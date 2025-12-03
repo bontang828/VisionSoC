@@ -1,5 +1,12 @@
-func TrapException(cause : integer, trap_value : bits(32))
+func TrapException(cause : integer{0..63}, trap_value : bits(32))
 begin
+  // Try delegate trap to supervisor mode. If none of the condition met, we
+  // handle the trap in M mode.
+  let delegated : boolean = TryDelegateTrap(cause, trap_value);
+  if delegated then
+    return
+  end
+
   // mepc
   MEPC = PC;
 
@@ -18,7 +25,7 @@ begin
 end
 
 // we only support limited machien mode interrupt now
-func TrapInterrupt(interrupt_code : integer{3,7,11})
+func TrapInterrupt(interrupt_code : integer{1,3,5,7,9,11,13})
 begin
 
   // save current context
@@ -38,24 +45,39 @@ begin
   end
 end
 
+// Return TRUE if the interrupt is handled
 func CheckInterrupt() => boolean
 begin
-  // if machine mode interrupt bit is not enabled, just return
-  if MSTATUS_MIE == '0' then
+  // First check interrupt pending is high or low
+  // Multiple simultaneous interrupts destined for M-mode are handled in the
+  // following decreasing priority order: MEI, MSI, MTI, SEI, SSI, STI, LCOFI.
+  var interrupt = CheckSupervisorInterrupt();
+  if (MTIE AND getExternal_MTIP) == '1' then
+    interrupt = 7;
+  end
+  if (MSIE AND getExternal_MSIP) == '1' then
+    interrupt = 3;
+  end
+  if (MEIE AND getExternal_MEIP) == '1' then
+    interrupt = 11;
+  end
+
+  // If no interrupt
+  if interrupt = 0 then
     return FALSE;
   end
 
-  let machine_trap_timer : bit = getExternal_MTIP AND MTIE;
-  if machine_trap_timer == '1' then
-    TrapInterrupt(MACHINE_TIMER_INTERRUPT);
-    return TRUE;
+  assert (interrupt > 0 && interrupt < 14) && (interrupt % 2 == 1);
+
+  if InterruptDelegatable(interrupt) then
+    return TrapSupervisorInterrupt(interrupt);
   end
 
-  let machine_trap_external : bit = getExternal_MEIP AND MEIE;
-  if machine_trap_external == '1' then
-    TrapInterrupt(MACHINE_EXTERNAL_INTERRUPT);
-    return TRUE;
+  // lower privilege trap immediately, whereas in M mode MIE mask is respected
+  if (CURRENT_PRIVILEGE == PRIV_MODE_M && MSTATUS_MIE == '0') then
+    return FALSE;
   end
 
-  return FALSE;
+  TrapInterrupt(interrupt);
+  return TRUE;
 end

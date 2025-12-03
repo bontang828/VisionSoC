@@ -55,6 +55,7 @@ var MSTATUS_VS : bits(2);
 // MIE csr
 var MEIE : bit;
 var MTIE : bit;
+var MSIE : bit;
 
 func resetArchStateDefault()
 begin
@@ -280,18 +281,5 @@ end
 // MTIP is controlled by external time interrupt controller in this model, no states will be stored.
 //
 // MSIP and MSIE is not implemented since we have support only one hart.
-let MACHINE_TIMER_INTERRUPT = 7;
-let MACHINE_EXTERNAL_INTERRUPT = 11;
-
-// export to simulator
-func ASL_ResetConfigAndState()
-begin
-  initConfigDefault();
-  resetArchStateDefault();
-end
-
-// export to simulator
-func ASL_ResetState()
-begin
-  resetArchStateDefault();
-end
+constant MACHINE_TIMER_INTERRUPT = 7;
+constant MACHINE_EXTERNAL_INTERRUPT = 11;

@@ -9,11 +9,11 @@
 //!
 //! - Implemented Fields: The simulator tracks the following status bits. All other
 //!   fields are hardwired to zero or ignored.
-//!     - MPP: Previous Privilege Mode.
-//!     - VS: Vector Extension Status.
-//!     - FS: Floating-Point Extension Status.
-//!     - MPIE: Machine Previous Interrupt Enable (interrupt-enable bit active prior to the trap).
-//!     - MIE: Machine Interrupt Enable.
+//!     - MPP
+//!     - SD, VS, FS
+//!     - MIE, MPIE
+//!     - SIE, SPIE, SPP
+//!     - SUM, MXR
 //! - Exceptions: An Illegal Instruction Exception is raised if the register is
 //!   accessed from a privilege level lower than Machine Mode.
 
@@ -44,6 +44,11 @@ begin
   MSTATUS_FS = value[14:13];
   MSTATUS_MPIE = value[7];
   MSTATUS_MIE = value[3];
+  MSTATUS_SIE = value[1];
+  MSTATUS_SPIE = value[5];
+  MSTATUS_SPP = value[8];
+  MSTATUS_SUM = value[18];
+  MSTATUS_MXR = value[19];
 
   logWrite_MSTATUS();
 
@@ -65,19 +70,24 @@ begin
     // WPRI[30:25], SDT[24], SPELP[23], TSR[22], TW[21], TVM[20]
     // MXR[19], SUM[18], MPRV[17], XS[16:15]
     Zeros(16),
-    
+
     MSTATUS_FS,         // [14:13]
     MSTATUS_MPP_BITS,   // [12:11]
     MSTATUS_VS,         // [10:9]
-    '0',                // [8] SPP
+    SSTATUS_SPP,        // [8]
     MSTATUS_MPIE,       // [7]
 
     // UBE, SPIE, WPRI
-    '000',
+    '0',
+    SSTATUS_SPIE,       // [5]
+    '0',
 
     MSTATUS_MIE,        // [3]
-    // WPRI, SIE, WPRI
-    '000'
+    // WPRI
+    '0',
+    SSTATUS_SIE,        // [1]
+    // WPRI
+    '0'
   ];
 end
 

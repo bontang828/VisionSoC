@@ -7,9 +7,7 @@
 //! The mip (Machine Interrupt Pending) register is an MXLEN-bit read/write register
 //! containing information on pending interrupts.
 //!
-//! - Implemented Fields:
-//!     - MEIP (bit 11): Machine External Interrupt Pending.
-//!     - MTIP (bit 7): Machine Timer Interrupt Pending.
+//! - Implemented Fields: MEIP, MTIP, MSIP, SEIP, STIP, SSIP
 //! - Behavior: Write operations are currently no-ops as these bits are driven by external signals.
 //! - Exceptions:
 //!     - Illegal Instruction if accessed from a privilege level lower than Machine Mode.
@@ -20,16 +18,20 @@ begin
     return CsrReadIllegalInstruction();
   end
 
-  var value : bits(32) = Zeros(32);
-  value[7] = getExternal_MTIP;
-  value[11] = getExternal_MEIP;
-  return CsrReadOk(value);
+  return CsrReadOk(GetRaw_MIP());
 end
 
 func GetRaw_MIP() => bits(XLEN)
 begin
-  // TODO: the exact semantics should be discussed later
-  return Zeros(32);
+  var value : bits(32) = Zeros(32);
+  value[1] = SSIP;
+  value[3] = getExternal_MSIP;
+  value[5] = STIP;
+  value[7] = getExternal_MTIP;
+  value[9] = getExternal_SEIP OR SEIP;
+  value[11] = getExternal_MEIP;
+
+  return value;
 end
 
 func Write_MIP(value : bits(32)) => Result
@@ -38,7 +40,9 @@ begin
     return IllegalInstruction();
   end
 
-  // currently we have no writable bits,
-  // thus it is no-op
+  SSIP = value[1];
+  STIP = value[5];
+  SEIP = value[9];
+
   return Retired();
 end
