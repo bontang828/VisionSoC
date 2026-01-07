@@ -74,18 +74,18 @@ begin
     MSTATUS_FS,         // [14:13]
     MSTATUS_MPP_BITS,   // [12:11]
     MSTATUS_VS,         // [10:9]
-    SSTATUS_SPP,        // [8]
+    MSTATUS_SPP,        // [8]
     MSTATUS_MPIE,       // [7]
 
     // UBE, SPIE, WPRI
     '0',
-    SSTATUS_SPIE,       // [5]
+    MSTATUS_SPIE,       // [5]
     '0',
 
     MSTATUS_MIE,        // [3]
     // WPRI
     '0',
-    SSTATUS_SIE,        // [1]
+    MSTATUS_SIE,        // [1]
     // WPRI
     '0'
   ];

@@ -17,7 +17,7 @@ begin
   var value : bits(SXLEN) = Zeros(SXLEN);
   value[1] = SSIP;
   value[5] = STIP;
-  value[9] = getExternal_SEIP OR SEIP;
+  value[9] = FFI_supervisor_external_interrupt_pending() OR SEIP;
   return value;
 end
 

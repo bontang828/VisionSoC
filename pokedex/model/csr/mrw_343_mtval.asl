@@ -28,7 +28,7 @@ end
 func Write_MTVAL(value : bits(XLEN)) => Result
 begin
   if !IsPrivAtLeast(PRIV_MODE_M) then
-    return CsrReadIllegalInstruction();
+    return IllegalInstruction();
   end
 
   // Trim the last bit to hold only valid virtual address

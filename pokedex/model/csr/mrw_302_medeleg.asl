@@ -26,10 +26,10 @@
 //! - SOFTWARE_CHECK_FAULT
 //! - HARDWARE_ERROR_FAULT
 
-func GetRaw_MEDELEG() : bits(32)
+func GetRaw_MEDELEG() => bits(32)
 begin
   return [
-    Zeros(32 - 19),
+    Zeros(32 - 20),
     MEDELEG_HARDWARE_ERROR_FAULT, // [19]
     MEDELEG_SOFTWARE_CHECK_FAULT, // [18]
     '00',                         // [16:17]
@@ -47,7 +47,7 @@ begin
     MEDELEG_BREAKPOINT,           // [3]
     MEDELEG_ILLEGAL_INSTRUCTION,  // [2]
     MEDELEG_FETCH_ACCESS,         // [1]
-    MEDELEG_MISALIGNED_FETCH,     // [0]
+    MEDELEG_MISALIGNED_FETCH      // [0]
   ];
 end
 
@@ -89,5 +89,5 @@ end
 
 func logWrite_MEDELEG()
 begin
-  FFI_write_CSR_hook(GetRaw_MEDELEG());
+  FFI_write_CSR_hook(CSR_MEDELEG);
 end

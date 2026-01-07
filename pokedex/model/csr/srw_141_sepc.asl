@@ -29,7 +29,7 @@ end
 func Write_SEPC(value : bits(SXLEN)) => Result
 begin
   if !IsPrivAtLeast(PRIV_MODE_S) then
-    return CsrReadIllegalInstruction();
+    return IllegalInstruction();
   end
 
   SEPC = value[SXLEN-1:1];

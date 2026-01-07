@@ -25,7 +25,7 @@ begin
     SATP_MODE,
     SATP_ASID,
     SATP_PPN
-  ]
+  ];
 end
 
 func Read_SATP() => CsrReadResult

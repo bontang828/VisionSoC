@@ -138,6 +138,29 @@ unsigned _BitInt(1) FFI_machine_external_interrupt_pending_0() {
     return 0;
 }
 
+unsigned _BitInt(1) FFI_machine_software_interrupt_pending_0() {
+    // TODO
+    return 0;
+}
+
+// SSIP
+unsigned _BitInt(1) FFI_supervisor_software_interrupt_pending_0() {
+    // TODO
+    return 0;
+}
+
+// STIP
+unsigned _BitInt(1) FFI_supervisor_timer_interrupt_pending_0() {
+    // TODO
+    return 0;
+}
+
+// SEIP
+unsigned _BitInt(1) FFI_supervisor_external_interrupt_pending_0() {
+    // TODO
+    return 0;
+}
+
 void FFI_write_GPR_hook_0(unsigned _BitInt(5) rd) {
     assert(trace_buffer.valid);
     trace_buffer.xreg_mask |= 1 << rd;

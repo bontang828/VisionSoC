@@ -4,7 +4,7 @@ begin
   // handle the trap in M mode.
   let delegated : boolean = TryDelegateTrap(cause, trap_value);
   if delegated then
-    return
+    return;
   end
 
   // mepc
@@ -51,7 +51,7 @@ begin
   // First check interrupt pending is high or low
   // Multiple simultaneous interrupts destined for M-mode are handled in the
   // following decreasing priority order: MEI, MSI, MTI, SEI, SSI, STI, LCOFI.
-  var interrupt = CheckSupervisorInterrupt();
+  var interrupt : integer{0,1,3,5,7,9,11,13} = CheckSupervisorInterrupt();
   if (MTIE AND getExternal_MTIP) == '1' then
     interrupt = 7;
   end
@@ -63,14 +63,14 @@ begin
   end
 
   // If no interrupt
-  if interrupt = 0 then
+  if interrupt == 0 then
     return FALSE;
   end
 
-  assert (interrupt > 0 && interrupt < 14) && (interrupt % 2 == 1);
+  assert (interrupt > 0 && interrupt < 14) && (interrupt REM 2 == 1);
 
   if InterruptDelegatable(interrupt) then
-    return TrapSupervisorInterrupt(interrupt);
+    return TrapSupervisorInterrupt(interrupt as integer{1,5,9});
   end
 
   // lower privilege trap immediately, whereas in M mode MIE mask is respected
@@ -78,6 +78,6 @@ begin
     return FALSE;
   end
 
-  TrapInterrupt(interrupt);
+  TrapInterrupt(interrupt as integer{1,3,5,7,9,11,13});
   return TRUE;
 end

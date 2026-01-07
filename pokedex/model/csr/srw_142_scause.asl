@@ -15,7 +15,7 @@ func GetRaw_SCAUSE() => bits(SXLEN)
 begin
   return [
     SCAUSE_INTERRUPT, // [SXLEN-1]
-    SCAUSE_XCPT_CODE, // [SXLEN-2:0]
+    SCAUSE_XCPT_CODE  // [SXLEN-2:0]
   ];
 end
 

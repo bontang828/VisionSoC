@@ -1,3 +1,15 @@
+//! ---
+//! csr: "sstatus"
+//! mode: "srw"
+//! id: 0x100
+//! tag: "s_mode"
+//! ---
+//! The sstatus is the corresponding SXLEN-bit read/write register containing
+//! restricted view on MSTATUS.
+//!
+//! - Exceptions: An Illegal Instruction Exception is raised if the register is
+//!   accessed from a privilege level lower than Supervisor Mode.
+
 func Read_SSTATUS() => CsrReadResult
 begin
   if !IsPrivAtLeast(PRIV_MODE_S) then
@@ -7,7 +19,7 @@ begin
   return CsrReadOk(GetRaw_MSTATUS());
 end
 
-func Write_SSTATUS(value : bits(32)) => CsrWriteResult
+func Write_SSTATUS(value : bits(SXLEN)) => Result
 begin
   if !IsPrivAtLeast(PRIV_MODE_S) then
     return IllegalInstruction();

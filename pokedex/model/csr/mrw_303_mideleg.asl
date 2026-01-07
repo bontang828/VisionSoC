@@ -18,7 +18,7 @@ begin
     MIDELEG_STI, // [5]
     '000',
     MIDELEG_SSI, // [1]
-    '0',
+    '0'
   ];
 end
 
@@ -28,10 +28,10 @@ begin
     return CsrReadIllegalInstruction();
   end
 
-  return CsrReadOk(GetRaw_MIDELEG);
+  return CsrReadOk(GetRaw_MIDELEG());
 end
 
-func Write_MIDELEG(value : XLEN) => Result
+func Write_MIDELEG(value : bits(XLEN)) => Result
 begin
   if !IsPrivAtLeast(PRIV_MODE_M) then
     return IllegalInstruction();

@@ -31,6 +31,7 @@ func FFI_debug_unsupported_csr(csr: bits(12));
 // interrupt
 func FFI_machine_external_interrupt_pending() => bit;
 func FFI_machine_time_interrupt_pending() => bit;
+func FFI_machine_software_interrupt_pending() => bit;
 
 // Atomic
 func FFI_load_reserved(addr : bits(32)) => FFI_ReadResult(32);

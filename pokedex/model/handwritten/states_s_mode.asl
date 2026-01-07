@@ -1,4 +1,8 @@
-constant SXLEN = XLEN;
+constant SXLEN : integer = XLEN;
+
+func FFI_supervisor_software_interrupt_pending() => bit;
+func FFI_supervisor_timer_interrupt_pending() => bit;
+func FFI_supervisor_external_interrupt_pending() => bit;
 
 var MSTATUS_SIE : bit;
 var MSTATUS_SPIE : bit;
@@ -52,11 +56,11 @@ var SATP_PPN : bits(22);
 
 func resetArchStateSMode()
 begin
-  SSTATUS_SIE = 0;
-  SSTATUS_SPIE = 0;
-  SSTATUS_SPP = 0;
-  SSTATUS_SUM = 0;
-  SSTATUS_MXR = 0;
+  MSTATUS_SIE = '0';
+  MSTATUS_SPIE = '0';
+  MSTATUS_SPP = '0';
+  MSTATUS_SUM = '0';
+  MSTATUS_MXR = '0';
 end
 
 func TryDelegateTrap(cause : integer{0..63}, trap_value : bits(32)) => boolean
@@ -77,11 +81,18 @@ begin
   end
 
   SCAUSE_INTERRUPT = '0';
-  SCAUSE_XCPT_CODE = cause[SXLEN - 1:0];
+  SCAUSE_XCPT_CODE = cause[SXLEN - 2:0];
   SEPC = PC[XLEN - 1:1];
   MSTATUS_SPIE = MSTATUS_SIE;
   MSTATUS_SIE = '0';
-  MSTATUS_SPP = CURRENT_PRIVILEGE;
+
+  assert CURRENT_PRIVILEGE != PRIV_MODE_M;
+  if CURRENT_PRIVILEGE == PRIV_MODE_U then
+    MSTATUS_SPP = '0';
+  else
+    MSTATUS_SPP = '1';
+  end
+
   CURRENT_PRIVILEGE = PRIV_MODE_S;
   STVAL = trap_value[SXLEN - 1:0];
 
@@ -116,7 +127,7 @@ begin
 
   SEPC = PC[XLEN - 1:1];
   SCAUSE_INTERRUPT = '1';
-  SCAUSE_XCPT_CODE = icode[SXLEN - 1:0];
+  SCAUSE_XCPT_CODE = icode[SXLEN - 2:0];
 
   CURRENT_PRIVILEGE = PRIV_MODE_S;
 
@@ -136,21 +147,28 @@ end
 // interrupt or supervisor interrupts are masked.
 func CheckSupervisorInterrupt() => integer{0, 1, 5, 9}
 begin
-  var interrupt = 0;
-  if STIE AND (getExternal_STIP OR STIP) then
+  var interrupt : integer{0,1,5,9} = 0;
+
+  let timer = STIE AND (FFI_supervisor_timer_interrupt_pending() OR STIP);
+  if timer == '1' then
     interrupt = 5;
   end
-  if SSIE AND (getExternal_SSIP OR SSIP) then
+
+  let software = SSIE AND (FFI_supervisor_software_interrupt_pending() OR SSIP);
+  if software == '1' then
     interrupt = 1;
   end
-  if SEIE AND (getExternal_SEIP OR SEIP) then
+
+  let external = SEIE AND (FFI_supervisor_external_interrupt_pending() OR SEIP);
+  if external == '1' then
     interrupt = 9;
   end
+
   return interrupt;
 end
 
 // Return TRUE if the interrupt can be delegated to supervisor mode
-func InterruptDelegatable(icode : integer{1,3,5,7,9,11,13}) : boolean
+func InterruptDelegatable(icode : integer{0..SXLEN-1}) => boolean
 begin
   let mideleg_bits : bits(32) = GetRaw_MIDELEG();
   return mideleg_bits[icode] == '1';

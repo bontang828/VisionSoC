@@ -18,7 +18,7 @@ begin
   return [
     STVEC_BASE,
     '0',
-    STVEC_MODE,
+    STVEC_MODE
   ];
 end
 

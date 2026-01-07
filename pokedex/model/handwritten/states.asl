@@ -227,6 +227,11 @@ begin
   return FFI_machine_time_interrupt_pending();
 end
 
+getter getExternal_MSIP => bit
+begin
+  return FFI_machine_software_interrupt_pending();
+end
+
 ///////////////////////////
 //// Utility Functions ////
 ///////////////////////////
