@@ -101,6 +101,23 @@ pub struct VirtAddr {
     page_offset: u32,
 }
 
+pub struct PhsyAddr {
+    ppn: [u32; 2],
+    page_offset: u32,
+}
+impl PhsyAddr {
+    pub fn new(ppn_hi: u32, ppn_lo: u32, page_offset: u32) -> Self {
+        Self {
+            ppn: [ppn_hi, ppn_lo],
+            page_offset,
+        }
+    }
+
+    pub fn to_u32(self) -> u32 {
+        self.ppn[0] << 22 | self.ppn[1] << 12 | self.page_offset & 0xFFF
+    }
+}
+
 impl VirtAddr {
     const VPN1_MASK: u32 = 0xFFC0_0000;
     const VPN0_MASK: u32 = 0x003F_F000;
@@ -165,51 +182,99 @@ pub struct Global {
     pub(crate) stats: Statistic,
 }
 
+#[derive(Debug)]
 pub enum VirtAddrTrasnlateError {
     AccessFault,
     PageFault,
 }
 
 impl Global {
-    pub fn rv32_translate(
-        &mut self,
-        vm_info: &VirtMemReqInfo,
-    ) -> Result<u32, VirtAddrTrasnlateError> {
+    pub fn sv32_walk(&mut self, vm_info: &VirtMemReqInfo) -> Result<u32, VirtAddrTrasnlateError> {
         let satp = Satp::from_bits(vm_info.satp);
         // mode is calculated with current privilege and satp.MODE at C-ABI side
         if satp.mode.is_bare() {
             return Ok(vm_info.addr);
         }
 
-        const SV32_LVL: u32 = 2;
-        const PAGE_SIZE: u32 = 4096;
-        const PTE_SIZE: u32 = 4;
+        assert!(
+            vm_info.priv_ < 2,
+            "Translate with reserved privilege mode or machine mode"
+        );
 
-        let mut a = satp.ppn * PAGE_SIZE;
+        const PAGE_SIZE: u64 = 4096;
+        const PTE_SIZE: u64 = 4;
+
+        // we might support 34-bit Bus
+        let mut a: u64 = (satp.ppn as u64) * PAGE_SIZE;
         let mut i: i32 = 1;
         while i >= 0 {
             let va = VirtAddr::from_32b(vm_info.addr);
-            let pte_addr = a + (va.vpn[i as usize] * PTE_SIZE);
+            let pte_addr = a + ((va.vpn[i as usize] as u64) * PTE_SIZE);
             let mut pte = [0; 4];
+            let pte_addr: u32 = pte_addr
+                .try_into()
+                .expect("Get 34-bit address that is not support in this platform");
             // TODO: PMA & PMP
             if self.bus.read(pte_addr, &mut pte).is_err() {
                 // caller responsibility to return corresponding access fault reason
                 return Err(VirtAddrTrasnlateError::AccessFault);
             }
             let pte = PageTableEntry::from_32b(u32::from_le_bytes(pte));
-            if !pte.valid || (!pte.read && pte.write) || (!pte.execute && !pte.write && pte.read) {
+            if !pte.valid || (!pte.read && pte.write) || (!pte.execute && pte.write && !pte.read) {
                 // not valid OR note readable but writable OR reserved
                 return Err(VirtAddrTrasnlateError::PageFault);
             }
             if !pte.read && !pte.execute {
                 i -= 1;
-                a = (pte.ppn[1] & pte.ppn[0]) * PAGE_SIZE;
+                a = ((pte.ppn[1] << 10) | pte.ppn[0]) as u64 * PAGE_SIZE;
                 continue;
             }
             if i > 0 && pte.ppn[0] != 0 {
                 // a super page misaligned
                 return Err(VirtAddrTrasnlateError::PageFault);
             }
+            if vm_info.priv_ == 0 && !pte.user {
+                // not accessible for user mode
+                return Err(VirtAddrTrasnlateError::PageFault);
+            }
+
+            let mstatus_sum = |mstatus: u32| mstatus >> 18 & 0x1;
+            let mstatus_mxr = |mstatus: u32| mstatus >> 19 & 0x1;
+
+            if vm_info.priv_ == 1 && pte.user {
+                // access user mode memory in supervisor mode depends on mstatus.SUM
+                let sum = mstatus_sum(vm_info.mstatus);
+                if sum == 0 {
+                    return Err(VirtAddrTrasnlateError::PageFault);
+                }
+            }
+
+            let mxr = mstatus_mxr(vm_info.mstatus);
+            // 0=fetch, 1=read, 2=write. See include/pokedex_interface.h
+            match vm_info.access_type {
+                0 if !pte.execute => return Err(VirtAddrTrasnlateError::PageFault),
+                1 if !pte.read && !(pte.execute && mxr == 1) => {
+                    return Err(VirtAddrTrasnlateError::PageFault);
+                }
+                2 if !pte.write => return Err(VirtAddrTrasnlateError::PageFault),
+                0 | 1 | 2 => (),
+                _ => panic!("Internal ABI error: unknown access_type when translating memory"),
+            }
+
+            if !pte.access || vm_info.access_type == 2 && !pte.dirty {
+                return Err(VirtAddrTrasnlateError::PageFault);
+            }
+
+            // now the translation is successful
+            let phsy_addr: PhsyAddr;
+            if i > 0 {
+                // superpage
+                phsy_addr = PhsyAddr::new(pte.ppn[1], va.vpn[0], va.page_offset);
+            } else {
+                phsy_addr = PhsyAddr::new(pte.ppn[1], pte.ppn[0], va.page_offset);
+            }
+
+            return Ok(phsy_addr.to_u32());
         }
 
         Err(VirtAddrTrasnlateError::PageFault)
@@ -223,6 +288,10 @@ impl PokedexCallbackMem for Global {
         &mut self,
         vm_info: &mut VirtMemReqInfo,
     ) -> Result<(), Self::CbMemError> {
+        // TODO: TLB
+        let addr = self.sv32_walk(vm_info);
+        vm_info.t_addr = addr.unwrap();
+
         Ok(())
     }
 
