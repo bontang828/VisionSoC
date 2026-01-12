@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#define POKEDEX_ABI_VERSION "2025-12-09"
+#define POKEDEX_ABI_VERSION "2026-01-08"
 
 #define POKEDEX_AMO_SWAP 0
 #define POKEDEX_AMO_ADD 1
@@ -151,16 +151,16 @@ struct pokedex_mem_callback_vtable {
     // All memory operations require aligned addresses.
     //
 
-    int (*inst_fetch_2)(void* cb_data, uint32_t addr, uint16_t* ret);
-    int (*read_mem_1)(void* cb_data, uint32_t addr, uint8_t* ret);
-    int (*read_mem_2)(void* cb_data, uint32_t addr, uint16_t* ret);
-    int (*read_mem_4)(void* cb_data, uint32_t addr, uint32_t* ret);
-    int (*write_mem_1)(void* cb_data, uint32_t addr, uint8_t value);
-    int (*write_mem_2)(void* cb_data, uint32_t addr, uint16_t value);
-    int (*write_mem_4)(void* cb_data, uint32_t addr, uint32_t value);
-    int (*amo_mem_4)(void* cb_data, uint32_t addr, uint8_t amo_op, uint32_t value, uint32_t* ret);
-    int (*lr_mem_4)(void* cb_data, uint32_t addr, uint32_t* ret);
-    int (*sc_mem_4)(void* cb_data, uint32_t addr, uint32_t value, uint32_t* ret);
+    int (*inst_fetch_2)(void* cb_data, uint32_t addr, uint16_t* ret, uint32_t satp);
+    int (*read_mem_1)(void* cb_data, uint32_t addr, uint8_t* ret, uint32_t satp);
+    int (*read_mem_2)(void* cb_data, uint32_t addr, uint16_t* ret, uint32_t satp);
+    int (*read_mem_4)(void* cb_data, uint32_t addr, uint32_t* ret, uint32_t satp);
+    int (*write_mem_1)(void* cb_data, uint32_t addr, uint8_t value, uint32_t satp);
+    int (*write_mem_2)(void* cb_data, uint32_t addr, uint16_t value, uint32_t satp);
+    int (*write_mem_4)(void* cb_data, uint32_t addr, uint32_t value, uint32_t satp);
+    int (*amo_mem_4)(void* cb_data, uint32_t addr, uint8_t amo_op, uint32_t value, uint32_t* ret, uint32_t satp);
+    int (*lr_mem_4)(void* cb_data, uint32_t addr, uint32_t* ret, uint32_t satp);
+    int (*sc_mem_4)(void* cb_data, uint32_t addr, uint32_t value, uint32_t* ret, uint32_t satp);
 };
 
 #define POKEDEX_MAX_CSR_WRITE 16

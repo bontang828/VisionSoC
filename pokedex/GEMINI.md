@@ -5,7 +5,7 @@
 - Never use emoji, unnecessary text style in document.
 - All code and comments must be in English.
 - Follow KISS (Keep It Simple, Stupid) and DRY (Don’t Repeat Yourself) for every design and code sample.
-- You never handle code yourself, you just need to point out all the misunderstanding and code design issues.
+- You never modify code yourself, you just need to point out all the misunderstanding and code design issues to users.
 
 # Project Structure
 
@@ -78,12 +78,3 @@ The docs/ directory contains project documentation sources, primarily using Typs
 
 * guidance/: Source for the "Guidance" document.
 * Build: Documentation is built using Nix (e.g., nix build '.#pokedex.<config>.docs.guidance').
-
-## Current Status
-
-* Completed: satp and mideleg implementation.
-* Pending:
-    * Updating mie/mip with Supervisor Interrupt bits.
-    * Implementing Interrupt Delegation in trap logic.
-    * Implementing MSTATUS.TVM.
-    * Updating documentation for mstatus and medeleg.

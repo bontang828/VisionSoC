@@ -44,33 +44,63 @@ impl<E, T: Copy> ResultExt2<T> for Result<T, E> {
 }
 
 impl<T: super::PokedexCallbackMem> MakeVTable<T> {
-    unsafe extern "C" fn inst_fetch_2(model: *mut c_void, addr: u32, ret: *mut u16) -> c_int {
+    unsafe extern "C" fn inst_fetch_2(
+        model: *mut c_void,
+        addr: u32,
+        ret: *mut u16,
+        satp: u32,
+    ) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
-        model.inst_fetch_2(addr).try_write(ret)
+        model.inst_fetch_2(addr, satp).try_write(ret)
     }
-    unsafe extern "C" fn read_mem_1(model: *mut c_void, addr: u32, ret: *mut u8) -> c_int {
+    unsafe extern "C" fn read_mem_1(
+        model: *mut c_void,
+        addr: u32,
+        ret: *mut u8,
+        satp: u32,
+    ) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
-        model.read_mem_u8(addr).try_write(ret)
+        model.read_mem_u8(addr, satp).try_write(ret)
     }
-    unsafe extern "C" fn read_mem_2(model: *mut c_void, addr: u32, ret: *mut u16) -> c_int {
+    unsafe extern "C" fn read_mem_2(
+        model: *mut c_void,
+        addr: u32,
+        ret: *mut u16,
+        satp: u32,
+    ) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
-        model.read_mem_u16(addr).try_write(ret)
+        model.read_mem_u16(addr, satp).try_write(ret)
     }
-    unsafe extern "C" fn read_mem_4(model: *mut c_void, addr: u32, ret: *mut u32) -> c_int {
+    unsafe extern "C" fn read_mem_4(
+        model: *mut c_void,
+        addr: u32,
+        ret: *mut u32,
+        satp: u32,
+    ) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
-        model.read_mem_u32(addr).try_write(ret)
+        model.read_mem_u32(addr, satp).try_write(ret)
     }
-    unsafe extern "C" fn write_mem_1(model: *mut c_void, addr: u32, value: u8) -> c_int {
+    unsafe extern "C" fn write_mem_1(model: *mut c_void, addr: u32, value: u8, satp: u32) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
-        model.write_mem_u8(addr, value).to_c_int()
+        model.write_mem_u8(addr, value, satp).to_c_int()
     }
-    unsafe extern "C" fn write_mem_2(model: *mut c_void, addr: u32, value: u16) -> c_int {
+    unsafe extern "C" fn write_mem_2(
+        model: *mut c_void,
+        addr: u32,
+        value: u16,
+        satp: u32,
+    ) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
-        model.write_mem_u16(addr, value).to_c_int()
+        model.write_mem_u16(addr, value, satp).to_c_int()
     }
-    unsafe extern "C" fn write_mem_4(model: *mut c_void, addr: u32, value: u32) -> c_int {
+    unsafe extern "C" fn write_mem_4(
+        model: *mut c_void,
+        addr: u32,
+        value: u32,
+        satp: u32,
+    ) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
-        model.write_mem_u32(addr, value).to_c_int()
+        model.write_mem_u32(addr, value, satp).to_c_int()
     }
     unsafe extern "C" fn amo_mem_4(
         model: *mut c_void,
@@ -78,6 +108,7 @@ impl<T: super::PokedexCallbackMem> MakeVTable<T> {
         amo_op: u8,
         value: u32,
         ret: *mut u32,
+        satp: u32,
     ) -> c_int {
         let model = unsafe { &mut *(model as *mut T) };
         let op = match amo_op as u32 {
@@ -92,9 +123,14 @@ impl<T: super::PokedexCallbackMem> MakeVTable<T> {
             raw::POKEDEX_AMO_MAXU => AtomicOp::Maxu,
             _ => unreachable!("unknown amo opcode ({amo_op})"),
         };
-        model.amo_mem_u32(addr, op, value).try_write(ret)
+        model.amo_mem_u32(addr, op, value, satp).try_write(ret)
     }
-    unsafe extern "C" fn lr_mem_4(model: *mut c_void, _addr: u32, _ret: *mut u32) -> c_int {
+    unsafe extern "C" fn lr_mem_4(
+        model: *mut c_void,
+        _addr: u32,
+        _ret: *mut u32,
+        _satp: u32,
+    ) -> c_int {
         let _model = unsafe { &mut *(model as *mut T) };
         todo!("LR instruction not implemented")
     }
@@ -103,6 +139,7 @@ impl<T: super::PokedexCallbackMem> MakeVTable<T> {
         _addr: u32,
         _value: u32,
         _ret: *mut u32,
+        _satp: u32,
     ) -> c_int {
         let _model = unsafe { &mut *(model as *mut T) };
         todo!("SC instruction not implemented")

@@ -41,10 +41,21 @@ static struct pokedex_trace_buffer trace_buffer;
 ///////////////////////
 
 
+uint32_t effective_satp() {
+    if (CURRENT_PRIVILEGE == PRIV_MODE_M) {
+        return 0;
+    } else if (SATP_MODE == 0) {
+        // Attempting to select satp.MODE=Bare with non-zero pattern in the remaining bits are ignored.
+        return 0;
+    } else {
+        return GetRaw_SATP_0();
+    }
+}
 
 FFI_ReadResult_N_16 FFI_instruction_fetch_half_0(uint32_t pc) {
     uint16_t data = 0;
-    int ret = mem_cb_vtable->inst_fetch_2(mem_cb_data, pc, &data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->inst_fetch_2(mem_cb_data, pc, &data, satp);
     FFI_ReadResult_N_16 value = {
         .success = !ret,
         .data = data,
@@ -54,7 +65,8 @@ FFI_ReadResult_N_16 FFI_instruction_fetch_half_0(uint32_t pc) {
 
 FFI_ReadResult_N_8 FFI_read_physical_memory_8bits_0(uint32_t addr) {
     uint8_t data = 0;
-    int ret = mem_cb_vtable->read_mem_1(mem_cb_data, addr, &data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->read_mem_1(mem_cb_data, addr, &data, satp);
     FFI_ReadResult_N_8 value = {
         .success = !ret,
         .data = data,
@@ -64,7 +76,8 @@ FFI_ReadResult_N_8 FFI_read_physical_memory_8bits_0(uint32_t addr) {
 
 FFI_ReadResult_N_16 FFI_read_physical_memory_16bits_0(uint32_t addr) {
     uint16_t data = 0;
-    int ret = mem_cb_vtable->read_mem_2(mem_cb_data, addr, &data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->read_mem_2(mem_cb_data, addr, &data, satp);
     FFI_ReadResult_N_16 value = {
         .success = !ret,
         .data = data,
@@ -74,7 +87,8 @@ FFI_ReadResult_N_16 FFI_read_physical_memory_16bits_0(uint32_t addr) {
 
 FFI_ReadResult_N_32 FFI_read_physical_memory_32bits_0(uint32_t addr) {
     uint32_t data = 0;
-    int ret = mem_cb_vtable->read_mem_4(mem_cb_data, addr, &data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->read_mem_4(mem_cb_data, addr, &data, satp);
     FFI_ReadResult_N_32 value = {
         .success = !ret,
         .data = data,
@@ -83,17 +97,20 @@ FFI_ReadResult_N_32 FFI_read_physical_memory_32bits_0(uint32_t addr) {
 }
 
 bool FFI_write_physical_memory_8bits_0(uint32_t addr, uint8_t data) {
-    int ret = mem_cb_vtable->write_mem_1(mem_cb_data, addr, data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->write_mem_1(mem_cb_data, addr, data, satp);
     return !ret;
 }
 
 bool FFI_write_physical_memory_16bits_0(uint32_t addr, uint16_t data) {
-    int ret = mem_cb_vtable->write_mem_2(mem_cb_data, addr, data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->write_mem_2(mem_cb_data, addr, data, satp);
     return !ret;
 }
 
 bool FFI_write_physical_memory_32bits_0(uint32_t addr, uint32_t data) {
-    int ret = mem_cb_vtable->write_mem_4(mem_cb_data, addr, data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->write_mem_4(mem_cb_data, addr, data, satp);
     return !ret;
 }
 
@@ -112,7 +129,8 @@ FFI_ReadResult_N_32 FFI_amo_0(AmoOperationType operation, uint32_t addr, uint32_
         default: assert(false && "unknown AMO type");
     }
     uint32_t data;
-    int ret = mem_cb_vtable->amo_mem_4(mem_cb_data, addr, opcode, value, &data);
+    uint32_t satp = effective_satp();
+    int ret = mem_cb_vtable->amo_mem_4(mem_cb_data, addr, opcode, value, &data, satp);
     FFI_ReadResult_N_32 ret_value = {
         .success = !ret,
         .data = data,

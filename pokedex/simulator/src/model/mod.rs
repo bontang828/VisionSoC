@@ -15,15 +15,20 @@ pub use ffi::Loader;
 pub trait PokedexCallbackMem {
     type CbMemError;
 
-    fn inst_fetch_2(&mut self, addr: u32) -> Result<u16, Self::CbMemError>;
-    fn read_mem_u8(&mut self, addr: u32) -> Result<u8, Self::CbMemError>;
-    fn read_mem_u16(&mut self, addr: u32) -> Result<u16, Self::CbMemError>;
-    fn read_mem_u32(&mut self, addr: u32) -> Result<u32, Self::CbMemError>;
-    fn write_mem_u8(&mut self, addr: u32, value: u8) -> Result<(), Self::CbMemError>;
-    fn write_mem_u16(&mut self, addr: u32, value: u16) -> Result<(), Self::CbMemError>;
-    fn write_mem_u32(&mut self, addr: u32, value: u32) -> Result<(), Self::CbMemError>;
-    fn amo_mem_u32(&mut self, addr: u32, op: AtomicOp, value: u32)
-    -> Result<u32, Self::CbMemError>;
+    fn inst_fetch_2(&mut self, addr: u32, satp: u32) -> Result<u16, Self::CbMemError>;
+    fn read_mem_u8(&mut self, addr: u32, satp: u32) -> Result<u8, Self::CbMemError>;
+    fn read_mem_u16(&mut self, addr: u32, satp: u32) -> Result<u16, Self::CbMemError>;
+    fn read_mem_u32(&mut self, addr: u32, satp: u32) -> Result<u32, Self::CbMemError>;
+    fn write_mem_u8(&mut self, addr: u32, value: u8, satp: u32) -> Result<(), Self::CbMemError>;
+    fn write_mem_u16(&mut self, addr: u32, value: u16, satp: u32) -> Result<(), Self::CbMemError>;
+    fn write_mem_u32(&mut self, addr: u32, value: u32, satp: u32) -> Result<(), Self::CbMemError>;
+    fn amo_mem_u32(
+        &mut self,
+        addr: u32,
+        op: AtomicOp,
+        value: u32,
+        satp: u32,
+    ) -> Result<u32, Self::CbMemError>;
 }
 
 #[derive(Debug, Default)]
