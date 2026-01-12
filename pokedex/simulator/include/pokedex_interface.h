@@ -144,6 +144,26 @@ struct pokedex_model_export {
     void (*get_csr)(void* model, uint16_t csr, uint64_t* ret);
 };
 
+// VirtMemReqInfo describe a memory request
+typedef struct {
+    // size in bytes
+    uint8_t size;
+    // virtual address
+    uint32_t addr;
+    // Access type: 0=fetch, 1=read, 2=write, >2 are reserved
+    uint8_t access_type;
+    // buffer to read data or store written data
+    uint32_t data;
+    // translated address
+    uint32_t t_addr;
+    // current privililege
+    uint8_t priv;
+    // current satp value
+    uint32_t satp;
+    // current mstatus value
+    uint32_t mstatus;
+} VirtMemReqInfo;
+
 struct pokedex_mem_callback_vtable {
     // All memory operations return 0 in sucess, return non-zero in failure.
     // currently we only return 1 for access fault in failure.
@@ -151,14 +171,8 @@ struct pokedex_mem_callback_vtable {
     // All memory operations require aligned addresses.
     //
 
-    int (*inst_fetch_2)(void* cb_data, uint32_t addr, uint16_t* ret, uint32_t satp);
-    int (*read_mem_1)(void* cb_data, uint32_t addr, uint8_t* ret, uint32_t satp);
-    int (*read_mem_2)(void* cb_data, uint32_t addr, uint16_t* ret, uint32_t satp);
-    int (*read_mem_4)(void* cb_data, uint32_t addr, uint32_t* ret, uint32_t satp);
-    int (*write_mem_1)(void* cb_data, uint32_t addr, uint8_t value, uint32_t satp);
-    int (*write_mem_2)(void* cb_data, uint32_t addr, uint16_t value, uint32_t satp);
-    int (*write_mem_4)(void* cb_data, uint32_t addr, uint32_t value, uint32_t satp);
-    int (*amo_mem_4)(void* cb_data, uint32_t addr, uint8_t amo_op, uint32_t value, uint32_t* ret, uint32_t satp);
+    int (*vm_req)(void* cb_data, VirtMemReqInfo* req);
+    int (*amo_mem_4)(void* cb_data, VirtMemReqInfo* req, uint8_t amo_op, uint32_t* ret);
     int (*lr_mem_4)(void* cb_data, uint32_t addr, uint32_t* ret, uint32_t satp);
     int (*sc_mem_4)(void* cb_data, uint32_t addr, uint32_t value, uint32_t* ret, uint32_t satp);
 };

@@ -5,6 +5,7 @@
 
 #include <pokedex_interface.h>
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdatomic.h>
@@ -40,77 +41,95 @@ static struct pokedex_trace_buffer trace_buffer;
 // callback wrappers //
 ///////////////////////
 
+VirtMemReqInfo generate_vm_info(uint8_t access_type, uint32_t addr, uint8_t size) {
+    assert(("Internal Implemenattion error: access_type is not [0,2]", access_type < 3));
 
-uint32_t effective_satp() {
-    if (CURRENT_PRIVILEGE == PRIV_MODE_M) {
-        return 0;
-    } else if (SATP_MODE == 0) {
-        // Attempting to select satp.MODE=Bare with non-zero pattern in the remaining bits are ignored.
-        return 0;
-    } else {
-        return GetRaw_SATP_0();
-    }
+    uint8_t priv = (uint8_t)privModeToBits_N_2_0(CURRENT_PRIVILEGE);
+
+    VirtMemReqInfo vm_info = {
+        .size = size,
+        .addr = addr,
+        .access_type = access_type,
+
+        .data = 0,
+        .t_addr = 0,
+        .priv = priv,
+        .satp = GetRaw_SATP_0(),
+        .mstatus = GetRaw_MSTATUS_0(),
+    };
+    return vm_info;
+}
+
+inline VirtMemReqInfo generate_fetch_vm_info(uint32_t addr) {
+    return generate_vm_info(0, addr, 2);
+}
+
+inline VirtMemReqInfo generate_load_vm_info(uint32_t addr, uint8_t size) {
+    return generate_vm_info(1, addr, size);
+}
+
+inline VirtMemReqInfo generate_store_vm_info(uint32_t addr, uint8_t size) {
+    return generate_vm_info(2, addr, size);
 }
 
 FFI_ReadResult_N_16 FFI_instruction_fetch_half_0(uint32_t pc) {
-    uint16_t data = 0;
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->inst_fetch_2(mem_cb_data, pc, &data, satp);
+    VirtMemReqInfo vm_info = generate_fetch_vm_info(pc);
+    int ret = mem_cb_vtable->vm_req(mem_cb_data, &vm_info);
     FFI_ReadResult_N_16 value = {
         .success = !ret,
-        .data = data,
+        .data = vm_info.data,
     };
     return value;
 }
 
 FFI_ReadResult_N_8 FFI_read_physical_memory_8bits_0(uint32_t addr) {
-    uint8_t data = 0;
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->read_mem_1(mem_cb_data, addr, &data, satp);
+    VirtMemReqInfo vm_info = generate_load_vm_info(addr, 1);
+    int ret = mem_cb_vtable->vm_req(mem_cb_data, &vm_info);
     FFI_ReadResult_N_8 value = {
         .success = !ret,
-        .data = data,
+        .data = vm_info.data,
     };
     return value;
 }
 
 FFI_ReadResult_N_16 FFI_read_physical_memory_16bits_0(uint32_t addr) {
-    uint16_t data = 0;
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->read_mem_2(mem_cb_data, addr, &data, satp);
+    VirtMemReqInfo vm_info = generate_load_vm_info(addr, 2);
+    int ret = mem_cb_vtable->vm_req(mem_cb_data, &vm_info);
     FFI_ReadResult_N_16 value = {
         .success = !ret,
-        .data = data,
+        .data = vm_info.data,
     };
     return value;
 }
 
 FFI_ReadResult_N_32 FFI_read_physical_memory_32bits_0(uint32_t addr) {
-    uint32_t data = 0;
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->read_mem_4(mem_cb_data, addr, &data, satp);
+    VirtMemReqInfo vm_info = generate_load_vm_info(addr, 4);
+    int ret = mem_cb_vtable->vm_req(mem_cb_data, &vm_info);
     FFI_ReadResult_N_32 value = {
         .success = !ret,
-        .data = data,
+        .data = vm_info.data,
     };
     return value;
 }
 
 bool FFI_write_physical_memory_8bits_0(uint32_t addr, uint8_t data) {
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->write_mem_1(mem_cb_data, addr, data, satp);
+    VirtMemReqInfo vm_info = generate_store_vm_info(addr, 1);
+    vm_info.data = (uint32_t)data;
+    int ret = mem_cb_vtable->vm_req(mem_cb_data, &vm_info);
     return !ret;
 }
 
 bool FFI_write_physical_memory_16bits_0(uint32_t addr, uint16_t data) {
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->write_mem_2(mem_cb_data, addr, data, satp);
+    VirtMemReqInfo vm_info = generate_store_vm_info(addr, 2);
+    vm_info.data = (uint32_t)data;
+    int ret = mem_cb_vtable->vm_req(mem_cb_data, &vm_info);
     return !ret;
 }
 
 bool FFI_write_physical_memory_32bits_0(uint32_t addr, uint32_t data) {
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->write_mem_4(mem_cb_data, addr, data, satp);
+    VirtMemReqInfo vm_info = generate_store_vm_info(addr, 4);
+    vm_info.data = data;
+    int ret = mem_cb_vtable->vm_req(mem_cb_data, &vm_info);
     return !ret;
 }
 
@@ -128,9 +147,12 @@ FFI_ReadResult_N_32 FFI_amo_0(AmoOperationType operation, uint32_t addr, uint32_
         case AMO_MINU: opcode = POKEDEX_AMO_MINU; break;
         default: assert(false && "unknown AMO type");
     }
+
+    VirtMemReqInfo vm_info = generate_store_vm_info(addr, 4);
+    vm_info.data = value;
+
     uint32_t data;
-    uint32_t satp = effective_satp();
-    int ret = mem_cb_vtable->amo_mem_4(mem_cb_data, addr, opcode, value, &data, satp);
+    int ret = mem_cb_vtable->amo_mem_4(mem_cb_data, &vm_info, opcode, &data);
     FFI_ReadResult_N_32 ret_value = {
         .success = !ret,
         .data = data,

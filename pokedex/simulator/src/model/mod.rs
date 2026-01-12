@@ -1,5 +1,4 @@
 use std::{
-    collections::HashSet,
     ffi::{CStr, c_char, c_void},
     ptr::NonNull,
 };
@@ -10,6 +9,7 @@ use crate::{bus::AtomicOp, util::Bitmap32};
 mod ffi;
 
 pub use ffi::Loader;
+pub use ffi::raw::VirtMemReqInfo;
 
 // See include/pokedex_interface.h for more
 pub trait PokedexCallbackMem {
@@ -29,6 +29,10 @@ pub trait PokedexCallbackMem {
         value: u32,
         satp: u32,
     ) -> Result<u32, Self::CbMemError>;
+    fn handle_virtual_address(
+        &mut self,
+        vm_info: &mut ffi::raw::VirtMemReqInfo,
+    ) -> Result<(), Self::CbMemError>;
 }
 
 #[derive(Debug, Default)]

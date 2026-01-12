@@ -1,5 +1,5 @@
 use crate::bus::{AtomicOp, Bus, BusError, BusResult};
-use crate::model::{Loader, ModelHandle, PokedexCallbackMem, StepCode, StepDetail};
+use crate::model::{Loader, ModelHandle, PokedexCallbackMem, StepCode, StepDetail, VirtMemReqInfo};
 
 pub struct Simulator {
     core: ModelHandle,
@@ -77,10 +77,14 @@ pub struct Satp {
 }
 
 impl Satp {
+    const MODE_MASK: u32 = 0x8000_0000;
+    const ASID_MASK: u32 = 0x7FC0_0000;
+    const PPN_MASK: u32 = 0x003F_FFFF;
+
     pub fn from_bits(raw: u32) -> Self {
-        let mode = raw >> 31 & 0x1;
-        let asid = raw >> 22 & 0x1ff;
-        let ppn = raw & 0x3fffff;
+        let mode = (raw & Self::MODE_MASK) >> 31;
+        let asid = (raw & Self::ASID_MASK) >> 22;
+        let ppn = raw & Self::PPN_MASK;
 
         let mode = match mode {
             0 => VirtualMemoryMode::Bare,
@@ -98,14 +102,60 @@ pub struct VirtAddr {
 }
 
 impl VirtAddr {
+    const VPN1_MASK: u32 = 0xFFC0_0000;
+    const VPN0_MASK: u32 = 0x003F_F000;
+    const PAGE_OFFSET_MASK: u32 = 0x0000_0FFF;
+
     pub fn from_32b(raw: u32) -> Self {
-        let vpn_1 = (raw >> 22) & 0x3ff;
-        let vpn_0 = (raw >> 12) & 0x3ff;
-        let page_offset = raw & 0xfff;
+        let vpn_1 = (raw & Self::VPN1_MASK) >> 22;
+        let vpn_0 = (raw & Self::VPN0_MASK) >> 12;
+        let page_offset = raw & Self::PAGE_OFFSET_MASK;
 
         Self {
             vpn: [vpn_0, vpn_1],
             page_offset,
+        }
+    }
+}
+
+pub struct PageTableEntry {
+    ppn: [u32; 2],
+    dirty: bool,
+    access: bool,
+    global: bool,
+    user: bool,
+    execute: bool,
+    write: bool,
+    read: bool,
+    valid: bool,
+}
+
+impl PageTableEntry {
+    const PPN_1: u32 = 0xFFF0_0000;
+    const PPN_0: u32 = 0x000F_FC00;
+
+    pub fn from_32b(raw: u32) -> Self {
+        let ppn1 = (raw & Self::PPN_1) >> 20;
+        let ppn0 = (raw & Self::PPN_0) >> 10;
+        let dirty = (raw >> 7) & 0x1;
+        let access = (raw >> 6) & 0x1;
+        let global = (raw >> 5) & 0x1;
+        let user = (raw >> 4) & 0x1;
+        let execute = (raw >> 3) & 0x1;
+        let write = (raw >> 2) & 0x1;
+        let read = (raw >> 1) & 0x1;
+        let valid = raw & 0x1;
+
+        Self {
+            ppn: [ppn0, ppn1],
+            dirty: dirty == 1,
+            access: access == 1,
+            global: global == 1,
+            user: user == 1,
+            execute: execute == 1,
+            write: write == 1,
+            read: read == 1,
+            valid: valid == 1,
         }
     }
 }
@@ -115,33 +165,66 @@ pub struct Global {
     pub(crate) stats: Statistic,
 }
 
+pub enum VirtAddrTrasnlateError {
+    AccessFault,
+    PageFault,
+}
+
 impl Global {
-    pub fn rv32_translate(&mut self, addr: u32, satp: u32) -> u32 {
-        let satp = Satp::from_bits(satp);
-        // vm_mode is calculated with current privilege and satp.MODE
+    pub fn rv32_translate(
+        &mut self,
+        vm_info: &VirtMemReqInfo,
+    ) -> Result<u32, VirtAddrTrasnlateError> {
+        let satp = Satp::from_bits(vm_info.satp);
+        // mode is calculated with current privilege and satp.MODE at C-ABI side
         if satp.mode.is_bare() {
-            return addr;
+            return Ok(vm_info.addr);
         }
 
         const SV32_LVL: u32 = 2;
         const PAGE_SIZE: u32 = 4096;
         const PTE_SIZE: u32 = 4;
 
-        let a = satp.ppn * PAGE_SIZE;
-        let mut i = SV32_LVL - 1;
+        let mut a = satp.ppn * PAGE_SIZE;
+        let mut i: i32 = 1;
         while i >= 0 {
-            let va = VirtAddr::from_32b(addr);
+            let va = VirtAddr::from_32b(vm_info.addr);
             let pte_addr = a + (va.vpn[i as usize] * PTE_SIZE);
             let mut pte = [0; 4];
-            self.bus.read(pte_addr, &mut pte);
+            // TODO: PMA & PMP
+            if self.bus.read(pte_addr, &mut pte).is_err() {
+                // caller responsibility to return corresponding access fault reason
+                return Err(VirtAddrTrasnlateError::AccessFault);
+            }
+            let pte = PageTableEntry::from_32b(u32::from_le_bytes(pte));
+            if !pte.valid || (!pte.read && pte.write) || (!pte.execute && !pte.write && pte.read) {
+                // not valid OR note readable but writable OR reserved
+                return Err(VirtAddrTrasnlateError::PageFault);
+            }
+            if !pte.read && !pte.execute {
+                i -= 1;
+                a = (pte.ppn[1] & pte.ppn[0]) * PAGE_SIZE;
+                continue;
+            }
+            if i > 0 && pte.ppn[0] != 0 {
+                // a super page misaligned
+                return Err(VirtAddrTrasnlateError::PageFault);
+            }
         }
 
-        todo!()
+        Err(VirtAddrTrasnlateError::PageFault)
     }
 }
 
 impl PokedexCallbackMem for Global {
     type CbMemError = BusError;
+
+    fn handle_virtual_address(
+        &mut self,
+        vm_info: &mut VirtMemReqInfo,
+    ) -> Result<(), Self::CbMemError> {
+        Ok(())
+    }
 
     fn inst_fetch_2(&mut self, addr: u32, satp: u32) -> BusResult<u16> {
         assert!(addr.is_multiple_of(2));
