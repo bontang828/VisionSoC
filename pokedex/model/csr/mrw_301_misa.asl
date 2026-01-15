@@ -9,10 +9,11 @@
 //! extensions supported by the hart.
 //! - Value: The register contains a bitmask indicating the supported
 //!   extensions (bits 0–25) and the machine XLEN (bits MXLEN-1:MXLEN-2).
-//! - Write Behavior: In this implementation, the set of supported extensions is
-//!   static. Writes to misa are ignored and will not change the enabled extensions.
-//! - Exceptions: An Illegal Instruction Exception is raised if the register is
-//!   accessed from a privilege level lower than Machine Mode.
+//!
+//! - Impl-defined Behaviors:
+//!   - Write: writes are ignored.
+//! - Exceptions:
+//!   - Attempt to access from a privilege level lower than M.
 
 func Read_MISA() => CsrReadResult
 begin

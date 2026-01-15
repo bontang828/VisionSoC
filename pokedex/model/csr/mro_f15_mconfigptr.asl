@@ -7,10 +7,9 @@
 //! The mconfigptr (Machine Configuration Pointer Register) is an MXLEN-bit read-only register
 //! accessible exclusively in Machine Mode.
 //!
-//! - Value: The register is hardwired to zero, indicating that the configuration data structure does not exist.
-//! - Exceptions: An Illegal Instruction Exception is raised under the following conditions:
-//!     - Attempting to write to the register.
-//!     - Attempting to read the register from a privilege level lower than Machine Mode.
+//! - Exceptions:
+//!   - Attempt to write (`mconfigptr` is read only).
+//!   - Attempt to access from a privilege level lower than M.
 
 func Read_MCONFIGPTR() => CsrReadResult
 begin

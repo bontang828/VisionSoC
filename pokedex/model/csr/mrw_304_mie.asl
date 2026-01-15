@@ -8,10 +8,12 @@
 //! containing interrupt enable bits for various interrupt sources.
 //!
 //! - Implemented Fields:
-//!     - MEIE (bit 11): Machine External Interrupt Enable.
-//!     - MTIE (bit 7): Machine Timer Interrupt Enable.
+//!   - MEIE (bit 11): Machine External Interrupt Enable.
+//!   - MTIE (bit 7): Machine Timer Interrupt Enable.
 //! - Exceptions:
-//!     - Illegal Instruction if accessed from a privilege level lower than Machine Mode.
+//!   - Attempt to access from a privilege level lower than M.
+//! - NOTE:
+//!   - All implemented fields are writable
 
 func Read_MIE() => CsrReadResult
 begin

@@ -10,9 +10,12 @@
 //! mtvec adheres to WARL (Write Any Values, Read Legal Values) semantics. The
 //! simulator implements the following behavior:
 //!
-//! - Supported Modes: Only Direct (00) and Vectored (01) modes are valid.
-//! - Invalid Writes: If a write operation specifies an unsupported mode, the entire
-//! write is ignored, and the register retains its previous value.
+//! Supported Modes: Only Direct (00) and Vectored (01) modes are valid.
+//!
+//! - Impl-defined behavior:
+//!   - Write: if the new mode is unsupported, the entire write is ignored
+//! - Exceptions:
+//!   - Attempt to access from a privilege level lower than M.
 
 
 // Details of MTVEC arch states see states.asl

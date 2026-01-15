@@ -8,8 +8,8 @@
 //! register whose value is the length of a vector register in bytes.
 //!
 //! - Exceptions:
-//!     - Illegal Instruction if the Vector extension is disabled (mstatus.vs == 0).
-//!     - Illegal Instruction if attempting to write to the register.
+//!   - Attempt to write (`vlenb` is read only).
+//!   - Attempt to access if `mstatus.vs` is disabled.
 
 
 func Read_VLENB() => CsrReadResult

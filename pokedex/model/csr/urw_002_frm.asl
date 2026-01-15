@@ -6,12 +6,13 @@
 //! ---
 //! The frm (Floating-Point Rounding Mode) register is an XLEN-bit read/write register
 //! that specifies the dynamic rounding mode for floating-point operations.
-//!
-//! - Fields: holds the lowest 3-bit value as FRM.
-//! - Behavior: Writing to this register sets mstatus.fs to Dirty.
+//! 
+//！- Side Effects:
+//!   - Write: writes will set `mstatus.fs` to dirty, even if the value is unchanged.
 //! - Exceptions:
-//!     - Illegal Instruction if the Floating-Point extension is disabled (mstatus.fs == 0).
+//!   - Attempt to access if `mstatus.fs` is disabled.
 
+// - Fields: holds the lowest 3-bit value as FRM.
 
 func Read_FRM() => CsrReadResult
 begin

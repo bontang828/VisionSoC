@@ -6,13 +6,14 @@
 //! ---
 //! The fcsr (Floating-Point Control and Status Register) is an XLEN-bit read/write register.
 //!
-//! - Fields:
-//!     - frm (bits 7:5): Rounding Mode.
-//!     - fflags (bits 4:0): Accrued Exceptions.
-//! - Behavior: Writing to this register sets mstatus.fs to Dirty.
+//！- Side Effects:
+//!   - Write: writes will set `mstatus.fs` to dirty, even if the value is unchanged.
 //! - Exceptions:
-//!     - Illegal Instruction if the Floating-Point extension is disabled (mstatus.fs == 0).
+//!   - Attempt to access if `mstatus.fs` is disabled.
 
+// - Fields:
+//   - frm (bits 7:5): Rounding Mode.
+//   - fflags (bits 4:0): Accrued Exceptions.
 
 func Read_FCSR() => CsrReadResult
 begin

@@ -7,9 +7,10 @@
 //! The vxrm (Vector Fixed-Point Rounding Mode) register is an XLEN-bit read/write register
 //! that holds the lowest 2-bit value as rounding mode for fixed-point instructions.
 //!
-//! - Behavior: Writing to this register sets mstatus.vs to Dirty.
+//！- Side Effects:
+//!   - Write: writes will set `mstatus.vs` to dirty, even if the value is unchanged.
 //! - Exceptions:
-//!     - Illegal Instruction if the Vector extension is disabled (mstatus.vs == 0).
+//!   - Attempt to access if `mstatus.vs` is disabled.
 
 
 func Read_VXRM() => CsrReadResult

@@ -6,10 +6,10 @@
 //! ---
 //! The mstatush register holds the upper 32 bits of mstatus on RV32 systems.
 //!
-//! - Implementation: Currently hardwired to zero.
+//! Currently we implement no bits in mstatush`. This CSR is hardwired to zero.
+//!
 //! - Exceptions:
-//!     - Illegal Instruction if accessed from a privilege level lower than Machine Mode.
-
+//!   - Attempt to access from a privilege level lower than M.
 
 func Read_MSTATUSH() => CsrReadResult
 begin

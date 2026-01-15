@@ -7,9 +7,13 @@
 //! The vstart (Vector Start Index) register is an XLEN-bit read/write register
 //! that specifies the index of the first element to be executed by a vector instruction.
 //!
-//! - Behavior: Writing to this register sets mstatus.fs to Dirty.
+//! - Impl-defined Behaviors;
+//!   - `vstart` state has only `log2(VLEN)` bits.
+//!   - Write: only lower `log2(VLEN)` bits are used.
+//！- Side Effects:
+//!   - Write: writes will set `mstatus.vs` to dirty, even if the value is unchanged.
 //! - Exceptions:
-//!     - Illegal Instruction if the Floating-Point extension is disabled (mstatus.fs == 0).
+//!   - Attempt to access if `mstatus.vs` is disabled.
 
 
 func Read_VSTART() => CsrReadResult

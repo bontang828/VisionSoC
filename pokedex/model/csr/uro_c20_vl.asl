@@ -8,8 +8,8 @@
 //! number of elements to be updated by a vector instruction.
 //!
 //! - Exceptions:
-//!     - Illegal Instruction if the Vector extension is disabled (mstatus.vs == 0)
-//!     - Illegal Instruction if attempting to write to the register.
+//!   - Attempt to write (`vl` is read only).
+//!   - Attempt to access if `mstatus.vs` is disabled.
 
 func Read_VL() => CsrReadResult
 begin

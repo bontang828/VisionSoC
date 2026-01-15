@@ -10,9 +10,10 @@
 //! - Implemented Fields:
 //!     - MEIP (bit 11): Machine External Interrupt Pending.
 //!     - MTIP (bit 7): Machine Timer Interrupt Pending.
-//! - Behavior: Write operations are currently no-ops as these bits are driven by external signals.
 //! - Exceptions:
-//!     - Illegal Instruction if accessed from a privilege level lower than Machine Mode.
+//!   - Attempt to access from a privilege level lower than M.
+//! - NOTE:
+//!   - All writes are ignored since no implemented bits are writable.
 
 func Read_MIP() => CsrReadResult
 begin

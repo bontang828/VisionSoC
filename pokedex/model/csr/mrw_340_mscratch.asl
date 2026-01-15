@@ -8,8 +8,7 @@
 //! machine mode trap handlers.
 //!
 //! - Exceptions:
-//!     - Illegal Instruction if accessed from a privilege level lower than Machine Mode.
-
+//!   - Attempt to access from a privilege level lower than M.
 
 func Read_MSCRATCH() => CsrReadResult
 begin

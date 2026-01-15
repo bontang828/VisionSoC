@@ -6,10 +6,10 @@
 //! ---
 //! The mcause (Machine Cause) register is an MXLEN-bit read/write register.
 //!
-//! - Behavior: MCAUSE is a WLRL register, it holds any value given from software.
+//! - Impl-defined Behavior:
+//!   - Currently implemented as a full XLEN-bit register.
 //! - Exceptions:
-//!     - Illegal Instruction if accessed from a privilege level lower than Machine Mode.
-
+//!   - Attempt to access from a privilege level lower than M.
 
 func Read_MCAUSE() => CsrReadResult
 begin

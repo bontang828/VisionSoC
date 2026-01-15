@@ -6,10 +6,10 @@
 //! ---
 //! The vxsat (Vector Fixed-Point Saturation) register is an XLEN-bit read/write register
 //!
-//! - Field: Holds only the lowest bit.
-//! - Behavior: Writing to this register sets mstatus.vs to Dirty.
+//！- Side Effects:
+//!   - Write: writes will set `mstatus.vs` to dirty, even if the value is unchanged.
 //! - Exceptions:
-//!     - Illegal Instruction if the Vector extension is disabled (mstatus.vs == 0).
+//!   - Attempt to access if `mstatus.vs` is disabled.
 
 
 func Read_VXSAT() => CsrReadResult

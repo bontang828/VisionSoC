@@ -10,7 +10,7 @@
 //!
 //! - Behavior: The C extension is enabled, thus the lowest bit (bit 0) is always zero.
 //! - Exceptions:
-//!     - Illegal Instruction if accessed from a privilege level lower than Machine Mode.
+//!   - Attempt to access from a privilege level lower than M.
 
 
 func Read_MEPC() => CsrReadResult
