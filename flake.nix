@@ -96,9 +96,6 @@
                 "*.sc"
                 "*.mill"
               ];
-              black.excludes = [
-                "pokedex/model/scripts/ninja_syntax.py"
-              ];
             };
           };
         };
