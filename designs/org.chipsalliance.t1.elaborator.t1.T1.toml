@@ -142,7 +142,9 @@ cmdopt = "--dLen 1024 --extensions zvl1024b --extensions zve32f --laneScale 1 --
 [benchmark_dlen1024_vlen2048_fp]
 cmdopt = "--dLen 1024 --extensions zvl2048b --extensions zve32f --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vrfWritePort 2 --vfuInstantiateParameter huge"
 [benchmark_dlen1024_vlen4096_fp]
-cmdopt = "--dLen 1024 --extensions zvl4096b --extensions zve32f --laneScale 1 --chainingSize 4 --vrfBankSize 4 --vrfRamType p0rwp1rw --vrfWritePort 2 --vfuInstantiateParameter huge"
+cmdopt = "--dLen 1024 --extensions zvl4096b --extensions zve32f --laneScale 1 --chainingSize 4 --vrfBankSize 4 --vrfRamType p0rwp1rw --vrfWritePort 2 -vfuInstantiateParameter huge"
+[benchmark_dlen4096_vlen16384_fp]
+cmdopt = "--dLen 4096 --extensions zvl16384b --extensions zve32f --laneScale 1 --chainingSize 4 --vrfBankSize 4 --vrfRamType p0rwp1rw --vrfWritePort 2 --vfuInstantiateParameter huge"
 # Experimental(only for elaboration)
 [experimental_0]
 cmdopt = "--dLen 256 --extensions zvl256b --extensions zve32x --laneScale 1 --chainingSize 4 --extensions zvbb --vrfBankSize 1 --vrfRamType p0rwp1rw --vrfWritePort 2 --vfuInstantiateParameter zvbb"
