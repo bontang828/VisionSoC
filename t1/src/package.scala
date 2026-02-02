@@ -568,13 +568,10 @@ package object rtl {
     pipe:    Boolean = false,
     flow:    Boolean = false
   ): QueueIO[T] = {
-    val io: QueueIO[T] = Wire(new QueueIO(gen, entries))
     val maxEntriesSize = 2048
-    if (gen.getWidth <= maxEntriesSize) {
-      val q = Queue.io(gen, entries, pipe, flow)
-      q <> io
-    } else {
-      val largeQueueNumber: Int = gen.getWidth / maxEntriesSize
+    if (gen.getWidth > maxEntriesSize) {
+      val io:               QueueIO[T] = Wire(new QueueIO(gen, entries))
+      val largeQueueNumber: Int        = gen.getWidth / maxEntriesSize
       val cornerQueueSize = gen.getWidth % maxEntriesSize
       val largeQueueVec   = Seq.tabulate(largeQueueNumber) { _ =>
         Queue.io(UInt(maxEntriesSize.W), entries, pipe, flow)
@@ -592,7 +589,13 @@ package object rtl {
       io.enq.ready          := cornerQueue.enq.ready
       cornerQueue.enq.bits  := io.enq.bits.asUInt(gen.getWidth - 1, maxEntriesSize * largeQueueNumber)
       io.deq.bits           := (cornerQueue.deq.bits ## VecInit(largeQueueVec.map(_.deq.bits)).asUInt).asTypeOf(gen)
+      io.empty              := cornerQueue.empty
+      io.full               := cornerQueue.full
+      io.almostEmpty.foreach(_ := cornerQueue.almostEmpty.get)
+      io.almostFull.foreach(_ := cornerQueue.almostFull.get)
+      io
+    } else {
+      Queue.io(gen, entries, pipe, flow)
     }
-    io
   }
 }
