@@ -561,4 +561,38 @@ package object rtl {
     }
     queueVec.map(_.enq)
   }
+
+  def splitQueue[T <: Data](
+    gen:     T,
+    entries: Int,
+    pipe:    Boolean = false,
+    flow:    Boolean = false
+  ): QueueIO[T] = {
+    val io: QueueIO[T] = Wire(new QueueIO(gen, entries))
+    val maxEntriesSize = 2048
+    if (gen.getWidth <= maxEntriesSize) {
+      val q = Queue.io(gen, entries, pipe, flow)
+      q <> io
+    } else {
+      val largeQueueNumber: Int = gen.getWidth / maxEntriesSize
+      val cornerQueueSize = gen.getWidth % maxEntriesSize
+      val largeQueueVec   = Seq.tabulate(largeQueueNumber) { _ =>
+        Queue.io(UInt(maxEntriesSize.W), entries, pipe, flow)
+      }
+      val cornerQueue     = Queue.io(UInt(cornerQueueSize.W), entries, pipe, flow)
+
+      largeQueueVec.zipWithIndex.foreach { case (lq, index) =>
+        lq.enq.valid := io.enq.valid
+        lq.enq.bits  := io.enq.bits.asUInt(maxEntriesSize * index + maxEntriesSize - 1, maxEntriesSize * index)
+        lq.deq.ready := io.deq.ready
+      }
+      cornerQueue.enq.valid := io.enq.valid
+      cornerQueue.deq.ready := io.deq.ready
+      io.deq.valid          := cornerQueue.deq.valid
+      io.enq.ready          := cornerQueue.enq.ready
+      cornerQueue.enq.bits  := io.enq.bits.asUInt(gen.getWidth - 1, maxEntriesSize * largeQueueNumber)
+      io.deq.bits           := (cornerQueue.deq.bits ## VecInit(largeQueueVec.map(_.deq.bits)).asUInt).asTypeOf(gen)
+    }
+    io
+  }
 }
