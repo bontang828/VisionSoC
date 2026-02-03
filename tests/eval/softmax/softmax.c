@@ -130,7 +130,7 @@ void softmax(const float *input, float *output, size_t size, float d_head) {
   vfloat32m1_t v_sum_scalar = __riscv_vfmv_v_f_f32m1(0.0f, 1);
   v_sum_scalar =
       __riscv_vfredusum_vs_f32m2_f32m1(v_sum_acc, v_sum_scalar, vlmax_e32m2);
-#else // FAST_EXP
+#else  // FAST_EXP
   avl = size;
   in_ptr = input;
   float *out_ptr = output;

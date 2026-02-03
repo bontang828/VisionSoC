@@ -32,7 +32,7 @@ builder {
   isFp = true;
 
   # env.DO_DIFF_TEST = 1;
-  # env.FAST_EXP = 1;
+  env.FAST_EXP = 1;
 
   buildPhase = ''
     runHook preBuild
@@ -47,7 +47,7 @@ builder {
       NIX_CFLAGS_COMPILE="-DFAST_EXP $NIX_CFLAGS_COMPILE"
     fi
 
-    $CC -T${linkerScript} \
+    $CC -O3 -T${linkerScript} \
       softmax.c \
       ${t1main} \
       -o $pname.elf
