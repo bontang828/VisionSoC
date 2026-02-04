@@ -616,18 +616,11 @@ class VRF(val parameter: VRFParam) extends Module with SerializableModule[VRFPar
       }
 
       when(stateClear) {
-        when(blockByGather) {
-          record.bits.wGatherRelease := true.B
-        }.otherwise {
-          record.valid := false.B
-        }
+        record.valid := false.B
+
         when(record.valid) {
           recordRelease(i) := indexToOH(record.bits.instIndex, parameter.chainingSize)
         }
-      }
-
-      when(record.bits.wGatherRelease && !blockByGather) {
-        record.valid := false.B
       }
 
       when(recordEnq(i)) {
