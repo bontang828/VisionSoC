@@ -1,5 +1,6 @@
 {
   pkgs,
+  millVersions,
   publishMillJar,
   git,
   makeSetupHook,
@@ -17,18 +18,19 @@
 
 let
   submodules = lib.filterAttrs (_: v: v ? src) (pkgs.callPackage ./_sources/generated.nix { });
+  publishMillJar_110 = publishMillJar.override { mill = millVersions.mill_1_1_0; };
 in
 lib.makeScope newScope (scope: {
   sources = submodules;
 
-  ivy-chisel = publishMillJar {
+  ivy-chisel = publishMillJar_110 {
     name = "chisel-snapshot";
     src = submodules.chisel.src;
 
     lockFile = ../locks/chisel-lock.nix;
 
     publishTargets = [
-      "unipublish"
+      "unipublish[2.13]"
     ];
 
     nativeBuildInputs = [
@@ -40,7 +42,7 @@ lib.makeScope newScope (scope: {
       name = "bump-chisel-mill-lock";
 
       runtimeInputs = [
-        mill
+        millVersions.mill_1_1_0
         mill-ivy-fetcher
       ];
 
