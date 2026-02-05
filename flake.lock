@@ -141,11 +141,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1770287276,
-        "narHash": "sha256-9WngzyaB2SVJQMc5tdbgY/FETsmz29ZPM8Q7HelTr8g=",
+        "lastModified": 1770302854,
+        "narHash": "sha256-dTZHOk7ySGOFbQl7pFxvmU5cQSr9/T8X6DkHVUlGlao=",
         "owner": "Avimitin",
         "repo": "mill-ivy-fetcher",
-        "rev": "998f955b8b8754d9caebfb4a48e28fc018e9161f",
+        "rev": "ded588e8755bfe93993b56e28b4f2e3a8e452130",
         "type": "github"
       },
       "original": {

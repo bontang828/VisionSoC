@@ -38,6 +38,13 @@ lib.makeScope newScope (scope: {
       git
     ];
 
+    postInstall = ''
+      correctVer="0.0.0+0-no-vcs-SNAPSHOT"
+      root="$out/local/org.chipsalliance"
+      mv "$root/chisel_2.13/unknown" "$root/chisel_2.13/$correctVer"
+      mv "$root/chisel-plugin_2.13.18/unknown" "$root/chisel-plugin_2.13.18/$correctVer"
+    '';
+
     passthru.bump = writeShellApplication {
       name = "bump-chisel-mill-lock";
 

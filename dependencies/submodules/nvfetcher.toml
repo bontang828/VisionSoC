@@ -1,7 +1,7 @@
 [arithmetic]
-src.git = "https://github.com/sequencer/arithmetic"
-src.branch = "master"
-fetch.github = "sequencer/arithmetic"
+src.git = "https://github.com/Avimitin/arithmetic"
+src.branch = "2.13.18"
+fetch.github = "Avimitin/arithmetic"
 
 [chisel]
 src.git = "https://github.com/chipsalliance/chisel"
@@ -10,7 +10,7 @@ fetch.github = "chipsalliance/chisel"
 
 [chisel-interface]
 src.git = "https://github.com/chipsalliance/chisel-interface"
-src.branch = "master"
+src.branch = "2.13.18"
 fetch.github = "chipsalliance/chisel-interface"
 
 [rvdecoderdb]
