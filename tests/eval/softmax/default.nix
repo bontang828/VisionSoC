@@ -32,7 +32,7 @@ builder {
   isFp = true;
 
   # env.DO_DIFF_TEST = 1;
-  env.FAST_EXP = 1;
+  #env.FAST_EXP = 1;
 
   buildPhase = ''
     runHook preBuild

@@ -206,12 +206,11 @@ void test() {
   int batch_size = input_tensor_shape[0];
   int row_size = input_tensor_shape[1];
 
-  // for (int i = 0; i < batch_size; i++) {
-  // int i = 0;
-  // const float *current = input_tensor + (i * row_size);
-  // float *scratch_pad = output_tensor + (i * row_size);
-  softmax(input_tensor, output_tensor, row_size, d_head);
-  // }
+  for (int i = 0; i < batch_size; i++) {
+    const float *current = input_tensor + (i * row_size);
+    float *scratch_pad = output_tensor + (i * row_size);
+    softmax(current, scratch_pad, row_size, d_head);
+  }
 
 #ifdef DO_DIFF_TEST
   // reference_tensor is generated using Pytorch softmax in torch.nn.functional
