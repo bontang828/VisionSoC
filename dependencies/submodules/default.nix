@@ -1,5 +1,5 @@
 {
-  pkgs,
+  callPackage,
   publishMillJar,
   git,
   makeSetupHook,
@@ -8,27 +8,30 @@
   newScope,
   circt-install,
   mlir-install,
+  zaozi-src,
+  chisel-src,
   jextract-21,
   runCommand,
   writeShellApplication,
-  mill,
+  millVersions,
   mill-ivy-fetcher,
 }:
 
 let
-  submodules = lib.filterAttrs (_: v: v ? src) (pkgs.callPackage ./_sources/generated.nix { });
+  inherit (millVersions) mill_0_12_14 mill_1_1_2;
+  publishMillJar-0_12_14 = publishMillJar.override { mill = mill_0_12_14; };
+  publishMillJar-1_1_2 = publishMillJar.override { mill = mill_1_1_2; };
 in
 lib.makeScope newScope (scope: {
-  sources = submodules;
 
-  ivy-chisel = publishMillJar {
+  ivy-chisel = publishMillJar-1_1_2 {
     name = "chisel-snapshot";
-    src = submodules.chisel.src;
+    src = chisel-src;
 
     lockFile = ../locks/chisel-lock.nix;
 
     publishTargets = [
-      "unipublish"
+      "unipublish[2.13]"
     ];
 
     nativeBuildInputs = [
@@ -36,28 +39,35 @@ lib.makeScope newScope (scope: {
       git
     ];
 
+    preBuild = ''
+      # Fix mill JVM version detection, use JVM version of the system
+      sed -i '1i //| mill-jvm-version: system' build.mill
+    '';
+
     passthru.bump = writeShellApplication {
       name = "bump-chisel-mill-lock";
 
       runtimeInputs = [
-        mill
+        mill_1_1_2
         mill-ivy-fetcher
       ];
 
       text = ''
-        mif run -p "${submodules.chisel.src}" -o ./dependencies/locks/chisel-lock.nix "$@"
+        mif run -p "${chisel-src}" -o ./dependencies/locks/chisel-lock.nix "$@"
       '';
     };
   };
 
-  ivy-omlib = publishMillJar {
-    name = "omlib-snapshot";
-    src = submodules.zaozi.src;
+  ivy-zaozi = publishMillJar-1_1_2 {
+    name = "zaozi-snapshot";
+    src = zaozi-src;
 
     publishTargets = [
       "mlirlib"
       "circtlib"
       "omlib"
+      "zaozi"
+      "stdlib"
     ];
 
     env = {
@@ -73,21 +83,21 @@ lib.makeScope newScope (scope: {
       name = "bump-zaozi-mill-lock";
 
       runtimeInputs = [
-        mill
+        mill_1_1_2
         mill-ivy-fetcher
       ];
 
       text = ''
-        mif run -p "${submodules.zaozi.src}" -o ./dependencies/locks/zaozi-lock.nix "$@"
+        mif run -p "${zaozi-src}" -o ./dependencies/locks/zaozi-lock.nix "$@"
       '';
     };
 
     nativeBuildInputs = [ git ];
   };
 
-  ivy-arithmetic = publishMillJar {
+  ivy-arithmetic = publishMillJar-0_12_14 {
     name = "arithmetic-snapshot";
-    src = submodules.arithmetic.src;
+    src = ../arithmetic;
 
     publishTargets = [
       "arithmetic[snapshot]"
@@ -103,7 +113,7 @@ lib.makeScope newScope (scope: {
       name = "bump-zaozi-mill-lock";
 
       runtimeInputs = [
-        mill
+        mill_0_12_14
         mill-ivy-fetcher
       ];
 
@@ -111,16 +121,16 @@ lib.makeScope newScope (scope: {
         ivyLocal="${scope.ivy-chisel}"
         export JAVA_TOOL_OPTIONS="''${JAVA_TOOL_OPTIONS:-} -Dcoursier.ivy.home=$ivyLocal -Divy.home=$ivyLocal"
 
-        mif run -p "${submodules.arithmetic.src}" \
+        mif run -p "${../arithmetic}" \
           --targets "arithmetic[snapshot]" \
           -o ./dependencies/locks/arithmetic-mill-lock.nix "$@"
       '';
     };
   };
 
-  ivy-chisel-interface = publishMillJar {
+  ivy-chisel-interface = publishMillJar-0_12_14 {
     name = "chiselInterface-snapshot";
-    src = submodules.chisel-interface.src;
+    src = ../chisel-interface;
 
     publishTargets = [
       "jtag[snapshot]"
@@ -140,7 +150,7 @@ lib.makeScope newScope (scope: {
       name = "bump-zaozi-mill-lock";
 
       runtimeInputs = [
-        mill
+        mill_0_12_14
         mill-ivy-fetcher
       ];
 
@@ -148,7 +158,7 @@ lib.makeScope newScope (scope: {
         ivyLocal="${scope.ivy-chisel}"
         export JAVA_TOOL_OPTIONS="''${JAVA_TOOL_OPTIONS:-} -Dcoursier.ivy.home=$ivyLocal -Divy.home=$ivyLocal"
 
-        mif run -p "${submodules.chisel-interface.src}" \
+        mif run -p "${../chisel-interface}" \
           --targets "jtag[snapshot]" \
           --targets "axi4[snapshot]" \
           --targets "dwbb[snapshot]" \
@@ -157,9 +167,9 @@ lib.makeScope newScope (scope: {
     };
   };
 
-  ivy-rvdecoderdb = publishMillJar rec {
+  ivy-rvdecoderdb = publishMillJar-0_12_14 rec {
     name = "rvdecoderdb-snapshot";
-    src = submodules.rvdecoderdb.src;
+    src = ../rvdecoderdb;
 
     publishTargets = [
       "rvdecoderdb.jvm"
@@ -175,20 +185,20 @@ lib.makeScope newScope (scope: {
     passthru.bump = writeShellApplication {
       name = "bump-rvdecoderdb-mill-lock";
       runtimeInputs = [
-        mill
+        mill_0_12_14
         mill-ivy-fetcher
       ];
       text = ''
         mif run \
           --targets 'rvdecoderdb.jvm' \
-          -p "${src}" -o ./dependencies/locks/rvdecoderdb-lock.nix "$@"
+          -p "${../rvdecoderdb}" -o ./dependencies/locks/rvdecoderdb-lock.nix "$@"
       '';
     };
   };
 
-  ivy-rvdecoderdb3 = publishMillJar rec {
+  ivy-rvdecoderdb3 = publishMillJar-0_12_14 rec {
     name = "rvdecoderdb-3-snapshot";
-    src = submodules.zaozi.src;
+    src = zaozi-src;
 
     publishTargets = [
       "rvdecoderdb"
@@ -204,7 +214,7 @@ lib.makeScope newScope (scope: {
     passthru.bump = writeShellApplication {
       name = "bump-rvdecoderdb-3-mill-lock";
       runtimeInputs = [
-        mill
+        mill_0_12_14
         mill-ivy-fetcher
       ];
       text = ''
@@ -215,7 +225,7 @@ lib.makeScope newScope (scope: {
     };
   };
 
-  ivy-hardfloat = publishMillJar rec {
+  ivy-hardfloat = publishMillJar-0_12_14 rec {
     name = "hardfloat-snapshot";
     src = ../berkeley-hardfloat;
 
@@ -237,7 +247,7 @@ lib.makeScope newScope (scope: {
     passthru.bump = writeShellApplication {
       name = "bump-hardfloat-mill-lock";
       runtimeInputs = [
-        mill
+        mill_0_12_14
         mill-ivy-fetcher
       ];
       text = ''
@@ -255,7 +265,7 @@ lib.makeScope newScope (scope: {
     writeText "setup-riscv-opcodes-src.sh" ''
       setupRiscvOpcodes() {
         mkdir -p dependencies
-        ln -sfT "${submodules.riscv-opcodes.src}" "dependencies/riscv-opcodes"
+        ln -sfT "${../riscv-opcodes}" "dependencies/riscv-opcodes"
       }
       prePatchHooks+=(setupRiscvOpcodes)
     ''
@@ -267,7 +277,7 @@ lib.makeScope newScope (scope: {
         buildInputs = with scope; [
           ivy-arithmetic.setupHook
           ivy-chisel.setupHook
-          ivy-omlib.setupHook
+          ivy-zaozi.setupHook
           ivy-chisel-interface.setupHook
           ivy-rvdecoderdb.setupHook
           ivy-hardfloat.setupHook

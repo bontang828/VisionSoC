@@ -8,8 +8,8 @@ object v {
   val scala               = "2.13.16"
   val chiselCrossVersions = Map(
     "snapshot" -> (
-      ivy"org.chipsalliance::chisel:0.0.0+0-no-vcs-SNAPSHOT",
-      ivy"org.chipsalliance:::chisel-plugin:0.0.0+0-no-vcs-SNAPSHOT"
+      ivy"org.chipsalliance::chisel:unknown",
+      ivy"org.chipsalliance:::chisel-plugin:unknown"
     )
   )
   val scalatest           = ivy"org.scalatest::scalatest:3.2.0"
