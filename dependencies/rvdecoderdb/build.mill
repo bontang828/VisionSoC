@@ -7,7 +7,7 @@ import mill.scalalib._, publish._
 import mill.scalalib.scalafmt._
 
 object v {
-  val scala   = "2.13.16"
+  val scala   = "2.13.18"
   val scalajs = "1.18.2"
   object jvm {
     val oslib   = ivy"com.lihaoyi::os-lib:0.9.1"
@@ -26,7 +26,7 @@ trait RVDecoderDBJVMModule extends common.RVDecoderDBJVMModule with PublishModul
   def osLibIvy     = v.jvm.oslib
   def upickleIvy   = v.jvm.upickle
 
-  def publishVersion = "unknown-SNAPSHOT"
+  def publishVersion = "0.0.0+0-no-vcs-SNAPSHOT"
 
   def pomSettings = PomSettings(
     description = "rvdecoderdb",

@@ -51,7 +51,7 @@ let
       riscv-opcodes
       ivy-arithmetic.setupHook
       ivy-chisel.setupHook
-      ivy-omlib.setupHook
+      ivy-zaozi.setupHook
       ivy-chisel-interface.setupHook
       ivy-rvdecoderdb.setupHook
       ivy-hardfloat.setupHook

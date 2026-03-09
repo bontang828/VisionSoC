@@ -6,32 +6,24 @@ import mill.scalalib.scalafmt._
 import os._
 
 object v {
-  val scala = "2.13.16"
-  val spire = ivy"org.typelevel::spire:0.18.0"
-  val oslib =  ivy"com.lihaoyi::os-lib:0.9.1"
-  val mainargs = ivy"com.lihaoyi::mainargs:0.5.0"
+  val scala               = "2.13.18"
+  val spire               = ivy"org.typelevel::spire:0.18.0"
+  val oslib               = ivy"com.lihaoyi::os-lib:0.9.1"
+  val mainargs            = ivy"com.lihaoyi::mainargs:0.5.0"
   val chiselCrossVersions = Map(
-    "snapshot" -> (ivy"org.chipsalliance::chisel:unknown", ivy"org.chipsalliance:::chisel-plugin:unknown"),
+    "snapshot" -> (ivy"org.chipsalliance::chisel:unknown", ivy"org.chipsalliance:::chisel-plugin:unknown")
   )
 }
 
 object arithmetic extends Cross[Arithmetic](v.chiselCrossVersions.keys.toSeq)
 
-object elaborator
-  extends mill.Cross[Elaborator](v.chiselCrossVersions.keys.toSeq)
+object elaborator extends mill.Cross[Elaborator](v.chiselCrossVersions.keys.toSeq)
 
-object emulator
-  extends mill.Cross[Emulator](v.chiselCrossVersions.keys.toSeq)
+object emulator extends mill.Cross[Emulator](v.chiselCrossVersions.keys.toSeq)
 
-object test
-  extends mill.Cross[Test](v.chiselCrossVersions.keys.toSeq)
+object test extends mill.Cross[Test](v.chiselCrossVersions.keys.toSeq)
 
-
-trait Arithmetic
-  extends common.ArithmeticModule
-    with ScalafmtModule
-    with PublishModule
-    with Cross.Module[String] {
+trait Arithmetic extends common.ArithmeticModule with ScalafmtModule with PublishModule with Cross.Module[String] {
 
   override def scalaVersion = T(v.scala)
 
@@ -48,12 +40,12 @@ trait Arithmetic
   def chiselPluginIvy = Some(v.chiselCrossVersions(crossValue)._2)
 
   def publishVersion = if (crossValue == "snapshot") {
-    "unknown-SNAPSHOT"
+    "0.0.0+0-no-vcs-SNAPSHOT"
   } else {
     crossValue
   }
 
-  def pomSettings = PomSettings (
+  def pomSettings = PomSettings(
     description = "Arithmetic",
     organization = "me.jiuyang",
     url = "https://github.com/sequencer/arithmetic",
@@ -63,10 +55,9 @@ trait Arithmetic
   )
 }
 
-trait Elaborator
-  extends Cross.Module[String] {
+trait Elaborator extends Cross.Module[String] {
 
-  object elaborate extends ScalaModule with ScalafmtModule{
+  object elaborate extends ScalaModule with ScalafmtModule {
     def sourceRoots = Task.Sources(millSourcePath / "elaborator")
 
     override def scalaVersion = v.scala
@@ -77,13 +68,15 @@ trait Elaborator
 
     def chiselPluginIvy = Some(v.chiselCrossVersions(crossValue)._2)
 
-    override def scalacPluginIvyDeps: T[Agg[Dep]] = T(super.scalacPluginIvyDeps() ++ chiselPluginIvy.map(Agg(_)).getOrElse(Agg.empty[Dep]))
+    override def scalacPluginIvyDeps: T[Agg[Dep]] = T(
+      super.scalacPluginIvyDeps() ++ chiselPluginIvy.map(Agg(_)).getOrElse(Agg.empty[Dep])
+    )
 
     def arithmeticModule = arithmetic(crossValue)
 
     override def moduleDeps = Seq(arithmeticModule)
 
-    override def ivyDeps = T(Seq(v.mainargs,v.oslib))
+    override def ivyDeps = T(Seq(v.mainargs, v.oslib))
 
     def elaborate = T {
       upstreamCompileOutput()
@@ -92,7 +85,7 @@ trait Elaborator
         runClasspath().map(_.path),
         Seq(
           "--dir",
-          T.dest.toString,
+          T.dest.toString
         )
       )
       PathRef(T.dest)
@@ -142,8 +135,7 @@ trait Elaborator
   }
 }
 
-trait Emulator
-  extends Cross.Module[String] {
+trait Emulator extends Cross.Module[String] {
   val config: String = crossValue
 
   val topName = "TestBench"
@@ -170,7 +162,6 @@ trait Emulator
 
   val testfloatLibDir = sys.env("TEST_FLOAT_LIB_DIR")
   val softfloatLibDir = sys.env("SOFT_FLOAT_LIB_DIR")
-
 
   def verilatorThreads = T {
     8
@@ -233,7 +224,16 @@ trait Emulator
 
   def cmake = T {
     mill.util.Jvm.runSubprocess(
-      Seq("cmake", "-G", "Ninja", "-S", cmakefileLists().path, "-B", buildDir().path, "-DCMAKE_EXPORT_COMPILE_COMMANDS=1").map(_.toString),
+      Seq(
+        "cmake",
+        "-G",
+        "Ninja",
+        "-S",
+        cmakefileLists().path,
+        "-B",
+        buildDir().path,
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=1"
+      ).map(_.toString),
       Map[String, String](),
       T.dest
     )
@@ -253,10 +253,9 @@ trait Emulator
   }
 }
 
-trait Test
-  extends Cross.Module[String] {
+trait Test extends Cross.Module[String] {
   def test = T {
-    def testOp(op: String): Unit ={
+    def testOp(op: String): Unit = {
       for (roundingMode <- 0 to 4) {
         val rmMaps = Map(
           0 -> "RNE",
@@ -267,10 +266,11 @@ trait Test
         )
         val runEnv = Map(
           "wave" -> s"${T.dest}/",
-          "op" -> s"$op",
-          "rm" -> s"$roundingMode"
+          "op"   -> s"$op",
+          "rm"   -> s"$roundingMode"
         )
-        os.proc(emulator(crossValue).elf().path).call(stdout = T.dest / s"${op}_${rmMaps(roundingMode)}.log", cwd = T.dest, env = runEnv)
+        os.proc(emulator(crossValue).elf().path)
+          .call(stdout = T.dest / s"${op}_${rmMaps(roundingMode)}.log", cwd = T.dest, env = runEnv)
       }
     }
     testOp("div")

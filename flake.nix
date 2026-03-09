@@ -5,8 +5,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     mill-ivy-fetcher.url = "github:Avimitin/mill-ivy-fetcher";
-    circt-follow.url = "github:sequencer/zaozi";
+    zaozi.url = "github:xinpian-tech/zaozi";
     treefmt-nix.url = "github:numtide/treefmt-nix";
+    chisel.url = "github:chipsalliance/chisel";
+    chisel.flake = false;
   };
 
   outputs =
@@ -14,7 +16,6 @@
       self,
       nixpkgs,
       mill-ivy-fetcher,
-      circt-follow,
       ...
     }:
     let
@@ -43,15 +44,20 @@
       ];
 
       perSystem =
-        { system, ... }:
+        { system, inputs', ... }:
         let
           pkgs = import nixpkgs {
             inherit system;
             overlays = [
               mill-ivy-fetcher.overlays.default
-              # Follow CIRCT from sequencer/zaozi overlay
-              circt-follow.overlays.default
+              mill-ivy-fetcher.overlays.mill-overlay
               overlay
+              (final: prev: {
+                zaozi-src = inputs.zaozi.outPath;
+                chisel-src = inputs.chisel.outPath;
+                mlir-install = inputs'.zaozi.packages.mlir-install;
+                circt-install = inputs'.zaozi.packages.circt-install;
+              })
             ];
           };
         in
@@ -73,6 +79,7 @@
                 mill
                 t1-helper
                 zstd
+                nixd
               ];
             };
           };

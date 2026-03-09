@@ -1,3 +1,4 @@
+//| mill-jvm-version: system
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2022 Jiuyang Liu <liu@jiuyang.me>
 
@@ -13,16 +14,16 @@ import mill.util.Jvm
 import coursier.maven.MavenRepository
 
 object v {
-  val scala        = "2.13.16"
+  val scala        = "2.13.18"
   val scala3       = "3.6.2"
   val mainargs     = ivy"com.lihaoyi::mainargs:0.5.0"
   val oslib        = ivy"com.lihaoyi::os-lib:0.9.1"
   val upickle      = ivy"com.lihaoyi::upickle:3.3.1"
   val spire        = ivy"org.typelevel::spire:latest.integration"
   val evilplot     = ivy"io.github.cibotech::evilplot:latest.integration"
-  val omlib        = ivy"me.jiuyang::omlib::0.0.0+0-no-vcs-SNAPSHOT"
-  val chisel       = ivy"org.chipsalliance::chisel:0.0.0+0-no-vcs-SNAPSHOT"
-  val chiselPlugin = ivy"org.chipsalliance:::chisel-plugin:0.0.0+0-no-vcs-SNAPSHOT"
+  val omlib        = ivy"me.jiuyang::omlib::0.0.1-SNAPSHOT"
+  val chisel       = ivy"org.chipsalliance::chisel:unknown"
+  val chiselPlugin = ivy"org.chipsalliance:::chisel-plugin:unknown"
   val axi4         = ivy"org.chipsalliance::axi4-snapshot:0.0.0+0-no-vcs-SNAPSHOT"
   val dwbb         = ivy"org.chipsalliance::dwbb-snapshot:0.0.0+0-no-vcs-SNAPSHOT"
   val jtag         = ivy"org.chipsalliance::jtag-snapshot:0.0.0+0-no-vcs-SNAPSHOT"

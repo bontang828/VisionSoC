@@ -18,8 +18,8 @@
 }:
 
 let
-  inherit (millVersions) mill_0_12_14 mill_1_1_2;
-  publishMillJar-0_12_14 = publishMillJar.override { mill = mill_0_12_14; };
+  inherit (millVersions) mill_0_12_9 mill_1_1_2;
+  publishMillJar-0_12_9 = publishMillJar.override { mill = mill_0_12_9; };
   publishMillJar-1_1_2 = publishMillJar.override { mill = mill_1_1_2; };
 in
 lib.makeScope newScope (scope: {
@@ -95,7 +95,7 @@ lib.makeScope newScope (scope: {
     nativeBuildInputs = [ git ];
   };
 
-  ivy-arithmetic = publishMillJar-0_12_14 {
+  ivy-arithmetic = publishMillJar-0_12_9 {
     name = "arithmetic-snapshot";
     src = ../arithmetic;
 
@@ -113,7 +113,7 @@ lib.makeScope newScope (scope: {
       name = "bump-zaozi-mill-lock";
 
       runtimeInputs = [
-        mill_0_12_14
+        mill_0_12_9
         mill-ivy-fetcher
       ];
 
@@ -128,7 +128,7 @@ lib.makeScope newScope (scope: {
     };
   };
 
-  ivy-chisel-interface = publishMillJar-0_12_14 {
+  ivy-chisel-interface = publishMillJar-0_12_9 {
     name = "chiselInterface-snapshot";
     src = ../chisel-interface;
 
@@ -150,7 +150,7 @@ lib.makeScope newScope (scope: {
       name = "bump-zaozi-mill-lock";
 
       runtimeInputs = [
-        mill_0_12_14
+        mill_0_12_9
         mill-ivy-fetcher
       ];
 
@@ -167,7 +167,7 @@ lib.makeScope newScope (scope: {
     };
   };
 
-  ivy-rvdecoderdb = publishMillJar-0_12_14 rec {
+  ivy-rvdecoderdb = publishMillJar-0_12_9 rec {
     name = "rvdecoderdb-snapshot";
     src = ../rvdecoderdb;
 
@@ -185,7 +185,7 @@ lib.makeScope newScope (scope: {
     passthru.bump = writeShellApplication {
       name = "bump-rvdecoderdb-mill-lock";
       runtimeInputs = [
-        mill_0_12_14
+        mill_0_12_9
         mill-ivy-fetcher
       ];
       text = ''
@@ -196,7 +196,7 @@ lib.makeScope newScope (scope: {
     };
   };
 
-  ivy-rvdecoderdb3 = publishMillJar-0_12_14 rec {
+  ivy-rvdecoderdb3 = publishMillJar-0_12_9 rec {
     name = "rvdecoderdb-3-snapshot";
     src = zaozi-src;
 
@@ -214,7 +214,7 @@ lib.makeScope newScope (scope: {
     passthru.bump = writeShellApplication {
       name = "bump-rvdecoderdb-3-mill-lock";
       runtimeInputs = [
-        mill_0_12_14
+        mill_0_12_9
         mill-ivy-fetcher
       ];
       text = ''
@@ -225,7 +225,7 @@ lib.makeScope newScope (scope: {
     };
   };
 
-  ivy-hardfloat = publishMillJar-0_12_14 rec {
+  ivy-hardfloat = publishMillJar-0_12_9 rec {
     name = "hardfloat-snapshot";
     src = ../berkeley-hardfloat;
 
@@ -247,7 +247,7 @@ lib.makeScope newScope (scope: {
     passthru.bump = writeShellApplication {
       name = "bump-hardfloat-mill-lock";
       runtimeInputs = [
-        mill_0_12_14
+        mill_0_12_9
         mill-ivy-fetcher
       ];
       text = ''
