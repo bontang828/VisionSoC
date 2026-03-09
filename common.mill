@@ -156,6 +156,27 @@ trait OMReaderModule extends ScalaModule {
   )
 }
 
+// zaozi-based RTL module
+trait T1ZaoziModule extends ScalaModule {
+  def circtInstallPath: T[os.Path]
+  def mlirInstallPath:  T[os.Path]
+
+  def zaoziIvy:       Dep
+  def zaoziStdlibIvy: Dep
+
+  override def ivyDeps       = T(super.ivyDeps() ++ Seq(zaoziIvy, zaoziStdlibIvy))
+  override def javacOptions  = T(super.javacOptions() ++ Seq("--enable-preview", "--release", "21"))
+  override def scalacOptions = T(super.scalacOptions() ++ Seq("-experimental"))
+  def libraryPaths           = Task(Seq(mlirInstallPath() / "lib", circtInstallPath() / "lib").map(PathRef(_)))
+  override def forkArgs: T[Seq[String]] = T(
+    super.forkArgs() ++ Seq(
+      "--enable-native-access=ALL-UNNAMED",
+      "--enable-preview",
+      s"-Djava.library.path=${libraryPaths().map(_.path).distinct.mkString(":")}"
+    )
+  )
+}
+
 trait StdlibModule extends ScalaModule with HasChisel {
   def dwbbIvy: Dep
 

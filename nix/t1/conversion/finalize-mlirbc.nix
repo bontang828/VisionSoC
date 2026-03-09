@@ -1,7 +1,7 @@
 {
   lib,
   stdenvNoCC,
-  circt,
+  circt-install,
 }:
 
 {
@@ -14,7 +14,7 @@ stdenvNoCC.mkDerivation (
   lib.recursiveUpdate rec {
     name = outputName;
 
-    nativeBuildInputs = [ circt ];
+    nativeBuildInputs = [ circt-install ];
 
     passthru = {
       last-stage-mlirbc = mlirbc;

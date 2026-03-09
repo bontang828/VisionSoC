@@ -3,7 +3,7 @@
   stdenvNoCC,
 
   espresso,
-  circt,
+  circt-install,
 
   elaborator,
 }:
@@ -29,7 +29,7 @@ stdenvNoCC.mkDerivation {
 
   nativeBuildInputs = [
     espresso
-    circt
+    circt-install
   ];
 
   configGenPhase = ''
@@ -62,5 +62,10 @@ stdenvNoCC.mkDerivation {
       --emit-bytecode \
       --parse-only \
       -o $out/$name
+
+    # Copy zaozi parameter JSONs if any were dumped during elaboration
+    if [ -d zaozi-params ]; then
+      cp -r zaozi-params $out/zaozi-params
+    fi
   '';
 }

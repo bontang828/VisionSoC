@@ -22,6 +22,8 @@ object v {
   val spire        = ivy"org.typelevel::spire:latest.integration"
   val evilplot     = ivy"io.github.cibotech::evilplot:latest.integration"
   val omlib        = ivy"me.jiuyang::omlib::0.0.1-SNAPSHOT"
+  val zaozi        = ivy"me.jiuyang::zaozi::0.0.1-SNAPSHOT"
+  val zaoziStdlib  = ivy"me.jiuyang::stdlib::0.0.1-SNAPSHOT"
   val chisel       = ivy"org.chipsalliance::chisel:unknown"
   val chiselPlugin = ivy"org.chipsalliance:::chisel-plugin:unknown"
   val axi4         = ivy"org.chipsalliance::axi4-snapshot:0.0.0+0-no-vcs-SNAPSHOT"
@@ -168,4 +170,16 @@ trait OMReader extends common.OMReaderModule with ScalafmtModule {
   def mainargsIvy = v.mainargs
   def oslibIvy    = v.oslib
   def omlibIvy    = v.omlib
+}
+
+object t1zaozi extends T1Zaozi
+
+trait T1Zaozi extends common.T1ZaoziModule with ScalafmtModule {
+  def scalaVersion = T(v.scala3)
+
+  def circtInstallPath = Task(os.Path(Task.env.getOrElse("CIRCT_INSTALL_PATH", "CIRCT_INSTALL_PATH not found")))
+  def mlirInstallPath  = Task.Input(os.Path(Task.env.getOrElse("MLIR_INSTALL_PATH", "MLIR_INSTALL_PATH not found")))
+
+  def zaoziIvy       = v.zaozi
+  def zaoziStdlibIvy = v.zaoziStdlib
 }

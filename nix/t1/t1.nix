@@ -44,16 +44,46 @@ forEachConfig (
       ) strippedGeneratorData;
   in
   forEachTop (
-    topName: generator: self: {
+    topName: generator: self: rec {
       inherit configName topName;
 
       cases = self.callPackage ../../tests { };
 
-      mlirbc = t1Scope.chisel-to-mlirbc {
+      chisel-mlirbc = t1Scope.chisel-to-mlirbc {
         outputName = "${generator.fullClassName}.mlirbc";
         generatorClassName = generator.fullClassName;
         elaboratorArgs = "config ${generator.cmdopt}";
       };
+
+      # List of zaozi modules to elaborate and link.
+      # Each entry: { className, paramJsonName }
+      # paramJsonName matches the filename dumped by the ExtModule constructor into zaozi-params/
+      zaozi-modules = lib.optionals (lib.hasInfix "rv_xsfmm" generator.cmdopt) [
+        {
+          className = "org.chipsalliance.t1.rtl.zvma.ZVMAProcessingElement";
+          paramJsonName = "ZVMAProcessingElement.json";
+        }
+      ];
+
+      zaozi-mlirbcs = map (
+        mod:
+        t1Scope.zaozi-to-mlirbc {
+          outputName = "${lib.last (lib.splitString "." mod.className)}.mlirbc";
+          generatorClassName = mod.className;
+          parameterJson = "${chisel-mlirbc}/zaozi-params/${mod.paramJsonName}";
+        }
+      ) zaozi-modules;
+
+      mlirbc =
+        if zaozi-modules != [ ] then
+          t1Scope.firld-link {
+            outputName = "${generator.fullClassName}.mlirbc";
+            mlirbcs = [ chisel-mlirbc ] ++ zaozi-mlirbcs;
+            # baseCircuit = lib.last (lib.splitString "." generator.fullClassName);
+            baseCircuit = "TestBench";
+          }
+        else
+          chisel-mlirbc;
 
       lowered-mlirbc = t1Scope.finalize-mlirbc {
         outputName = "lowered-" + self.mlirbc.name;

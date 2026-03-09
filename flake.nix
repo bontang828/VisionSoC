@@ -77,9 +77,10 @@
               buildInputs = with pkgs; [
                 ammonite
                 mill
-                t1-helper
+                # FIXME: t1-helper
                 zstd
                 nixd
+                circt-install
               ];
             };
           };
@@ -98,7 +99,8 @@
               # rustfmt.enable = true;
             };
             settings.formatter = {
-              nixfmt.excludes = [ "*/generated.nix" ];
+              nixfmt.excludes = [ "dependencies/*" ];
+              scalafmt.excludes = [ "dependencies/*" ];
               scalafmt.includes = [
                 "*.sc"
                 "*.mill"

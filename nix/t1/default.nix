@@ -55,6 +55,9 @@ lib.makeScope newScope (
     omreader-unwrapped = t1Scope._t1MillModules.omreader // {
       meta.mainProgram = "omreader";
     };
+    t1zaozi = t1Scope._t1MillModules.t1zaozi // {
+      meta.mainProgram = "t1zaozi";
+    };
     t1package = t1Scope._t1MillModules.t1package;
     profiler = t1Scope.callPackage ../../profiler { };
     sim-checker = t1Scope.callPackage ../../difftest { } {
@@ -70,6 +73,16 @@ lib.makeScope newScope (
     # chisel-to-mlirbc accept outputName as output mlirbc file name, and elaboratorArgs for elaborator to run.
     # Return a derivation with the parsed mlirbc file as output.
     chisel-to-mlirbc = t1Scope.callPackage ./conversion/chisel-to-mlirbc.nix { };
+
+    # zaozi-to-mlirbc :: { outputName :: String, generatorClassName :: String, parameterJson :: Path } -> Derivation
+    #
+    # zaozi-to-mlirbc runs a zaozi @generator design with a pre-existing parameter JSON to produce .mlirbc directly.
+    zaozi-to-mlirbc = t1Scope.callPackage ./conversion/zaozi-to-mlirbc.nix { };
+
+    # firld-link :: { outputName :: String, mlirbcs :: List<Derivation>, baseCircuit :: String } -> Derivation
+    #
+    # firld-link uses firld to link multiple MLIRBC files at the FIRRTL level.
+    firld-link = t1Scope.callPackage ./conversion/firld-link.nix { };
 
     # finalize-mlirbc :: { outputName :: String, mlirbc :: Derivation } -> Derivation
     #

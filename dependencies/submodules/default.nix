@@ -68,6 +68,7 @@ lib.makeScope newScope (scope: {
       "omlib"
       "zaozi"
       "stdlib"
+      "decoder"
     ];
 
     env = {

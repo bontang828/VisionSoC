@@ -38,6 +38,7 @@ let
           ./../../t1
           ./../../omreader
           ./../../t1emu/src
+          ./../../t1zaozi/src
           ./../../elaborator
           ./../../rocketv
           ./../../t1rocket/src
@@ -100,6 +101,7 @@ let
       "out"
       "omreader"
       "elaborator"
+      "t1zaozi"
     ];
 
     buildPhase = ''
@@ -126,9 +128,11 @@ let
       }
       add-determinism-q out/elaborator/assembly.dest/out.jar
       add-determinism-q out/omreader/assembly.dest/out.jar
+      add-determinism-q out/t1zaozi/assembly.dest/out.jar
 
       mv out/elaborator/assembly.dest/out.jar $out/share/java/elaborator.jar
       mv out/omreader/assembly.dest/out.jar "$out"/share/java/omreader.jar
+      mv out/t1zaozi/assembly.dest/out.jar "$out"/share/java/t1zaozi.jar
 
       mkdir -p $elaborator/bin
       makeWrapper ${jdk21}/bin/java $elaborator/bin/elaborator \
@@ -141,6 +145,13 @@ let
         --add-flags "--enable-native-access=ALL-UNNAMED" \
         --add-flags "-Djava.library.path=${mlir-install}/lib:${circt-install}/lib" \
         --add-flags "-cp $out/share/java/omreader.jar"
+
+      mkdir -p $t1zaozi/bin
+      makeWrapper ${jdk21}/bin/java "$t1zaozi"/bin/t1zaozi \
+        --add-flags "--enable-preview" \
+        --add-flags "--enable-native-access=ALL-UNNAMED" \
+        --add-flags "-Djava.library.path=${mlir-install}/lib:${circt-install}/lib" \
+        --add-flags "-cp $out/share/java/t1zaozi.jar"
     '';
   };
 in

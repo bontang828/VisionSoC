@@ -1,7 +1,7 @@
 {
   stdenvNoCC,
   lib,
-  circt,
+  circt-install,
 }:
 
 {
@@ -20,7 +20,7 @@ let
 in
 stdenvNoCC.mkDerivation {
   name = outputName;
-  nativeBuildInputs = [ circt ];
+  nativeBuildInputs = [ circt-install ];
 
   passthru.layersDirs = enabledLayersDirs;
 
