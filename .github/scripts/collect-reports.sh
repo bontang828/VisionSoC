@@ -2,7 +2,7 @@
 
 set -e
 
-allTops=("t1emu" "t1rocketemu")
+allTops=("t1rocketemu")
 for t in "${allTops[@]}"; do
   nix run ".#ci-helper" -- postCI \
     --urg-report-file-path ./urg-report.md \

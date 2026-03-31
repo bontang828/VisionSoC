@@ -15,7 +15,6 @@
 assert
   let
     available = [
-      "dpi_t1emu"
       "dpi_t1rocketemu"
       "t1-sim-checker"
     ];
@@ -30,7 +29,6 @@ let
       fileset = unions [
         ./spike_rs
         ./dpi_common
-        ./dpi_t1emu
         ./dpi_t1rocketemu
         ./t1-sim-checker
         ./Cargo.lock

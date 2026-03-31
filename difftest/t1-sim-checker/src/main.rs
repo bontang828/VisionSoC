@@ -7,7 +7,6 @@ use spike_rs::runner::SpikeArgs;
 use tracing::Level;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
-mod t1emu;
 mod t1rocketemu;
 pub(crate) mod util;
 
@@ -95,14 +94,11 @@ fn main() -> anyhow::Result<()> {
   };
 
   match sim_result.flavor.as_str() {
-    "t1emu" => {
-      t1emu::run_diff(&spike_args)?;
-    }
     "t1rocketemu" => {
       t1rocketemu::run_diff(&spike_args)?;
     }
     _ => bail!(
-      "unknown flavor '{}', expected 't1emu' or 't1rocketemu'",
+      "unknown flavor '{}', expected 't1rocketemu'",
       sim_result.flavor
     ),
   }

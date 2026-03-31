@@ -181,17 +181,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dpi_t1emu"
-version = "0.1.0"
-dependencies = [
- "dpi_common",
- "hex",
- "spike_rs",
- "svdpi",
- "tracing",
-]
-
-[[package]]
 name = "dpi_t1rocketemu"
 version = "0.1.0"
 dependencies = [

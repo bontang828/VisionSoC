@@ -65,16 +65,6 @@ jobs:
       rtl_top: "t1rocketemu"
       git_rev: ${{ github.event.pull_request.head.sha }}
 
-  run-spike-vcs:
-    name: "Spike VCS"
-    needs: [run-single-check]
-    uses: ./.github/workflows/01-emulator-ci.yml
-    with:
-      backend: "vcs"
-      emulator: "vcs-emu-cover"
-      rtl_top: "t1emu"
-      git_rev: ${{ github.event.pull_request.head.sha }}
-
   run-rocket-verilator:
     name: "Rocket Verilator"
     needs: [run-rocket-vcs]
@@ -83,16 +73,6 @@ jobs:
       backend: "verilator"
       emulator: "verilator-emu"
       rtl_top: "t1rocketemu"
-      git_rev: ${{ github.event.pull_request.head.sha }}
-
-  run-spike-verilator:
-    name: "Spike Verilator"
-    needs: [run-spike-vcs]
-    uses: ./.github/workflows/01-emulator-ci.yml
-    with:
-      backend: "verilator"
-      emulator: "verilator-emu"
-      rtl_top: "t1emu"
       git_rev: ${{ github.event.pull_request.head.sha }}
 
   report:

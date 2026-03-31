@@ -27,7 +27,6 @@ jobs:
         config:
           - blastoise
         top:
-          - t1emu
           - t1rocketemu
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +61,6 @@ jobs:
         config:
           - blastoise
         top:
-          - t1emu
           - t1rocketemu
     steps:
       - name: Pull and Run tests

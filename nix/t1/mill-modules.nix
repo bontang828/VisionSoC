@@ -37,7 +37,6 @@ let
           ./../../common.mill
           ./../../t1
           ./../../omreader
-          ./../../t1emu/src
           ./../../t1zaozi/src
           ./../../elaborator
           ./../../rocketv
