@@ -28,10 +28,6 @@ class LaneOM(parameter: LaneParameter) extends GeneralOM[LaneParameter, Lane](pa
   @public
   val vfusIn = IO(Input(Property[Seq[AnyClassType]]()))
   vfus := vfusIn
-  val vrf   = IO(Output(Property[AnyClassType]()))
-  @public
-  val vrfIn = IO(Input(Property[AnyClassType]()))
-  vrf := vrfIn
 }
 
 class LaneSlotProbe(instructionIndexBits: Int, datapathWidth: Int) extends Bundle {
@@ -434,7 +430,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
 
   /** VRF instantces. */
   val vrf: Instance[VRF] = Instantiate(new VRF(parameter.vrfParam))
-  omInstance.vrfIn := Property(vrf.om.asAnyClassType)
+  vrf.io.clock := clock
+  vrf.io.reset := reset.asBool
 
   val fullMask: UInt = (-1.S(parameter.datapathWidth.W)).asUInt
 
@@ -1025,26 +1022,26 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
         // connect arbiter input
         readArbiter.io.in(i) <> readPortVec(sourceIndex)
         // connect arbiter output
-        vrf.readRequests(vrfPortIndex) <> readArbiter.io.out
+        vrf.io.readRequests(vrfPortIndex) <> readArbiter.io.out
         // connect read result
-        readResultVec(sourceIndex) := vrf.readResults(vrfPortIndex)
+        readResultVec(sourceIndex) := vrf.io.readResults(vrfPortIndex)
       }
     }
 
     // all vrf write
     val allVrfWrite: Seq[DecoupledIO[VRFWriteRequest]] = vrfWriteArbiter
     // check all write
-    vrf.writeCheck.zip(allVrfWrite).foreach { case (check, write) =>
+    vrf.io.writeCheck.zip(allVrfWrite).foreach { case (check, write) =>
       check.vd               := write.bits.vd
       check.offset           := write.bits.offset
       check.instructionIndex := write.bits.instructionIndex
     }
 
-    vrf.readCheck.zip(readCheckRequestVec).foreach { case (sink, source) => sink := source }
-    readCheckResult.zip(vrf.readCheckResult).foreach { case (sink, source) => sink := source }
+    vrf.io.readCheck.zip(readCheckRequestVec).foreach { case (sink, source) => sink := source }
+    readCheckResult.zip(vrf.io.readCheckResult).foreach { case (sink, source) => sink := source }
 
     allVrfWriteAfterCheck.zipWithIndex.foreach { case (req, i) =>
-      val check    = vrf.writeAllow(i)
+      val check    = vrf.io.writeAllow(i)
       val enqReady = check && (!afterCheckValid(i) || afterCheckDequeueReady(i))
       val enqFire  = enqReady && allVrfWrite(i).valid
       allVrfWrite(i).ready := enqReady
@@ -1067,14 +1064,14 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
     queueBeforeMaskWrite.enq.valid := writeSelect.orR
     queueBeforeMaskWrite.enq.bits  := Mux1H(writeSelect, allVrfWriteAfterCheck)
 
-    vrf.write <> maskedWriteUnit.dequeue
+    vrf.io.write <> maskedWriteUnit.dequeue
     readBeforeMaskedWrite <> maskedWriteUnit.vrfReadRequest
 
     // 更新v0
-    v0Update.valid       := vrf.write.valid && vrf.write.bits.vd === 0.U
-    v0Update.bits.data   := vrf.write.bits.data
-    v0Update.bits.offset := vrf.write.bits.offset
-    v0Update.bits.mask   := vrf.write.bits.mask
+    v0Update.valid       := vrf.io.write.valid && vrf.io.write.bits.vd === 0.U
+    v0Update.bits.data   := vrf.io.write.bits.data
+    v0Update.bits.offset := vrf.io.write.bits.offset
+    v0Update.bits.mask   := vrf.io.write.bits.mask
   }
 
   {
@@ -1267,40 +1264,40 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
     entranceControl.instructionFinished && !laneRequest.bits.decodeResult(Decoder.readOnly) && (writeCount === 0.U)
   val needWaitCrossWrite:                 Bool = laneRequest.bits.decodeResult(Decoder.crossWrite) && csrInterface.vl.orR
   // normal instruction, LSU instruction will be report to VRF.
-  vrf.instructionWriteReport.valid                       := laneRequest.bits.issueInst && (!instructionFinishAndNotReportByTop || needWaitCrossWrite)
-  vrf.instructionWriteReport.bits.instIndex              := laneRequest.bits.instructionIndex
-  vrf.instructionWriteReport.bits.vd.bits                := laneRequest.bits.vd
-  vrf.instructionWriteReport.bits.vd.valid               := !laneRequest.bits.decodeResult(
+  vrf.io.instructionWriteReport.valid                       := laneRequest.bits.issueInst && (!instructionFinishAndNotReportByTop || needWaitCrossWrite)
+  vrf.io.instructionWriteReport.bits.instIndex              := laneRequest.bits.instructionIndex
+  vrf.io.instructionWriteReport.bits.vd.bits                := laneRequest.bits.vd
+  vrf.io.instructionWriteReport.bits.vd.valid               := !laneRequest.bits.decodeResult(
     Decoder.targetRd
   ) || (laneRequest.bits.loadStore && !laneRequest.bits.store)
-  vrf.instructionWriteReport.bits.vs2                    := laneRequest.bits.vs2
-  vrf.instructionWriteReport.bits.vs1.bits               := laneRequest.bits.vs1
-  vrf.instructionWriteReport.bits.vs1.valid              := laneRequest.bits.decodeResult(Decoder.vtype)
-  vrf.instructionWriteReport.bits.indexType              := laneRequest.valid && laneRequest.bits.loadStore
+  vrf.io.instructionWriteReport.bits.vs2                    := laneRequest.bits.vs2
+  vrf.io.instructionWriteReport.bits.vs1.bits               := laneRequest.bits.vs1
+  vrf.io.instructionWriteReport.bits.vs1.valid              := laneRequest.bits.decodeResult(Decoder.vtype)
+  vrf.io.instructionWriteReport.bits.indexType              := laneRequest.valid && laneRequest.bits.loadStore
   // TODO: move ma to [[V]]
-  vrf.instructionWriteReport.bits.ma                     := laneRequest.bits.ma
-  vrf.instructionWriteReport.bits.onlyRead               := laneRequest.bits.decodeResult(Decoder.popCount)
+  vrf.io.instructionWriteReport.bits.ma                     := laneRequest.bits.ma
+  vrf.io.instructionWriteReport.bits.onlyRead               := laneRequest.bits.decodeResult(Decoder.popCount)
   // for mask unit
-  vrf.instructionWriteReport.bits.slow                   := laneRequest.bits.decodeResult(Decoder.special)
-  vrf.instructionWriteReport.bits.oooWrite               :=
+  vrf.io.instructionWriteReport.bits.slow                   := laneRequest.bits.decodeResult(Decoder.special)
+  vrf.io.instructionWriteReport.bits.oooWrite               :=
     laneRequest.bits.decodeResult(Decoder.maskPipeUop) === BitPat("b001??") ||
       laneRequest.bits.decodeResult(Decoder.maskPipeUop) === BitPat("b0001?")
-  vrf.instructionWriteReport.bits.ls                     := laneRequest.bits.loadStore
-  vrf.instructionWriteReport.bits.st                     := laneRequest.bits.store
-  vrf.instructionWriteReport.bits.crossWrite             := laneRequest.bits.decodeResult(Decoder.crossWrite)
-  vrf.instructionWriteReport.bits.crossRead              := laneRequest.bits.decodeResult(Decoder.crossRead)
-  vrf.instructionWriteReport.bits.unalignedReadVs1       := laneRequest.bits.decodeResult(
+  vrf.io.instructionWriteReport.bits.ls                     := laneRequest.bits.loadStore
+  vrf.io.instructionWriteReport.bits.st                     := laneRequest.bits.store
+  vrf.io.instructionWriteReport.bits.crossWrite             := laneRequest.bits.decodeResult(Decoder.crossWrite)
+  vrf.io.instructionWriteReport.bits.crossRead              := laneRequest.bits.decodeResult(Decoder.crossRead)
+  vrf.io.instructionWriteReport.bits.unalignedReadVs1       := laneRequest.bits.decodeResult(
     Decoder.gather16
   ) || laneRequest.bits.decodeResult(Decoder.compress)
-  vrf.instructionWriteReport.bits.gather                 := laneRequest.bits.decodeResult(Decoder.gather) &&
+  vrf.io.instructionWriteReport.bits.gather                 := laneRequest.bits.decodeResult(Decoder.gather) &&
     laneRequest.bits.decodeResult(Decoder.vtype)
   // init state
-  vrf.instructionWriteReport.bits.state.stFinish         := !laneRequest.bits.loadStore
+  vrf.io.instructionWriteReport.bits.state.stFinish         := !laneRequest.bits.loadStore
   // load need wait for write queue clear in lsu write queue
-  vrf.instructionWriteReport.bits.state.wWriteQueueClear := !(laneRequest.bits.loadStore && !laneRequest.bits.store)
-  vrf.instructionWriteReport.bits.state.wLaneLastReport  := !laneRequest.valid
-  vrf.instructionWriteReport.bits.state.wTopLastReport   := !laneRequest.bits.decodeResult(Decoder.maskUnit)
-  vrf.instructionWriteReport.bits.state.wLaneClear       := false.B
+  vrf.io.instructionWriteReport.bits.state.wWriteQueueClear := !(laneRequest.bits.loadStore && !laneRequest.bits.store)
+  vrf.io.instructionWriteReport.bits.state.wLaneLastReport  := !laneRequest.valid
+  vrf.io.instructionWriteReport.bits.state.wTopLastReport   := !laneRequest.bits.decodeResult(Decoder.maskUnit)
+  vrf.io.instructionWriteReport.bits.state.wLaneClear       := false.B
 
   val elementSizeForOneRegister: Int  = parameter.vLen / parameter.datapathWidth / parameter.laneNumber
   val nrMask:                    UInt = VecInit(Seq.tabulate(8) { i =>
@@ -1332,22 +1329,22 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
     )
   )
 
-  vrf.instructionWriteReport.bits.elementMask := selectMask
+  vrf.io.instructionWriteReport.bits.elementMask := selectMask
 
   instructionFinishInSlot := (~instructionValid).asUInt & instructionValidNext
 
-  val emptyInstValid: Bool = RegNext(laneRequest.bits.issueInst && !vrf.instructionWriteReport.valid, false.B)
+  val emptyInstValid: Bool = RegNext(laneRequest.bits.issueInst && !vrf.io.instructionWriteReport.valid, false.B)
   val emptyInstCount: UInt = RegNext(indexToOH(laneRequest.bits.instructionIndex, parameter.chainingSize))
   val emptyReport:    UInt = maskAnd(emptyInstValid, emptyInstCount).asUInt
 
   // clear record by instructionFinished
-  vrf.instructionLastReport                 := instructionFinishInSlot
-  vrf.lsuLastReport                         := lsuLastReport
-  vrf.loadDataInLSUWriteQueue               := loadDataInLSUWriteQueue
-  vrf.dataInLane                            := instructionValid
-  instructionFinished                       := vrf.vrfSlotRelease | emptyReport
-  writeReadyForLsu                          := vrf.writeReadyForLsu
-  vrfReadyToStore                           := vrf.vrfReadyToStore
+  vrf.io.instructionLastReport              := instructionFinishInSlot
+  vrf.io.lsuLastReport                      := lsuLastReport
+  vrf.io.loadDataInLSUWriteQueue            := loadDataInLSUWriteQueue
+  vrf.io.dataInLane                         := instructionValid
+  instructionFinished                       := vrf.io.vrfSlotRelease | emptyReport
+  writeReadyForLsu                          := vrf.io.writeReadyForLsu
+  vrfReadyToStore                           := vrf.io.vrfReadyToStore
   tokenManager.crossWrite2Reports.zipWithIndex.foreach { case (rpt, rptIndex) =>
     rpt.valid := slots.head.maskStage.get
       .crossWritePort2Enq(rptIndex)
@@ -1392,8 +1389,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
   tokenManager.writePipeEnqReport.valid := queueBeforeMaskWrite.enq.fire
   tokenManager.writePipeEnqReport.bits  := queueBeforeMaskWrite.enq.bits.instructionIndex
 
-  tokenManager.writePipeDeqReport.valid := vrf.write.fire
-  tokenManager.writePipeDeqReport.bits  := vrf.write.bits.instructionIndex
+  tokenManager.writePipeDeqReport.valid := vrf.io.write.fire
+  tokenManager.writePipeDeqReport.bits  := vrf.io.write.bits.instructionIndex
 
   tokenManager.topWriteEnq.valid := vrfWriteChannel.fire
   tokenManager.topWriteEnq.bits  := vrfWriteChannel.bits.instructionIndex
@@ -1439,13 +1436,13 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
     probeWire.laneRequestStall    := laneRequest.valid && !laneRequest.ready
     probeWire.lastSlotOccupied    := slotOccupied.last
     probeWire.instructionFinished := instructionFinished
-    probeWire.instructionValid    := vrf.instructionValid
+    probeWire.instructionValid    := vrf.io.instructionValid
     probeWire.crossWriteProbe.zip(writeBusPort2).foreach { case (pb, port) =>
       pb.valid          := port.deq.fire
       pb.bits.writeTag  := port.deq.bits.instructionIndex
       pb.bits.writeMask := port.deq.bits.mask
     }
-    probeWire.vrfProbe            := probe.read(vrf.vrfProbe)
+    probeWire.vrfProbe            := vrf.io.vrfProbe
   }
 
 }

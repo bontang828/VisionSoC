@@ -26,9 +26,50 @@ class SRAMProbe(parameter: SRAMParameter) extends DVBundle[SRAMParameter, SRAMLa
 
 case class SRAMVerilogParams(depth: Int, width: Int, addrWidth: Int) extends VerilogParameter
 
+class SRAM1R1WIO(parameter: SRAMParameter) extends HWBundle(parameter):
+  val clock:        BundleField[Clock] = Flipped(Clock())
+  val readEnable:   BundleField[Bool]  = Flipped(Bool())
+  val readAddress:  BundleField[UInt]  = Flipped(UInt(log2Ceil(parameter.depth)))
+  val readData:     BundleField[Bits]  = Aligned(Bits(parameter.width))
+  val writeEnable:  BundleField[Bool]  = Flipped(Bool())
+  val writeAddress: BundleField[UInt]  = Flipped(UInt(log2Ceil(parameter.depth)))
+  val writeData:    BundleField[Bits]  = Flipped(Bits(parameter.width))
+
+class SRAM2RWIO(parameter: SRAMParameter) extends HWBundle(parameter):
+  val clock0:     BundleField[Clock] = Flipped(Clock())
+  val enable0:    BundleField[Bool]  = Flipped(Bool())
+  val isWrite0:   BundleField[Bool]  = Flipped(Bool())
+  val address0:   BundleField[UInt]  = Flipped(UInt(log2Ceil(parameter.depth)))
+  val writeData0: BundleField[Bits]  = Flipped(Bits(parameter.width))
+  val readData0:  BundleField[Bits]  = Aligned(Bits(parameter.width))
+  val clock1:     BundleField[Clock] = Flipped(Clock())
+  val enable1:    BundleField[Bool]  = Flipped(Bool())
+  val isWrite1:   BundleField[Bool]  = Flipped(Bool())
+  val address1:   BundleField[UInt]  = Flipped(UInt(log2Ceil(parameter.depth)))
+  val writeData1: BundleField[Bits]  = Flipped(Bits(parameter.width))
+  val readData1:  BundleField[Bits]  = Aligned(Bits(parameter.width))
+
 @generator
 object SRAM extends VerilogWrapper[SRAMParameter, SRAMLayers, SRAMIO, SRAMProbe, SRAMVerilogParams]:
   def verilogModuleName(parameter: SRAMParameter) = "SRAM1RW"
+  def verilogParameter(parameter: SRAMParameter)  = SRAMVerilogParams(
+    depth = parameter.depth,
+    width = parameter.width,
+    addrWidth = log2Ceil(parameter.depth)
+  )
+
+@generator
+object SRAM1R1W extends VerilogWrapper[SRAMParameter, SRAMLayers, SRAM1R1WIO, SRAMProbe, SRAMVerilogParams]:
+  def verilogModuleName(parameter: SRAMParameter) = "SRAM1R1W"
+  def verilogParameter(parameter: SRAMParameter)  = SRAMVerilogParams(
+    depth = parameter.depth,
+    width = parameter.width,
+    addrWidth = log2Ceil(parameter.depth)
+  )
+
+@generator
+object SRAM2RW extends VerilogWrapper[SRAMParameter, SRAMLayers, SRAM2RWIO, SRAMProbe, SRAMVerilogParams]:
+  def verilogModuleName(parameter: SRAMParameter) = "SRAM2RW"
   def verilogParameter(parameter: SRAMParameter)  = SRAMVerilogParams(
     depth = parameter.depth,
     width = parameter.width,

@@ -58,7 +58,13 @@ forEachConfig (
       # List of zaozi modules to elaborate and link.
       # Each entry: { className, paramJsonName }
       # paramJsonName matches the filename dumped by the ExtModule constructor into zaozi-params/
-      zaozi-modules = lib.optionals (lib.hasInfix "rv_xsfmm" generator.cmdopt) [
+      zaozi-modules = [
+        {
+          className = "org.chipsalliance.t1.rtl.vrf.VRF";
+          paramJsonName = "VRF.json";
+        }
+      ]
+      ++ lib.optionals (lib.hasInfix "rv_xsfmm" generator.cmdopt) [
         {
           className = "org.chipsalliance.t1.rtl.zvma.ZVMA";
           paramJsonName = "ZVMA.json";
