@@ -18,6 +18,10 @@ def log2Ceil(x: Int): Int =
   require(x > 0)
   (ceil(log(x.toDouble) / log(2.0))).toInt.max(1)
 
+def chiselLog2Ceil(x: Int): Int =
+  require(x > 0)
+  if x == 1 then 0 else log2Ceil(x)
+
 def cutUInt(
   data:  Referable[UInt],
   width: Int

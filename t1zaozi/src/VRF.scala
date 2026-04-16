@@ -68,7 +68,7 @@ case class VRFParam(
   ramType:       RamType)
     extends Parameter:
 
-  val chaining1HBits: Int = 2 << log2Ceil(chainingSize)
+  val chaining1HBits: Int = 2 << chiselLog2Ceil(chainingSize)
 
   /** See documentation for VRF. chainingSize * 3 + 1 + 1: 3 read /slot + maskedWrite + lsu read 0: maskedWrite last:
     * lsu read Each element represents a read port of vrf, The number inside is which of the above requests will share
@@ -81,10 +81,10 @@ case class VRFParam(
   val regNum: Int = 32
 
   /** The hardware width of [[regNum]] */
-  val regNumBits:           Int = log2Ceil(regNum)
+  val regNumBits:           Int = chiselLog2Ceil(regNum)
   // One more bit for sorting
   /** see [[VParameter.instructionIndexBits]] */
-  val instructionIndexBits: Int = log2Ceil(chainingSize) + 1
+  val instructionIndexBits: Int = chiselLog2Ceil(chainingSize) + 1
 
   /** the width of VRF banked together. */
   val rowWidth: Int = datapathWidth * portFactor
@@ -96,19 +96,19 @@ case class VRFParam(
   val singleGroupSize: Int = vLen / datapathWidth / laneNumber
 
   /** see [[LaneParameter.vrfOffsetBits]] */
-  val vrfOffsetBits: Int = log2Ceil(singleGroupSize)
+  val vrfOffsetBits: Int = chiselLog2Ceil(singleGroupSize)
 
   // 用data path width 的 ram 应该是不会变了
   val ramWidth:  Int = datapathWidth
   val rfBankNum: Int = rowWidth / ramWidth
 
   /** used to instantiate VRF. */
-  val VLMaxWidth: Int = log2Ceil(vLen) + 1
+  val VLMaxWidth: Int = chiselLog2Ceil(vLen) + 1
 
   /** bits of mask group counter */
-  val maskGroupCounterBits: Int = log2Ceil(vLen / datapathWidth)
+  val maskGroupCounterBits: Int = chiselLog2Ceil(vLen / datapathWidth)
 
-  val vlWidth: Int = log2Ceil(vLen)
+  val vlWidth: Int = chiselLog2Ceil(vLen)
 
   val elementSize: Int = vLen * 8 / datapathWidth / laneNumber
 
@@ -203,7 +203,7 @@ class VRFWriteReport(param: VRFParam) extends Bundle:
   val state            = Aligned(new VRFInstructionState)
 
 class VRFReadPipe(size: Int) extends Bundle:
-  val address = Aligned(UInt(log2Ceil(size)))
+  val address = Aligned(UInt(chiselLog2Ceil(size)))
 
 class VRFProbe(parameter: VRFParam) extends Bundle:
   val valid              = Aligned(Bool())
@@ -329,9 +329,10 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
     val writeCheck       = io.writeCheck.toSeq
     val writeAllow       = io.writeAllow.toSeq
     val rfBankNumLog2    = if parameter.rfBankNum == 1 then 0 else log2Ceil(parameter.rfBankNum)
+    val rfDepthLog2      = chiselLog2Ceil(parameter.rfDepth)
     val readAddressVec   = readRequests.map { r =>
       val address = (r.bits.vs.asBits ## r.bits.offset.asBits).asUInt
-      if rfBankNumLog2 == 0 then address else (address >> rfBankNumLog2)
+      if rfBankNumLog2 == 0 then address else (address >> rfBankNumLog2).asBits.bits(rfDepthLog2 - 1, 0).asUInt
     }
     val validRecordType  = Valid(new VRFWriteReport(parameter))
     val readPipeType     = Valid(new VRFReadPipe(parameter.rfDepth))
@@ -346,7 +347,7 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
 
     // reset sram
     val sramReady      = RegInit(false.B)
-    val sramResetCount = RegInit(0.U(log2Ceil(parameter.rfDepth)))
+    val sramResetCount = RegInit(0.U(chiselLog2Ceil(parameter.rfDepth)))
     val resetValid     = !sramReady
     when(resetValid):
       sramResetCount := ((sramResetCount + 1.U(sramResetCount.width)).asBits.bits(sramResetCount.width - 1, 0)).asUInt
@@ -500,11 +501,15 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
 
     val writeData    = io.write.fire ? (io.write.bits.data, 0.U(parameter.datapathWidth))
     val writeAddress =
-      resetValid ? (
+      (resetValid ? (
         sramResetCount,
         (if rfBankNumLog2 == 0 then (writePipe.bits.vd.asBits ## writePipe.bits.offset.asBits).asUInt
-         else ((writePipe.bits.vd.asBits ## writePipe.bits.offset.asBits).asUInt >> rfBankNumLog2))
-      )
+         else
+           ((writePipe.bits.vd.asBits ## writePipe.bits.offset.asBits).asUInt >> rfBankNumLog2).asBits
+             .bits(rfDepthLog2 - 1, 0)
+             .asUInt
+        )
+      )).asBits.bits(rfDepthLog2 - 1, 0).asUInt
     // @todo @Clo91eaf VRF write&read singal should be captured here.
     // @todo           in the future, we need to maintain a layer to trace the original requester to each read&write.
     parameter.ramType match
@@ -517,9 +522,11 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
           firstReadPipe(bank).bits.address := mux1H(
             bankReadF.toSeq.map(_.asBits.bit(bank)),
             readAddressVec
-          )
+          ).asBits.bits(rfDepthLog2 - 1, 0).asUInt
           firstReadPipe(bank).valid        := orReduce(bankReadF.toSeq.map(_.asBits.bit(bank)))
-          rf.io.address                    := ramWriteValid ? (writeAddress, firstReadPipe(bank).bits.address)
+          rf.io.address                    := (ramWriteValid ? (writeAddress, firstReadPipe(bank).bits.address)).asBits
+            .bits(rfDepthLog2 - 1, 0)
+            .asUInt
           rf.io.enable                     := ramWriteValid | firstReadPipe(bank).valid
           rf.io.isWrite                    := ramWriteValid
           rf.io.writeData                  := (0.U(parameter.memoryWidth - parameter.datapathWidth).asBits ## writeData.asBits)
@@ -534,7 +541,7 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
           firstReadPipe(bank).bits.address := mux1H(
             bankReadF.toSeq.map(_.asBits.bit(bank)),
             readAddressVec
-          )
+          ).asBits.bits(rfDepthLog2 - 1, 0).asUInt
           firstReadPipe(bank).valid        := orReduce(bankReadF.toSeq.map(_.asBits.bit(bank)))
           // connect readPorts
           rf.io.readAddress                := firstReadPipe(bank).bits.address
@@ -556,7 +563,7 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
           firstReadPipe(bank).bits.address := mux1H(
             bankReadF.toSeq.map(_.asBits.bit(bank)),
             readAddressVec
-          )
+          ).asBits.bits(rfDepthLog2 - 1, 0).asUInt
           firstReadPipe(bank).valid        := orReduce(bankReadF.toSeq.map(_.asBits.bit(bank)))
           // connect readPorts
           rf.io.address0                   := firstReadPipe(bank).bits.address
@@ -570,9 +577,11 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
           secondReadPipe(bank).bits.address := mux1H(
             bankReadS.toSeq.map(_.asBits.bit(bank)),
             readAddressVec
-          )
+          ).asBits.bits(rfDepthLog2 - 1, 0).asUInt
           secondReadPipe(bank).valid        := orReduce(bankReadS.toSeq.map(_.asBits.bit(bank)))
-          rf.io.address1                    := ramWriteValid ? (writeAddress, secondReadPipe(bank).bits.address)
+          rf.io.address1                    := (ramWriteValid ? (writeAddress, secondReadPipe(bank).bits.address)).asBits
+            .bits(rfDepthLog2 - 1, 0)
+            .asUInt
           rf.io.enable1                     := ramWriteValid | secondReadPipe(bank).valid
           rf.io.isWrite1                    := ramWriteValid
           rf.io.writeData1                  := (0.U(parameter.memoryWidth - parameter.datapathWidth).asBits ## writeData.asBits)
@@ -648,7 +657,12 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
         when(recordEnq.asBits.bit(i)):
           record := initRecord
         when(!recordEnq.asBits.bit(i) & elementUpdateValid):
-          record.bits.elementMask := (record.bits.elementMask.asBits | elementUpdate1H.asBits).asUInt
+          record.bits.elementMask := (record.bits.elementMask.asBits | elementUpdate1H.asBits)
+            .bits(
+              parameter.elementSize - 1,
+              0
+            )
+            .asUInt
       }
     }
     // @todo @qinjun-li DV&RTL, here is a bug, LSU hazard

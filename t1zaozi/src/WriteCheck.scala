@@ -45,7 +45,8 @@ object WriteCheck extends Generator[VRFParam, WriteCheckLayers, WriteCheckInterf
 
     // elementMask records the relative position of the relative instruction.
     // Let's calculate the absolute position.
-    val vdShift     = (io.record.bits.vd.bits.asBits.bits(2, 0) ## 0.U(log2Ceil(elementSizeForOneRegister)).asBits).asUInt
+    val vdShift     =
+      (io.record.bits.vd.bits.asBits.bits(2, 0) ## 0.U(chiselLog2Ceil(elementSizeForOneRegister)).asBits).asUInt
     val maskBase    = (Fill(paddingSize, true.B) ## io.record.bits.elementMask.asBits ## Fill(paddingSize, true.B)).asUInt
     val maskShifter = (((maskBase << vdShift) >> paddingSize).asBits.bits(2 * paddingSize - 1, 0)).asUInt
     // mask for vd's group
@@ -62,7 +63,8 @@ object WriteCheck extends Generator[VRFParam, WriteCheckLayers, WriteCheckInterf
     val waw      = io.record.bits.vd.valid & (hitVd | hitVd1)
 
     // calculate the absolute position for vs1
-    val vs1Shift  = (io.record.bits.vs1.bits.asBits.bits(2, 0) ## 0.U(log2Ceil(elementSizeForOneRegister)).asBits).asUInt
+    val vs1Shift  =
+      (io.record.bits.vs1.bits.asBits.bits(2, 0) ## 0.U(chiselLog2Ceil(elementSizeForOneRegister)).asBits).asUInt
     val vs1Base   = (io.record.bits.elementMask.asBits ## Fill(paddingSize, true.B)).asUInt
     val vs1Mask   = (((vs1Base << vs1Shift) >> paddingSize).asBits).asUInt
     // Gather16 will read and write lengths mismatch
@@ -70,7 +72,8 @@ object WriteCheck extends Generator[VRFParam, WriteCheckLayers, WriteCheckInterf
     val war1      = io.record.bits.vs1.valid & (checkVd === io.record.bits.vs1.bits.asBits.bits(4, 3).asUInt) & notHitVs1
 
     // calculate the absolute position for vs2
-    val vs2Shift          = (io.record.bits.vs2.asBits.bits(2, 0) ## 0.U(log2Ceil(elementSizeForOneRegister)).asBits).asUInt
+    val vs2Shift          =
+      (io.record.bits.vs2.asBits.bits(2, 0) ## 0.U(chiselLog2Ceil(elementSizeForOneRegister)).asBits).asUInt
     val vs2Base           = (Fill(paddingSize, true.B) ## io.record.bits.elementMask.asBits ## Fill(paddingSize, true.B)).asUInt
     val maskShifterForVs2 = (((vs2Base << vs2Shift) >> paddingSize).asBits.bits(2 * paddingSize - 1, 0)).asUInt
 
