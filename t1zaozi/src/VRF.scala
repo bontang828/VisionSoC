@@ -499,7 +499,7 @@ object VRF extends Generator[VRFParam, VRFLayers, VRFInterface, VRFProbeInterfac
       case RamType.p0rp1w   => true.B
       case RamType.p0rwp1rw => (writeBank.asBits & (~secondOccupied.asBits)).orR)
 
-    val writeData    = io.write.fire ? (io.write.bits.data, 0.U(parameter.datapathWidth))
+    val writeData    = resetValid ? (0.U(parameter.datapathWidth), writePipe.bits.data)
     val writeAddress =
       (resetValid ? (
         sramResetCount,
