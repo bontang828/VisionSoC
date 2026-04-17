@@ -54,7 +54,13 @@ class RocketProbe(param: RocketParameter) extends Bundle {
   // fpu score board
   val fpuScoreboard:  Option[FPUScoreboardProbe] = Option.when(param.usingFPU)(new FPUScoreboardProbe)
 
-  val wbRegPc:    UInt                         = UInt(param.iBufParameter.vaddrBitsExtended.W)
+  val wbValid: Bool = Bool()
+  val wbPc:    UInt = UInt(param.iBufParameter.vaddrBitsExtended.W)
+  val wbInst:  UInt = UInt(32.W)
+  val wbWen:   Bool = Bool()
+  val wbWaddr: UInt = UInt(param.lgNXRegs.W)
+  val wbWdata: UInt = UInt(param.xLen.W)
+
   val t1IssueEnq: Option[DecoupledIO[T1Issue]] =
     Option.when(param.usingT1)(DecoupledIO(new T1Issue(param.xLen, param.vLen)))
 }
@@ -1197,30 +1203,31 @@ class Rocket(val parameter: RocketParameter)
       longLatencyWenable   := true.B
     }
 
-    val wbValid = wbRegValid && !replayWb && !wbException
-    val wbWen   = wbValid && wbRegDecodeOutput(parameter.decoderParameter.wxd)
+    val wbValid      = wbRegValid && !replayWb && !wbException
+    val wbWen        = wbValid && wbRegDecodeOutput(parameter.decoderParameter.wxd)
     // RF is at WB stage
-    val rfWen   = wbWen || longLatencyWenable
-    val rfWaddr = Mux(longLatencyWenable, longlatencyWaddress, wbWaddr)
-    val rfWdata = Mux(
+    val rfWen        = wbWen || longLatencyWenable
+    val rfWaddr      = Mux(longLatencyWenable, longlatencyWaddress, wbWaddr)
+    val wbOtherWdata = Mux(
+      (wbRegDecodeOutput(parameter.decoderParameter.csr) =/= parameter.csrParameter.N) || Option
+        .when(usingVector)(wbRegDecodeOutput(parameter.decoderParameter.vectorCSR))
+        .getOrElse(false.B),
+      csr.io.rw.rdata,
+      Mux(
+        Option
+          .when(usingMulDiv && pipelinedMul)(wbRegDecodeOutput(parameter.decoderParameter.mul))
+          .getOrElse(false.B),
+        mul.map(_.io.resp.bits.data).getOrElse(wbRegWdata),
+        wbRegWdata
+      )
+    )
+    val rfWdata      = Mux(
       dmemResponseValid && dmemResponseXpu,
       io.dmem.resp.bits.data(xLen - 1, 0),
       Mux(
         longLatencyWenable,
         longlatencyWdata,
-        Mux(
-          (wbRegDecodeOutput(parameter.decoderParameter.csr) =/= parameter.csrParameter.N) || Option
-            .when(usingVector)(wbRegDecodeOutput(parameter.decoderParameter.vectorCSR))
-            .getOrElse(false.B),
-          csr.io.rw.rdata,
-          Mux(
-            Option
-              .when(usingMulDiv && pipelinedMul)(wbRegDecodeOutput(parameter.decoderParameter.mul))
-              .getOrElse(false.B),
-            mul.map(_.io.resp.bits.data).getOrElse(wbRegWdata),
-            wbRegWdata
-          )
-        )
+        wbOtherWdata
       )
     )
     when(rfWen) { rf.write(rfWaddr, rfWdata) }
@@ -1653,7 +1660,12 @@ class Rocket(val parameter: RocketParameter)
         probeWire.vectorWriteFD  := t1RetireQueue.map(q => q.deq.fire && q.deq.bits.isFp).getOrElse(false.B)
         probeWire.idle           := vectorEmpty
 
-        probeWire.wbRegPc := wbRegPc
+        probeWire.wbValid := wbRegValid
+        probeWire.wbPc    := wbRegPc
+        probeWire.wbInst  := wbRegInstruction
+        probeWire.wbWen   := wbWen
+        probeWire.wbWaddr := wbWaddr
+        probeWire.wbWdata := wbOtherWdata
         probeWire.t1IssueEnq.foreach { case t1IssueEnq =>
           t1IssueEnq := t1IssueQueue.enq
         }

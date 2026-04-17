@@ -172,6 +172,21 @@ class TestBench(val parameter: T1RocketTileParameter)
 
   val log = SimLog.file("rtl_event.jsonl")
 
+  when(rocketProbe.wbValid) {
+    val wbWen   = rocketProbe.wbWen && rocketProbe.wbWaddr =/= 0.U
+    val wbWaddr = Mux(wbWen, rocketProbe.wbWaddr, 0.U)
+    val wbWdata = Mux(wbWen, rocketProbe.wbWdata, 0.U)
+    when (wbWen) {
+      log.printf(
+        cf"""{"event":"commit","pc":"${rocketProbe.wbPc}%x","inst":"${rocketProbe.wbInst}%x","waddr":$wbWaddr,"wdata":"$wbWdata%x"}\n"""
+      )
+    }.otherwise {
+      log.printf(
+        cf"""{"event":"commit","pc":"${rocketProbe.wbPc}%x","inst":"${rocketProbe.wbInst}%x"}\n"""
+      )
+    }
+  }
+
   // output the probes
   // rocket reg write
   when(
