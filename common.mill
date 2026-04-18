@@ -151,8 +151,8 @@ trait OMReaderModule extends ScalaModule {
   override def forkArgs: T[Seq[String]] = T(
     super.forkArgs() ++ Seq(
       "--enable-native-access=ALL-UNNAMED",
-      "--enable-preview"
-    )
+      "--enable-preview",
+      "-Xmx24g"    )
   )
 }
 

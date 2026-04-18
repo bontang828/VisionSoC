@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
 set -e
 
+START_TIME=$(date +%s)
+
+#Print elapsed time on exit
+finish() {
+    local exit_code=$?
+    local end_time
+    end_time=$(date +%s)
+    local elapsed=$(( end_time - START_TIME ))
+    local mins=$(( elapsed / 60 ))
+    local secs=$(( elapsed % 60 ))
+    echo ""
+    echo "----------------------------------------"
+    printf "Time elapsed: %dm %ds" "$mins" "$secs"
+    if [ "$exit_code" -ne 0 ]; then
+        printf "  (exit code: %d)\n" "$exit_code"
+    else
+        printf "  (success)\n"
+    fi
+    echo "----------------------------------------"
+}
+trap finish EXIT
+
 #Run script adapted from t1 public repo as nix doesnt work on my copmuter
 #Flags: ./run-test.sh <test-case-name> [-c <config>] [-i <top>] [-e <emu-type>] [--check]
 # -c <config> system high level parameters: e.g. blastoise, machamp, mudkip
@@ -65,12 +87,54 @@ TEST_BASE_NAME=$(basename "$TEST_CASE")
 OUTPUT_DIR="$VISIONSOC_DIR/test_output/$CONFIG/${TEST_BASE_NAME}-${TIMESTAMP}"
 mkdir -p "$OUTPUT_DIR"
 
+#Set up run log to captures everything printed to the terminal from this point on
+RUN_LOG="$OUTPUT_DIR/run.log"
+
+#Extract the cmdopt for this config from designs/*.toml
+CONFIG_CMDOPT=$(awk -v cfg="[$CONFIG]" '
+    $0 == cfg        { found=1; next }
+    found && /^cmdopt/ {
+        sub(/^cmdopt *= *"/, "")
+        sub(/"[[:space:]]*$/, "")
+        print
+        exit
+    }
+    /^\[/ && found   { exit }
+' "${VISIONSOC_DIR}/designs/"*.toml 2>/dev/null)
+
+{
+    echo "========================================"
+    echo "T1 Test Run Log"
+    echo "========================================"
+    echo "Config:      $CONFIG"
+    echo "Test:        $TEST_CASE"
+    echo "Top module:  $TOP"
+    echo "Emulator:    $EMU_TYPE"
+    echo "Trace:       $ENABLE_TRACE"
+    echo "Started:     $(date)"
+    echo ""
+    echo "Config parameters:"
+    if [ -n "$CONFIG_CMDOPT" ]; then
+        echo "$CONFIG_CMDOPT" | sed 's/ --/\n  --/g' | sed 's/^/  /'
+    else
+        echo "  [not found in designs/*.toml]"
+    fi
+    echo "========================================"
+    echo ""
+} > "$RUN_LOG"
+
+# Tee all stdout and stderr to run.log
+exec > >(tee -a "$RUN_LOG") 2>&1
+
+
+
 echo "Configuration: $CONFIG"
 echo "Top module: $TOP"
 echo "Emulator type: $EMU_TYPE"
 echo "Trace enabled: $ENABLE_TRACE"
 echo "Output directory: $OUTPUT_DIR"
 echo "Build logs: $OUTPUT_DIR/build.log"
+echo "Run log:    $RUN_LOG"
 echo ""
 
 echo "Resolving simulator path..."

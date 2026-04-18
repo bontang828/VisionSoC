@@ -391,9 +391,9 @@ case class T1RocketTileParameter(
 
   def dtimParameter: Option[AXI4BundleParameter] = hellaCacheParameter.dtimParameter
 
-  def t1HighBandwidthParameter: AXI4BundleParameter = t1Parameter.axi4BundleParameter
+  def t1HighBandwidthParameter: AXI4BundleParameter = t1Parameter.axi4BundleParameterWithArbiter
 
-  def t1HightOutstandingParameter: AXI4BundleParameter = t1Parameter.axi4BundleParameter.copy(dataWidth = 32)
+  def t1HightOutstandingParameter: AXI4BundleParameter = t1Parameter.axi4BundleParameterWithArbiter.copy(dataWidth = 32)
 }
 
 @instantiable
