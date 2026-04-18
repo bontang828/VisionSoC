@@ -135,8 +135,8 @@ case class T1Parameter(
   // TODO: simplify it. this is user-level API.
   vfuInstantiateParameter: VFUInstantiateParameter,
   matrixAluRowSize:        Option[Int],
-  matrixAluColSize:        Option[Int])
-    extends SerializableModuleParameter {
+  matrixAluColSize:        Option[Int],
+  rowNumber:               Option[Int] = Some(1))    extends SerializableModuleParameter {
   // TODO: expose it with the Property API
   override def toString: String =
     s"""T1-${extensions.mkString(",")}
@@ -149,6 +149,7 @@ case class T1Parameter(
       }}
        |matrixAluRowSize: ${matrixAluRowSize.getOrElse(0)}
        |matrixAluColSize: ${matrixAluColSize.getOrElse(0)}
+       |rowNumber: ${rowNumber.getOrElse(1)}
        |""".stripMargin
 
   def vLen: Int = extensions.collectFirst { case s"zvl${vlen}b" =>

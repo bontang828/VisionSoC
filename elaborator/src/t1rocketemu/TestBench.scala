@@ -86,7 +86,9 @@ object TestBench extends SerializableModuleElaborator {
     @arg(name = "vrfRamType") vrfRamType:                           RamType,
     @arg(name = "vfuInstantiateParameter") vfuInstantiateParameter: String,
     @arg(name = "matrixAluRowSize") matrixAluRowSize:               Option[Int],
-    @arg(name = "matrixAluColSize") matrixAluColSize: Option[Int]) {
+    @arg(name = "matrixAluColSize") matrixAluColSize:               Option[Int],
+    @arg(name = "rowNumber") rowNumber:                             Option[Int]
+    ) {
     def convert: T1RocketTileParameter = {
       val vLen = instructionSets.collectFirst { case s"zvl${vlen}b" =>
         vlen.toInt
@@ -121,7 +123,8 @@ object TestBench extends SerializableModuleElaborator {
           laneScale = laneScale
         ),
         matrixAluRowSize,
-        matrixAluColSize
+        matrixAluColSize,
+        rowNumber
       )
     }
   }
