@@ -25,3 +25,5 @@ target
 t1-sim-result/
 .worktree/
 /test_output/
+/test-results/
+*test-result*
