@@ -28,3 +28,5 @@ t1-sim-result/
 /test-results/
 *test-result*
 sim-checker-result
+fpga/system/vivado*.jou
+fpga/system/vivado*.log
