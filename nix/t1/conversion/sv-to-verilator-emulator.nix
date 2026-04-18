@@ -2,7 +2,6 @@
   lib,
   stdenv,
   verilator,
-  snps-fhs-env,
   zlib,
 }:
 
@@ -30,8 +29,7 @@ let
     "--threads"
     (toString verilatorThreads)
     "-O1"
-    "-y"
-    "$DWBB_DIR/sim_ver"
+    #removed dwbb dependency
     "-Wno-lint"
     "-Wno-fatal"
     "+define+T1_DEV"
@@ -72,7 +70,6 @@ let
     buildPhase = ''
       runHook preBuild
 
-      DWBB_DIR=$(${snps-fhs-env}/bin/snps-fhs-env -c "echo \$DWBB_DIR")
 
       verilatorPhase="verilator ${lib.escapeShellArgs verilatorArgs}"
       echo "[nix] running verilator: $verilatorPhase"

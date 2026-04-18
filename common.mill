@@ -157,7 +157,7 @@ trait OMReaderModule extends ScalaModule {
 }
 
 trait StdlibModule extends ScalaModule with HasChisel {
-  def dwbbIvy: Dep
-
-  override def ivyDeps = T(super.ivyDeps() ++ Seq(dwbbIvy))
+  //def dwbbIvy: Dep
+  //override def ivyDeps = T(super.ivyDeps() ++ Seq(dwbbIvy))
+  //removed dependency from dwbb
 }

@@ -1,11 +1,8 @@
 package org.chipsalliance.dwbb.stdlib.queue
 
 import chisel3._
-import chisel3.experimental.hierarchy.Instantiate
-import org.chipsalliance.dwbb.wrapper.DW_fifo_s1_sf.{DW_fifo_s1_sf => DwbbFifo}
-import org.chipsalliance.dwbb.interface.DW_fifo_s1_sf.{Interface => DwbbFifoInterface, Parameter => DwbbFifoParameter}
-import chisel3.ltl.AssertProperty
-import chisel3.util.{Decoupled, DecoupledIO, DeqIO, EnqIO, ReadyValidIO}
+
+import chisel3.util._
 
 class QueueIO[T <: Data](private val gen: T, entries: Int) extends Bundle {
   val enq = Flipped(EnqIO(gen))
@@ -77,55 +74,58 @@ object Queue {
         Range.inclusive(1, entries - 1).contains(almostFullLevel),
         "almost full level must be between 1 and entries-1"
       )
+      //calculate the number of bits needed for the counter
+      val ptrWidth = log2Ceil(entries) + 1
 
-      val clock = Module.clock
-      val reset = Module.reset
+      //create the memory to store queue data
+      val ram = if (resetMem) {
+        RegInit(VecInit(Seq.fill(entries)(0.U.asTypeOf(gen))))
+      } else {
+        Reg(Vec(entries, gen))
+      }
 
-      // TODO: use sync reset for now and wait for t1 to migrate to FixedIOModule
-      // require(reset.typeName == "Bool" || reset.typeName == "AsyncReset")
-      val useAsyncReset = reset.typeName == "AsyncReset"
+      //write and read pointers
+      val enqPtr = RegInit(0.U(ptrWidth.W))
+      val deqPtr = RegInit(0.U(ptrWidth.W))
 
-      val fifo = Instantiate(
-        new DwbbFifo(
-          new DwbbFifoParameter(
-            width = gen.getWidth,
-            depth = entries,
-            aeLevel = almostEmptyLevel,
-            afLevel = almostFullLevel,
-            errMode = "unlatched",
-            rstMode = (useAsyncReset, resetMem) match {
-              case (false, false) => "sync_wo_mem"
-              case (false, true)  => "sync_with_mem"
-              case (true, false)  => "async_wo_mem"
-              case (true, true)   => "async_with_mem"
-            }
-          )
-        )
+      //calculate queue status
+      val ptrMatch = enqPtr(ptrWidth - 2, 0) === deqPtr(ptrWidth - 2, 0)
+      val empty    = ptrMatch && (enqPtr(ptrWidth - 1) === deqPtr(ptrWidth - 1))
+      val full     = ptrMatch && (enqPtr(ptrWidth - 1) =/= deqPtr(ptrWidth - 1))
+
+      //calculate the number of elements in the queue
+      val count = Mux(
+        enqPtr >= deqPtr,
+        enqPtr - deqPtr,
+        entries.U + enqPtr - deqPtr
       )
 
-      val dataIn  = io.enq.bits.asUInt
-      val dataOut = fifo.io.data_out.asTypeOf(io.deq.bits)
+      //almost empty/full signals
+      val almostEmpty = count <= almostEmptyLevel.U
+      val almostFull  = count >= (entries.U - almostFullLevel.U)
 
-      fifo.io.clk   := clock
-      fifo.io.rst_n := ~(reset.asBool)
+      //enqueue logic
+      val doEnq = WireDefault(io.enq.fire && (if (flow) !(empty && io.deq.ready) else true.B))
+      when(doEnq) {
+        ram(enqPtr(ptrWidth - 2, 0)) := io.enq.bits
+        enqPtr := Mux(enqPtr(ptrWidth - 2, 0) === (entries - 1).U, ~enqPtr(ptrWidth - 1) ## 0.U((ptrWidth - 1).W), enqPtr + 1.U)
+      }
 
-      fifo.io.diag_n := ~(false.B)
+      //dequeue logic
+      val doDeq = WireDefault(io.deq.ready && !empty)
+      when(doDeq) {
+        deqPtr := Mux(deqPtr(ptrWidth - 2, 0) === (entries - 1).U, ~deqPtr(ptrWidth - 1) ## 0.U((ptrWidth - 1).W), deqPtr + 1.U)
+      }
 
-      io.enq.ready       := !fifo.io.full || (if (pipe) io.deq.ready else false.B)
-      fifo.io.push_req_n := ~(io.enq.fire && (if (flow) !(fifo.io.empty && io.deq.ready) else true.B))
-      fifo.io.data_in    := dataIn
+      //connect outputs
+      io.enq.ready := !full || (if (pipe) io.deq.ready else false.B)
+      io.deq.valid := !empty || (if (flow) io.enq.valid else false.B)
+      io.deq.bits  := (if (flow) Mux(empty, io.enq.bits, ram(deqPtr(ptrWidth - 2, 0))) else ram(deqPtr(ptrWidth - 2, 0)))
+      io.empty           := empty
+      io.full            := full
+      io.almostEmpty.get := almostEmpty
+      io.almostFull.get  := almostFull
 
-      io.deq.valid      := !fifo.io.empty || (if (flow) io.enq.valid else false.B)
-      fifo.io.pop_req_n := ~(io.deq.ready && !fifo.io.empty)
-      io.deq.bits       := (if (flow) Mux(fifo.io.empty, io.enq.bits, dataOut) else dataOut)
-
-      io.empty           := fifo.io.empty
-      io.full            := fifo.io.full
-      io.almostEmpty.get := fifo.io.almost_empty
-      io.almostFull.get  := fifo.io.almost_full
-
-      // There should be no error since we guarantee to push/pop items only when the fifo is neither empty nor full.
-      AssertProperty(!fifo.io.error)
     }
 
     io
