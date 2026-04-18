@@ -11,7 +11,6 @@ in
 stdenvNoCC.mkDerivation (finalAttr: {
   name = "${caseName}-vcs-prof-vcd";
 
-  __noChroot = true;
 
   dontUnpack = true;
 

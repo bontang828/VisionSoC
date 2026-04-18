@@ -53,7 +53,6 @@ stdenvNoCC.mkDerivation (
       python3
     ];
 
-    __noChroot = true;
     dontUnpack = true;
 
     emuDriverWithArgs =

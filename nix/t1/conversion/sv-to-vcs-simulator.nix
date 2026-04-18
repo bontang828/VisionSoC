@@ -94,7 +94,6 @@ let
     inherit mainProgram;
 
     # require license
-    __noChroot = true;
     dontPatchELF = true;
 
     dontUnpack = true;

@@ -152,7 +152,6 @@ let
       ${vcs-emu.snps-fhs-env}/bin/snps-fhs-env -c "urg -dir $out/*/cm.vdb -format text -metric assert -show summary"
       cp -vr urgReport $out/
     '';
-    __noChroot = true;
   };
 
   _verilatorEmuResult = _getAllResult {

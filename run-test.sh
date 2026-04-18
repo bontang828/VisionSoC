@@ -74,7 +74,7 @@ echo "Build logs: $OUTPUT_DIR/build.log"
 echo ""
 
 echo "Resolving simulator path..."
-SIMULATOR_PATH=$(nix build ".#t1.$CONFIG.$TOP.$EMU_TYPE" --no-link --print-out-paths 2>> "$OUTPUT_DIR/build.log")
+SIMULATOR_PATH=$(nix build ".#t1.$CONFIG.$TOP.$EMU_TYPE" --no-link --print-out-paths -L 2>> "$OUTPUT_DIR/build.log")
 if [ -z "$SIMULATOR_PATH" ]; then
     echo "Error: Failed to resolve simulator path for .#t1.$CONFIG.$TOP.$EMU_TYPE"
     echo "Check build.log for details: $OUTPUT_DIR/build.log"
@@ -82,7 +82,7 @@ if [ -z "$SIMULATOR_PATH" ]; then
 fi
 
 echo "Resolving DPI library path..."
-DPI_LIB_PATH=$(nix build ".#t1.$CONFIG.$TOP.verilator-dpi-lib" --no-link --print-out-paths 2>> "$OUTPUT_DIR/build.log")
+DPI_LIB_PATH=$(nix build ".#t1.$CONFIG.$TOP.verilator-dpi-lib" --no-link --print-out-paths -L 2>> "$OUTPUT_DIR/build.log")
 if [ -z "$DPI_LIB_PATH" ]; then
     echo "Error: Failed to resolve DPI library path for .#t1.$CONFIG.$TOP.verilator-dpi-lib"
     echo "Check build.log for details: $OUTPUT_DIR/build.log"
@@ -95,7 +95,7 @@ echo "DPI library path: $DPI_LIB_PATH"
 echo ""
 
 echo "Building test case: $TEST_CASE"
-nix build ".#t1.$CONFIG.$TOP.cases.$TEST_CASE" -o test-result 2>> "$OUTPUT_DIR/build.log"
+nix build ".#t1.$CONFIG.$TOP.cases.$TEST_CASE" -o test-result -L 2>> "$OUTPUT_DIR/build.log"
 
 if [ ! -L "test-result" ]; then
     echo "Error: Test case build failed"
@@ -176,7 +176,7 @@ if [ -f "$OUTPUT_DIR/sim_result.json" ]; then
             echo "=== Running Offline Checker ==="
 
             #Build sim-checker if not already built
-            if [ ! -L "$VISIONSOC_DIR/sim-checker-result" ]; then
+            if [ ! -e "$VISIONSOC_DIR/sim-checker-result" ]; then
                 echo "Building sim-checker..."
                 nix build ".#t1.sim-checker" -o "$VISIONSOC_DIR/sim-checker-result"
             fi

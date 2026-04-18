@@ -58,7 +58,6 @@ let
   verilatedLib = stdenv.mkDerivation (rec {
     name = mainProgram + "-vlib";
 
-    __noChroot = true;
 
     dontUnpack = true;
 
