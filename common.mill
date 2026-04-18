@@ -132,7 +132,8 @@ trait ElaboratorModule extends ScalaModule with HasChisel {
   override def forkArgs: T[Seq[String]] = T(
     super.forkArgs() ++ Seq(
       "--enable-native-access=ALL-UNNAMED",
-      "--enable-preview"
+      "--enable-preview",
+      "-Xmx48g"
     )
   )
 }
@@ -152,7 +153,7 @@ trait OMReaderModule extends ScalaModule {
     super.forkArgs() ++ Seq(
       "--enable-native-access=ALL-UNNAMED",
       "--enable-preview",
-      "-Xmx24g"    )
+      "-Xmx48g"    )
   )
 }
 

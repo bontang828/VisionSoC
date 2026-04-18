@@ -159,14 +159,14 @@ echo "DPI library path: $DPI_LIB_PATH"
 echo ""
 
 echo "Building test case: $TEST_CASE"
-nix build ".#t1.$CONFIG.$TOP.cases.$TEST_CASE" -o test-result -L 2>> "$OUTPUT_DIR/build.log"
+nix build ".#t1.$CONFIG.$TOP.cases.$TEST_CASE" -o "$OUTPUT_DIR/test-result" -L 2>> "$OUTPUT_DIR/build.log"
 
-if [ ! -L "test-result" ]; then
+if [ ! -L "$OUTPUT_DIR/test-result" ]; then
     echo "Error: Test case build failed"
     exit 1
 fi
 
-TEST_ELF=$(find test-result/bin -name "*.elf" | head -1)
+TEST_ELF=$(find "$OUTPUT_DIR/test-result/bin" -name "*.elf" | head -1)
 if [ -z "$TEST_ELF" ]; then
     echo "Error: Could not find test ELF file"
     exit 1
@@ -217,7 +217,7 @@ export LD_LIBRARY_PATH="$DPI_LIB_PATH:$LD_LIBRARY_PATH"
 "$SIMULATOR_PATH/bin/$SIMULATOR_BIN" "${SIM_ARGS[@]}"
 
 if [ -f "sim_result.json" ]; then
-    mv sim_result.json $OUTPUT_DIR/
+    mv sim_result.json "$OUTPUT_DIR/"
 fi
 
 echo ""

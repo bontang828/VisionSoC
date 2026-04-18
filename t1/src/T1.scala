@@ -469,7 +469,8 @@ class T1(val parameter: T1Parameter)
 
   /** the LSU Module */
 
-  val lsu2D:    Seq[Instance[LSU]]      = Seq.tabulate(parameter.numRows)(i => Instantiate(new LSU(parameter.lsuParameters.copy(name = s"lsu_row$i"))))
+  // val lsu2D:    Seq[Instance[LSU]]           = Seq.tabulate(parameter.numRows)(i => Instantiate(new LSU(parameter.lsuParameters.copy(name = s"lsu_row$i"))))
+  val lsu2D:    Seq[Instance[LSU]]           = Seq.tabulate(parameter.numRows)(_ => Instantiate(new LSU(parameter.lsuParameters)))
   val decode: Instance[VectorDecoder] = Instantiate(new VectorDecoder(parameter.decoderParam))
 
   /** instantiate lanes. */
