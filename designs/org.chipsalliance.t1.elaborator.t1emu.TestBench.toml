@@ -12,6 +12,14 @@ cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 4 --ch
 [mudkip2d128small1bram1chain2lanescale]
 cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
 
+[mudkip2d128small1bram0chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --chainingSize 0 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+[mudkip2d128small4bram0chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --chainingSize 0 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 4"
+
+[mudkip2d128small4bram1chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 4"
 
 
 [uxie]

@@ -326,6 +326,10 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
   /** for each instruction in the slot, response to top when instruction is finished in this lane. */
   @public
   val instructionFinished: UInt = IO(Output(UInt(parameter.chaining1HBits.W)))
+
+  @public
+  val vrfInstructionValid: UInt = IO(Output(UInt(parameter.chaining1HBits.W))) //exposing this state for time multiplexing row firing timing
+
   @public
   val vxsatReport:         UInt = IO(Output(UInt(parameter.chaining1HBits.W)))
   @public

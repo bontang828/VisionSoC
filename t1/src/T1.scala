@@ -314,6 +314,10 @@ case class T1Parameter(
 
   val numRows: Int = rowNumber.getOrElse(1)
 
+  /** time multiplexing**/
+  val targetElementNum: Int = vLen * 4 / 8 // 4 means LMUL=4 and 8 means 8 bit per element
+  val timeMultiplexBatch: Int = targetElementNum / numRows // How many batches needed for time multiplexing after instantiating how many rows
+
   /** paraemter for AXI4. */
   val axi4BundleParameter: AXI4BundleParameter = AXI4BundleParameter(
     idWidth = sourceWidth,
@@ -753,13 +757,25 @@ class T1(val parameter: T1Parameter)
       )
     )
   }
+  //time multiplexing for fpga
+  //val replayFSM = Module(new time_multiplex_row_fsm(parameter.timeMultiplexBatch))
+  val replayFSM = Module(new time_multiplex_row_fsm(2))
+  val replayRowDone = Wire(Bool())
+  replayFSM.rowDone := replayRowDone
+
+
   // 0 0 -> don't update
   // 0 1 -> update to false
   // 1 0 -> update to true
   // 1 1 -> don't update
-  requestReg.valid := Mux(io.issue.fire ^ requestRegDequeue.fire, io.issue.fire, requestReg.valid)
-  // ready when requestReg is free or it will be free in this cycle.
-  io.issue.ready          := !requestReg.valid || requestRegDequeue.ready
+
+  // time multiplex: only release requestReg on last row
+  //requestReg.valid := Mux(io.issue.fire ^ requestRegDequeue.fire, io.issue.fire, requestReg.valid)
+  requestReg.valid := Mux(io.issue.fire ^ replayFSM.lastRowFire, io.issue.fire, requestReg.valid)
+  
+  // time multiplex: doesn't support back-to-back pipelining, so we can remove the `|| requestRegDequeue.ready` condition to ensure repeating row can obtain the same instruction data at requestReg
+  //io.issue.ready          := !requestReg.valid || requestRegDequeue.ready
+  io.issue.ready          := !requestReg.valid
   // manually maintain a queue for requestReg.
   requestRegDequeue.bits  := requestReg.bits.issue
   requestRegDequeue.valid := requestReg.valid
@@ -835,6 +851,9 @@ class T1(val parameter: T1Parameter)
   val allSlotFree:   Bool = Wire(Bool())
   val existMaskType: Bool = Wire(Bool())
 
+  // time multiplexing for fpga
+  replayFSM.requestRegDequeueFire := requestRegDequeue.fire
+
   // read
   val readType: VRFReadRequest = new VRFReadRequest(
     parameter.vrfParam.regNumBits,
@@ -861,6 +880,13 @@ class T1(val parameter: T1Parameter)
 
     //endTag2D Register for supporting 2D: laneNumber lanes + 1 LSU bit per row (mirrors original control.endTag width)
     val endTag2D: Seq[Vec[Bool]] = Seq.fill(parameter.numRows)(RegInit(VecInit(Seq.fill(parameter.laneNumber + 1)(true.B))))
+
+    // wMaskUnitLast2D Register for supporting 2D: one bit per row tracking mask unit completion
+    val wMaskUnitLast2D: Vec[Bool] = RegInit(VecInit(Seq.fill(parameter.numRows)(true.B)))
+
+    // time multiplex: remember initial endTag values for between-batch reset
+    val savedSkipLastFromLane: Bool = RegInit(true.B)
+    val savedIsMaskUnit: Bool = RegInit(false.B)
 
     /** the execution is finished. (but there might still exist some data in the ring.)
       */
@@ -891,8 +917,14 @@ class T1(val parameter: T1Parameter)
       control.state.wLast             := false.B
       control.state.sCommit           := false.B
       control.state.wMaskUnitLast     := !requestReg.bits.decodeResult(Decoder.maskUnit)
+      wMaskUnitLast2D.foreach { d =>
+        d := !requestReg.bits.decodeResult(Decoder.maskUnit)
+      }
 
       control.vxsat  := false.B
+      // time multiplex: save initial values for between-batch reset
+      savedSkipLastFromLane := skipLastFromLane
+      savedIsMaskUnit := requestReg.bits.decodeResult(Decoder.maskUnit)
       // two different initial states for endTag:
       // for load/store instruction, use the last bit to indicate whether it is the last instruction
       // for other instructions, use MSB to indicate whether it is the last instruction
@@ -904,11 +936,31 @@ class T1(val parameter: T1Parameter)
     }
       // state machine starts here
       .otherwise {
-        val maskUnit2DLastReport = maskUnit2D.map(_.io.lastReport.orR).reduce(_ && _)
-        when(maskUnit2DLastReport) { //Bon: 2D TODO(completed)
-          control.state.wMaskUnitLast := true.B
+        //val maskUnit2DLastReport = maskUnit2D.map(_.io.lastReport.orR).reduce(_ && _)
+        //when(maskUnit2DLastReport) { //Bon: 2D TODO(completed)
+        //  control.state.wMaskUnitLast := true.B
+        //}
+        //wMaskUnitLast2D update logic: each row's mask unit sets its own bit using sticky OR
+        //Time complexity: making the reset and update mutually exclusive
+        val resetBetweenRows = replayFSM.rowFire && !control.state.idle
+        when(resetBetweenRows){
+          wMaskUnitLast2D.foreach { d =>
+            d := !savedIsMaskUnit
+          }
+        }.otherwise{
+          maskUnit2D.zipWithIndex.foreach { case (maskUnit, row) =>
+            when(maskUnit.io.lastReport.orR) {
+              wMaskUnitLast2D(row) := true.B
+            }
+          }
         }
-        when(laneAndLSUFinish && v0WriteFinish) {
+        //AND reduction: all rows must have mask unit done
+        control.state.wMaskUnitLast := wMaskUnitLast2D.asUInt.andR && !replayFSM.busy //gated by replayFSM as this signal contributes to slot retirement, so should not go high when havn't complete whole time multiplex batch
+        //when(laneAndLSUFinish && v0WriteFinish) {
+        //  control.state.wLast := true.B
+        //}
+        //time multiplex: only set wLast when FSM has finished all batches
+        when(laneAndLSUFinish && v0WriteFinish && !replayFSM.busy) {
           control.state.wLast := true.B
         }
 
@@ -925,13 +977,20 @@ class T1(val parameter: T1Parameter)
         //   d := d || c
         // }
 
-        //endTag2D update logic
-        endTag2D.zipWithIndex.foreach { case (endTag, row) =>
-          endTag.zip(instructionFinished2D(row).map(_(index)) :+ lsuFinished2D(row)).foreach { case (d, c) =>
-            d := d || c
+        when(resetBetweenRows) { //time multiplex: reset endTag2D between batches
+          val resetVec = VecInit(Seq.fill(parameter.laneNumber)(savedSkipLastFromLane) :+ !control.record.isLoadStore)
+          endTag2D.foreach { endTag => endTag := resetVec }
+          //also reset control.endTag directly, so it will not reads expired all-true endTag2D this cycle
+          control.endTag := resetVec
+        } .otherwise {
+          //endTag2D update logic
+          endTag2D.zipWithIndex.foreach { case (endTag, row) =>
+            endTag.zip(instructionFinished2D(row).map(_(index)) :+ lsuFinished2D(row)).foreach { case (d, c) =>
+              d := d || c
+            }
           }
+          control.endTag := endTag2D.map(_.asUInt).reduce(_ & _).asBools
         }
-        control.endTag := endTag2D.map(_.asUInt).reduce(_ & _).asBools
 
         when(vxsatUpdate) {
           control.vxsat := true.B
@@ -968,6 +1027,8 @@ class T1(val parameter: T1Parameter)
     )
     control
   }
+  //filter out idle slots (they are assigned all true in endtag for no-op), OR to find the one active slot
+  replayRowDone := slots.map(s => !s.state.idle && s.endTag.asUInt.andR).reduce(_ || _) //all physical rows should be done for the active slot
 
   // top & mask unit <-> sequencerIF (Lane related)
   val laneRequestSourceWire2D: Seq[Vec[DecoupledIO[LaneRequest]]]  = sequencerIF2D.map(_.io.laneRequest)
@@ -1075,7 +1136,9 @@ class T1(val parameter: T1Parameter)
 
   for (row <- 0 until parameter.numRows) {
     laneRequestSourceWire2D(row).zipWithIndex.foreach { case (request, index) =>
-      request.valid                 := requestRegDequeue.fire
+      // request.valid                 := requestRegDequeue.fire
+      // time multiplex: lane dispatch per row
+      request.valid                 := replayFSM.rowFire
       // hard wire
       request.bits.instructionIndex := requestReg.bits.instructionIndex
       request.bits.decodeResult     := decodeResult
@@ -1225,7 +1288,9 @@ class T1(val parameter: T1Parameter)
     .getOrElse(isLoadStoreType)
   Seq.tabulate(parameter.numRows) { row =>
     val lsuRequestTopWire = lsuRequestTopWire2D(row)
-    lsuRequestTopWire.valid                                               := requestRegDequeue.fire && issueToLSU
+    // lsuRequestTopWire.valid                                               := requestRegDequeue.fire && issueToLSU
+    // time multiplex: LSU dispatch per row
+    lsuRequestTopWire.valid                                               := replayFSM.rowFire && issueToLSU
     lsuRequestTopWire.bits.request.instructionIndex                       := requestReg.bits.instructionIndex
     lsuRequestTopWire.bits.request.rs1Data                                := requestRegDequeue.bits.rs1Data
     lsuRequestTopWire.bits.request.rs2Data                                := requestRegDequeue.bits.rs2Data
@@ -1290,7 +1355,9 @@ class T1(val parameter: T1Parameter)
   // connect mask unit
   for (row <- 0 until parameter.numRows) {
     val maskUnit = maskUnit2D(row)
-    maskUnit.io.instReq.valid                 := requestRegDequeue.fire && requestReg.bits.decodeResult(Decoder.maskUnit)
+    // maskUnit.io.instReq.valid                 := requestRegDequeue.fire && requestReg.bits.decodeResult(Decoder.maskUnit)
+    //time multiplex: mask unit dispatch per row
+    maskUnit.io.instReq.valid                 := replayFSM.rowFire && requestReg.bits.decodeResult(Decoder.maskUnit)
     maskUnit.io.instReq.bits.instructionIndex := requestReg.bits.instructionIndex
     maskUnit.io.instReq.bits.decodeResult     := decodeResult
     maskUnit.io.instReq.bits.readFromScala    := Mux(decodeResult(Decoder.itype), imm, requestRegDequeue.bits.rs1Data)
@@ -1303,11 +1370,15 @@ class T1(val parameter: T1Parameter)
     maskUnit.io.instReq.bits.vd               := requestRegDequeue.bits.instruction(11, 7)
     maskUnit.io.instReq.bits.vl               := requestReg.bits.issue.vl
     // for mask stage type, shifter v0 / get write count
-    maskUnit.io.maskPipeReq.valid             := requestRegDequeue.fire && requestReg.bits.decodeResult(Decoder.writeCount)
+    // maskUnit.io.maskPipeReq.valid             := requestRegDequeue.fire && requestReg.bits.decodeResult(Decoder.writeCount)
+    //time multiplex: mask pipe dispatch per row
+    maskUnit.io.maskPipeReq.valid             := replayFSM.rowFire && requestReg.bits.decodeResult(Decoder.writeCount)
     maskUnit.io.maskPipeReq.bits.uop          := requestReg.bits.decodeResult(Decoder.maskPipeUop)
     // gather read
     maskUnit.io.gatherRead                    := gatherNeedRead
-    maskUnit.io.gatherData.ready              := requestRegDequeue.fire
+    // maskUnit.io.gatherData.ready              := requestRegDequeue.fire
+    //time multiplex: gatherData ready per row
+    maskUnit.io.gatherData.ready              := replayFSM.rowFire
   }
 
   // io.highBandwidthLoadStorePort <> lsu.axi4Port  
@@ -1340,8 +1411,12 @@ class T1(val parameter: T1Parameter)
 
   /** for lsu instruction lsu is ready, for normal instructions, lanes are ready. */
   val sequencerIF2DLsuRequestReady: Bool = sequencerIF2D.map(_.io.lsuRequest.ready).reduce(_ && _)
+  //allLanesVrfIdle is added for time multiplexing, to expose the VRF state for firing the same instruction again without commiting
+  val allLanesVrfIdle: Bool = laneVec2D.flatten.map(_.vrfInstructionValid === 0.U).reduce(_ && _) 
+
   val executionReady: Bool =
-    (!(isLoadStoreType || isZvma) || sequencerIF2DLsuRequestReady) && (noOffsetReadLoadStore || allLaneReady2DandR)
+    (!(isLoadStoreType || isZvma) || sequencerIF2DLsuRequestReady) && (noOffsetReadLoadStore || allLaneReady2DandR) && allLanesVrfIdle
+  replayFSM.executionReady := executionReady
   // - ready to issue instruction
   // - for vi and vx type of gather, it need to access vs2 for one time, we read vs2 firstly in `gatherReadFinish`
   //   and convert it to mv instruction.
@@ -1351,11 +1426,15 @@ class T1(val parameter: T1Parameter)
   //   issue the instruction after the slide which already in the slot.
   val maskUnitGatherDataValid = maskUnit2D.map(_.io.gatherData.valid).reduce(_ && _)
   requestRegDequeue.ready := executionReady && slotReady && (!gatherNeedRead || maskUnitGatherDataValid) &&
-    tokenManager.issueAllow && instructionIndexFree && olderCheck
+    tokenManager.issueAllow && instructionIndexFree && olderCheck && !replayFSM.busy
 
-  instructionToSlotOH := Mux(requestRegDequeue.fire, slotToEnqueue, 0.U)
+  // instructionToSlotOH := Mux(requestRegDequeue.fire, slotToEnqueue, 0.U)
+  // time multiplex: slot allocation on first row only
+  instructionToSlotOH := Mux(replayFSM.firstRowFire, slotToEnqueue, 0.U)
 
-  tokenManager.instructionIssue.valid                 := requestRegDequeue.fire
+  // tokenManager.instructionIssue.valid                 := requestRegDequeue.fire
+  // time multiplex: token claim on first row only
+  tokenManager.instructionIssue.valid                 := replayFSM.firstRowFire
   tokenManager.instructionIssue.bits.instructionIndex := requestReg.bits.instructionIndex
   tokenManager.instructionIssue.bits.writeV0          :=
     (!requestReg.bits.decodeResult(Decoder.targetRd) && !isStoreType && !isZvma) && requestReg.bits.vdIsV0
@@ -1438,11 +1517,13 @@ class T1(val parameter: T1Parameter)
     val probeWire = Wire(new T1Probe(parameter))
     define(io.t1Probe, ProbeValue(probeWire))
     probeWire.instructionCounter := instructionCounter
-    probeWire.instructionIssue   := requestRegDequeue.fire
+    // probeWire.instructionIssue   := requestRegDequeue.fire
+    probeWire.instructionIssue   := replayFSM.firstRowFire
     probeWire.issueTag           := requestReg.bits.instructionIndex
     probeWire.retireValid        := retire
     probeWire.requestReg         := requestReg
-    probeWire.requestRegReady    := requestRegDequeue.ready
+    // probeWire.requestRegReady    := requestRegDequeue.ready
+    probeWire.requestRegReady    := requestRegDequeue.ready && !replayFSM.busy
     // maskUnitWrite maskUnitWriteReady
     probeWire.writeQueueEnqVec.zip(maskUnit2D.head.io.exeResp).foreach { case (probe, write) => // Bon: 2D TODO, might need to change this 'head' deafault to support 2D probe
       probe.valid := write.fire && write.bits.mask.orR
