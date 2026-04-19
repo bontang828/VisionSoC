@@ -250,7 +250,9 @@ class MaskCompress(val parameter: CompressParam)
   )
   compressMask := Mux(compressTailValid, compressTailMask, (-1.S(out.mask.getWidth.W)).asUInt)
 
-  val validInputPipe     = initRegEnable(in.bits.validInput, in.fire)
+  // val validInputPipe     = initRegEnable(in.bits.validInput, in.fire)
+  //Bon2D: fixed to support one lane only, as "asTypeOf" will return 0 bits when lane number is 1 in the initRegEnable defination
+  val validInputPipe = RegEnable(in.bits.validInput, 0.U(parameter.laneNumber.W), in.fire)
   val readFromScalarPipe = initRegEnable(in.bits.readFromScalar, in.fire)
 
   val mvMask = Mux1H(eew1H, Seq(1.U, 3.U, 15.U))

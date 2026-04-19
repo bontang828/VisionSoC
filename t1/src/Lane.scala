@@ -1184,7 +1184,15 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
   val vlTail: UInt = csrInterface.vl(parameter.datapathWidthBits - 1, 0)
   val vlBody: UInt =
     csrInterface.vl(parameter.datapathWidthBits + parameter.laneNumberBits - 1, parameter.datapathWidthBits)
-  val vlHead: UInt = csrInterface.vl(parameter.vlMaxBits - 1, parameter.datapathWidthBits + parameter.laneNumberBits)
+
+  //Bon2D: this fixed to support one lane only, vlHead is 0 when datapath covers entire vl range, as the last element is alawys in this one only lane.
+  val vlHeadWidth = parameter.vlMaxBits - parameter.datapathWidthBits - parameter.laneNumberBits
+  val vlHead: UInt = if(vlHeadWidth > 0){
+    csrInterface.vl(parameter.vlMaxBits - 1, parameter.datapathWidthBits + parameter.laneNumberBits)
+  }else{
+    0.U(1.W)
+  }
+  // val vlHead: UInt = csrInterface.vl(parameter.vlMaxBits - 1, parameter.datapathWidthBits + parameter.laneNumberBits)
   val lastGroupMask = scanRightOr(UIntToOH(vlTail)) >> 1
   val dataPathMisaligned: Bool = vlTail.orR
   val maskeDataGroup = (vlHead ## vlBody) - !dataPathMisaligned

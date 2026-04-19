@@ -486,7 +486,7 @@ class T1(val parameter: T1Parameter)
   val lsuIF2D: Seq[Instance[LSUInterface]] = Seq.tabulate(parameter.numRows)(_ => Instantiate(new LSUInterface(parameter.lsuIFParam)))
 
   /** Register for 2D row return index **/
-  val rowReturn: UInt = RegInit(7.U(log2Ceil(parameter.numRows).W))
+  val rowReturn: UInt = RegInit(0.U(log2Ceil(parameter.numRows).max(1).W))
   val highBandwidthLoadStorePortArbiter = Module(new AXI4RRArbiter(parameter.numRows, parameter.axi4BundleParameter))
   val indexedLoadStorePortArbiter = Module(new AXI4RRArbiter(parameter.numRows, parameter.axi4BundleParameter.copy(dataWidth = 32)))
 

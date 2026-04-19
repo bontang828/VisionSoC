@@ -853,8 +853,16 @@ class MaskUnit(val parameter: T1Parameter)
     val setSize  = parameter.datapathWidth / vs1Size
     val vs1SetIndex: UInt =
       if (parameter.datapathWidth <= vs1Size) true.B
-      else
-        requestCounter(log2Ceil(setSize) - 1, 0)
+      // else
+      //   requestCounter(log2Ceil(setSize) - 1, 0)
+      //Bon2D: this is to fixed the maskUnit when there is only one lane 
+      else{
+        val needed = log2Ceil(setSize)
+        if (needed <= parameter.laneParam.groupNumberBits)
+          requestCounter(needed - 1, 0)
+        else
+          requestCounter.pad(needed)
+      }
     val selectVS1:   UInt =
       if (parameter.datapathWidth <= vs1Size) readVS1Reg.data
       else
