@@ -108,6 +108,7 @@ let
       disp = casesSelf.callPackage ./disp { };
       emurt-test = casesSelf.callPackage ./emurt/tests { };
       eval = casesSelf.callPackage ./eval { };
+      vision_task = casesSelf.callPackage ./vision_task { };
     })
   );
 
@@ -130,6 +131,7 @@ let
       disp
       emurt-test
       eval
+      vision_task
       ;
   };
 

@@ -23,6 +23,12 @@ impl ShadowMem {
   pub fn apply_writes(&mut self, records: &MemAccessRecord) {
     for (&addr, record) in &records.all_writes {
       if let Some(write) = record.writes.last() {
+        //Bon2D:intercept UART MMIO writes and print to terminal immediately
+        if addr == 0x10000010 {
+          use std::io::Write;
+          print!("{}", write.val as char);
+          std::io::stdout().flush().unwrap_or(());
+        }
         self.mem[addr as usize] = write.val;
       }
     }
