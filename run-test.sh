@@ -24,11 +24,12 @@ finish() {
 trap finish EXIT
 
 #Run script adapted from t1 public repo as nix doesnt work on my copmuter
-#Flags: ./run-test.sh <test-case-name> [-c <config>] [-i <top>] [-e <emu-type>] [--check]
+#Flags: ./run-test.sh <test-case-name> [-c <config>] [-i <top>] [-e <emu-type>] [--check] [--max-cycles <n>]
 # -c <config> system high level parameters: e.g. blastoise, machamp, mudkip
 # -i <top> top module:                      e.g. t1rocketemu, t1emu
 # -e <emu-type> emulator type:              e.g. verilator-emu, verilator-emu-trace
 # --check run offline checker after simulation
+# --max-cycles <n> max cycles until termination without fatal for waves
 
 #Example usage:
 # ./run-test.sh intrinsic.linear_normalization -c machamp -i t1rocketemu
@@ -36,7 +37,7 @@ trap finish EXIT
 
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 <test-case-name> [-c <config>] [-i <top>] [-e <emu-type>] [--check]"
+    echo "Usage: $0 <test-case-name> [-c <config>] [-i <top>] [-e <emu-type>] [--check] [--max-cycles <n>]"
     exit 1
 fi
 
@@ -47,6 +48,8 @@ CONFIG="blastoise"
 TOP="t1emu"
 EMU_TYPE="verilator-emu"
 RUN_CHECK=false
+MAX_CYCLES=""
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         -c)
@@ -65,12 +68,21 @@ while [[ $# -gt 0 ]]; do
             RUN_CHECK=true
             shift
             ;;
+        --max-cycles)
+            MAX_CYCLES="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             show_usage
             ;;
     esac
 done
+
+if [ -n "$MAX_CYCLES" ] && ! [[ "$MAX_CYCLES" =~ ^[0-9]+$ ]]; then
+    echo "Error: --max-cycles must be a non-negative integer"
+    exit 1
+fi
 
 #Enable trace in simulator if trace emulator is requested
 ENABLE_TRACE=false
@@ -132,6 +144,7 @@ echo "Configuration: $CONFIG"
 echo "Top module: $TOP"
 echo "Emulator type: $EMU_TYPE"
 echo "Trace enabled: $ENABLE_TRACE"
+echo "Max cycles: ${MAX_CYCLES:-none}"
 echo "Output directory: $OUTPUT_DIR"
 echo "Build logs: $OUTPUT_DIR/build.log"
 echo "Run log:    $RUN_LOG"
@@ -189,6 +202,9 @@ SIM_ARGS=(
     "+t1_elf_file=$(readlink -f $TEST_ELF)"
     "+t1_dev_rtl_event_path=$OUTPUT_DIR/rtl_event.jsonl"
 )
+if [ -n "$MAX_CYCLES" ]; then
+    SIM_ARGS+=("+t1_debug_global_timeout=$MAX_CYCLES")
+fi
 
 #Add DRAMsim3 arguments if using t1rocketemu
 if [ "$TOP" = "t1rocketemu" ]; then
@@ -209,12 +225,17 @@ fi
 
 #Add trace arguments if trace is enabled
 if [ "$ENABLE_TRACE" = true ]; then
-    SIM_ARGS+=("+trace" "+trace-file=$OUTPUT_DIR/wave")
+    SIM_ARGS+=("+trace" "+t1_wave_path=$OUTPUT_DIR/wave.fst")
     echo "Trace output will be saved to: $OUTPUT_DIR/wave.fst"
 fi
 
 export LD_LIBRARY_PATH="$DPI_LIB_PATH:$LD_LIBRARY_PATH"
-"$SIMULATOR_PATH/bin/$SIMULATOR_BIN" "${SIM_ARGS[@]}"
+if [ -n "$MAX_CYCLES" ]; then
+    #To handle early termination causing rust panic
+    T1_SUPPRESS_PANIC_IN_FINAL=1 "$SIMULATOR_PATH/bin/$SIMULATOR_BIN" "${SIM_ARGS[@]}"
+else
+    "$SIMULATOR_PATH/bin/$SIMULATOR_BIN" "${SIM_ARGS[@]}"
+fi
 
 if [ -f "sim_result.json" ]; then
     mv sim_result.json "$OUTPUT_DIR/"

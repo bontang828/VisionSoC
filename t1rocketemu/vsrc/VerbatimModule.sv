@@ -186,8 +186,13 @@ module VerbatimModule #(
         end
       end
 
-      if (cycle == debug_global_timeout) begin
-        $fatal(1, "global timeout reached");
+      if (debug_global_timeout != 0 && cycle == debug_global_timeout) begin
+        // $fatal(1, "global timeout reached");
+      `ifdef T1_ENABLE_TRACE
+        dump_finish();
+      `endif
+        $display("global timeout reached at cycle=%0d, exiting cleanly", cycle);
+        $finish;
       end
 
     `ifdef T1_ENABLE_TRACE
