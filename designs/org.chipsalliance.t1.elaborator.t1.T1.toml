@@ -6,6 +6,64 @@ cmdopt = "--dLen 256 --extensions zvl2048b --extensions zve32f --laneScale 2 --c
 [uxie]
 cmdopt = "--dLen 512 --extensions zvl2048b --extensions zve32f --laneScale 2 --chainingSize 4 --vrfBankSize 8 --vrfRamType p0rp1w --vfuInstantiateParameter small"
 
+
+
+[mudkip]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small"
+[mudkip2d]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 2"
+[mudkip2d8]
+cmdopt = "--dLen 128 --extensions zvl32b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 8"
+[mudkip2d16]
+cmdopt = "--dLen 128 --extensions zvl32b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 16"
+[mudkip2d32]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 32"
+[mudkip2d64]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 64"
+[mudkip2d128]
+cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 128"
+[mudkip2d256]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 256"
+[mudkip2d256small]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 1 --chainingSize 2 --vrfBankSize 1 --vrfRamType p0rp1w --vfuInstantiateParameter small --rowNumber 256"
+
+[mudkip2d64small16]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rwp1rw --vfuInstantiateParameter small --rowNumber 16"
+
+[mudkip2d64small16bram]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 4 --vrfBankSize 2 --vrfRamType p0rw --vfuInstantiateParameter small --rowNumber 16"
+
+[mudkip2d64small16bram1chain]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 16"
+
+[mudkip2d64small16bram2chain]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 2 --vrfBankSize 2 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 16"
+
+[mudkip2d64small1bram2chain]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 2 --vrfBankSize 2 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+[mudkip2d64small1bram1chain]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+[mudkip2d64small2bram1chain]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 1 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 2"
+
+[mudkip2d64small1bram1chain4lanescale]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 4 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+[mudkip2d64small1bram1chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+[mudkip2d64small1bram2chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl128b --extensions zve32x --laneScale 2 --chainingSize 2 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+[mudkip2d128small1bram1chain4lanescale256dlen]
+cmdopt = "--dLen 256 --extensions zvl256b --extensions zve32x --laneScale 4 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+[mudkip2d128small1bram1chain4lanescale]
+cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 4 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
+
 # Physcial Design Benchmark
 ## VLEN from 128 to 64K
 [physical_design_case_0]
