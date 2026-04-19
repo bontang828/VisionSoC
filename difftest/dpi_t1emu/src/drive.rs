@@ -20,7 +20,7 @@ impl ShadowMem {
   pub fn new() -> Self {
     Self { mem: vec![0; MEM_SIZE] }
   }
-  pub fn apply_writes(&mut self, records: &MemAccessRecord) {
+  pub fn apply_writes(&mut self, records: &MemAccessRecord, cycle: u64) {
     for (&addr, record) in &records.all_writes {
       if let Some(write) = record.writes.last() {
         //Bon2D:intercept UART MMIO writes and print to terminal immediately
@@ -28,6 +28,17 @@ impl ShadowMem {
           use std::io::Write;
           print!("{}", write.val as char);
           std::io::stdout().flush().unwrap_or(());
+        }
+        //Bon2D:intercept perf counter writes and print cycle count
+        if addr == 0x10000014 {
+          use std::io::Write;
+          let tag = write.val as i32;
+          if tag != 0 {
+            eprintln!("[PERF] counter {} START at cycle {}", tag, cycle);
+          } else {
+            eprintln!("[PERF] counter STOP at cycle {}", cycle);
+          }
+          std::io::stderr().flush().unwrap_or(());
         }
         self.mem[addr as usize] = write.val;
       }
@@ -325,7 +336,7 @@ impl Driver {
         );
         if self.vector_lsu_count == 0 {
           // issue scalar load / store
-          self.shadow_mem.apply_writes(&se.mem_access_record);
+          self.shadow_mem.apply_writes(&se.mem_access_record, get_t());
           self.spike_runner.commit_queue.pop_front();
           continue;
         } else {
@@ -363,7 +374,7 @@ impl Driver {
     let se = self.spike_runner.commit_queue.back().unwrap();
 
     // todo: filter all vector instruction.
-    self.shadow_mem.apply_writes(&se.mem_access_record);
+    self.shadow_mem.apply_writes(&se.mem_access_record, get_t());
 
     self.spike_runner.commit_queue.pop_back();
     self.last_commit_cycle = get_t();
