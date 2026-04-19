@@ -1406,7 +1406,7 @@ class T1(val parameter: T1Parameter)
   // Identical subscripts lead to incorrect early release of endtag\
   // If the performance impact is too great, you can lengthen the tag.
   val instructionIndexFree: Bool = slots
-    .map(s => s.state.idle || s.record.instructionIndex(1, 0) =/= requestReg.bits.instructionIndex(1, 0))
+    .map(s => s.state.idle || s.record.instructionIndex((parameter.instructionIndexBits - 1).min(1), 0) =/= requestReg.bits.instructionIndex((parameter.instructionIndexBits - 1).min(1), 0))
     .reduce(_ && _)
 
   /** for lsu instruction lsu is ready, for normal instructions, lanes are ready. */

@@ -253,7 +253,7 @@ if [ -f "$OUTPUT_DIR/sim_result.json" ]; then
 
     #Check test passed
     if grep -q '"success": true' "$OUTPUT_DIR/sim_result.json"; then
-        echo "\e[32m[== SUCCESS ==]\e[0m SIMULATION PASSED"
+        printf '\033[32m[== SUCCESS ==]\033[0m SIMULATION PASSED\n'
 
         #Run offline checker if --check flag is provided
         if [ "$RUN_CHECK" = true ]; then
@@ -274,11 +274,11 @@ if [ -f "$OUTPUT_DIR/sim_result.json" ]; then
                 --rtl-event-file "$OUTPUT_DIR/rtl_event.jsonl" \
                 --log-level info > "$OUTPUT_DIR/checker.log" 2>&1; then
 
-                echo "\e[32m[== SUCCESS ==]\e[0m OFFLINE CHECK PASSED"
+                printf '\033[32m[== SUCCESS ==]\033[0m OFFLINE CHECK PASSED\n'
                 echo "Check log: $OUTPUT_DIR/checker.log"
                 exit 0
             else
-                echo "\e[31m[== FAILURE ==]\e[0m OFFLINE CHECK FAILED"
+                printf '\033[31m[== FAILURE ==]\033[0m OFFLINE CHECK FAILED\n'
                 echo "Check log: $OUTPUT_DIR/checker.log"
                 echo ""
                 echo "=== Checker Log (last 20 lines) ==="
@@ -289,10 +289,10 @@ if [ -f "$OUTPUT_DIR/sim_result.json" ]; then
             exit 0
         fi
     else
-        echo "\e[31m[== FAILURE ==]\e[0m SIMULATION FAILED"
+        printf '\033[31m[== FAILURE ==]\033[0m SIMULATION FAILED\n'
         exit 1
     fi
 else
-    echo "\e[31m[== ERROR ==]\e[0m  No sim_result.json found"
+    printf '\033[31m[== ERROR ==]\033[0m  No sim_result.json found\n'
     exit 1
 fi

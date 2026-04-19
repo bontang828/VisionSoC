@@ -1357,6 +1357,7 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
   vrf.lsuLastReport                         := lsuLastReport
   vrf.loadDataInLSUWriteQueue               := loadDataInLSUWriteQueue
   vrf.dataInLane                            := instructionValid
+  vrfInstructionValid                       := vrf.instructionValid
   instructionFinished                       := vrf.vrfSlotRelease | emptyReport
   writeReadyForLsu                          := vrf.writeReadyForLsu
   vrfReadyToStore                           := vrf.vrfReadyToStore

@@ -98,11 +98,11 @@ echo "Building T1 RTL..."
 
 if nix build ".#t1.$CONFIG.t1.rtl" --out-link "$OUTPUT_DIR/result" -L; then
     echo ""
-    echo "\e[32m[== SUCCESS ==]\e[0m RTL build completed"
+    printf '\033[32m[== SUCCESS ==]\033[0m RTL build completed\n'
     exit 0
 else
     echo ""
-    echo "\e[31m[== FAILURE ==]\e[0m RTL build failed"
+    printf '\033[31m[== FAILURE ==]\033[0m RTL build failed\n'
     echo "Check build.log for details: $BUILD_LOG"
     exit 1
 fi
