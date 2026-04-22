@@ -51,7 +51,10 @@ case class MSHRParam(
   paWidth:          Int,
   lsuTransposeSize: Int,
   lsuReadShifter:   Int,
-  vrfReadLatency: Int) {
+  vrfReadLatency:   Int,
+  timeMultiplexBatch: Int = 1) {
+
+  val rowCounterBits: Int = log2Ceil(timeMultiplexBatch).max(1)
 
   /** see [[LaneParameter.lmulMax]] */
   val lmulMax: Int = 8
@@ -196,6 +199,10 @@ class SimpleAccessUnit(param: MSHRParam) extends Module with LSUPublic {
     */
   @public
   val csrInterface: CSRInterface = IO(Input(new CSRInterface(param.vlMaxBits)))
+
+  @public
+  val rowCounter: UInt = IO(Input(UInt(param.rowCounterBits.W))) // used for calculating row offset for 2D memory addressing
+
 
   /** notify [[LSU]] the status of [[MSHR]] */
   @public
@@ -803,7 +810,11 @@ class SimpleAccessUnit(param: MSHRParam) extends Module with LSUPublic {
 
   s0DequeueFire                        := s1EnqQueue.enq.fire
   s1EnqQueue.enq.valid                 := s0Valid && readReady
-  s1EnqQueue.enq.bits.address          := lsuRequestReg.rs1Data + s0Reg.addressOffset
+  //2D row offset: rowCounter * (vl << eew) bytes
+  //(vl << eew) is how many bytes for a row
+  val rowStride: UInt = (csrInterfaceReg.vl << lsuRequestReg.instructionInformation.eew).asUInt
+  val rowOffset: UInt = rowCounter * rowStride
+  s1EnqQueue.enq.bits.address          := lsuRequestReg.rs1Data + s0Reg.addressOffset + rowOffset
   s1EnqQueue.enq.bits.indexInMaskGroup := s0Reg.indexInGroup
   s1EnqQueue.enq.bits.segmentIndex     := s0Reg.segmentIndex
   s1EnqQueue.enq.bits.readData         := DontCare

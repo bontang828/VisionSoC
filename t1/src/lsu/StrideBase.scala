@@ -11,6 +11,7 @@ import org.chipsalliance.t1.rtl.{CSRInterface, LSURequest}
 trait LSUPublic {
   val lsuRequest:   ValidIO[LSURequest]
   val csrInterface: CSRInterface
+  val rowCounter:   UInt
   val maskInput:    UInt
   val maskSelect:   ValidIO[UInt]
   val status:       LSUBaseStatus
@@ -39,6 +40,11 @@ abstract class StrideBase(param: MSHRParam) extends Module {
     */
   @public
   val csrInterface: CSRInterface = IO(Input(new CSRInterface(param.vlMaxBits)))
+
+  /** rowCounter from replayFSM for 2D memory addressing  */
+  @public
+  val rowCounter: UInt = IO(Input(UInt(param.rowCounterBits.W)))
+
 
   /** latch CSR. TODO: merge to [[lsuRequestReg]]
     */
@@ -145,8 +151,12 @@ abstract class StrideBase(param: MSHRParam) extends Module {
   val bufferBaseCacheLineIndex: UInt      = RegInit(0.U(param.cacheLineIndexBits.W))
   val cacheLineIndexInBuffer:   UInt      = RegInit(0.U(bufferCounterBits.W))
 
+  //2D row offset
+  val rowStride: UInt = (csrInterfaceReg.vl << dataEEW).asUInt
+  val rowOffset: UInt = rowCounter * rowStride
+
   // 初始偏移
-  val initOffset: UInt = lsuRequestReg.rs1Data(param.cacheLineBits - 1, 0)
+  val initOffset: UInt = (lsuRequestReg.rs1Data + rowOffset)(param.cacheLineBits - 1, 0)
 
   val invalidInstruction:     Bool = csrInterface.vl === 0.U
   val invalidInstructionNext: Bool = RegNext(invalidInstruction && lsuRequest.valid)

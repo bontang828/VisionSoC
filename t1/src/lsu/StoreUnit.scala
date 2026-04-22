@@ -257,9 +257,12 @@ class StoreUnit(param: MSHRParam) extends StrideBase(param) with LSUPublic {
   memRequest.bits.index := bufferBaseCacheLineIndex
 
   // select by address set
-  val alignedDequeueAddress: UInt =
-    ((lsuRequestReg.rs1Data >> param.cacheLineBits).asUInt + bufferBaseCacheLineIndex) ##
-      0.U(param.cacheLineBits.W)
+    // val alignedDequeueAddress: UInt =
+    // ((lsuRequestReg.rs1Data >> param.cacheLineBits).asUInt + bufferBaseCacheLineIndex) ##
+    //   0.U(param.cacheLineBits.W)
+
+  val offsetBase = lsuRequestReg.rs1Data + rowOffset
+  val alignedDequeueAddress: UInt = ((offsetBase >> param.cacheLineBits).asUInt + bufferBaseCacheLineIndex) ## 0.U(param.cacheLineBits.W)
   memRequest.bits.address := alignedDequeueAddress
 
   // todo: param outstanding
@@ -277,7 +280,7 @@ class StoreUnit(param: MSHRParam) extends StrideBase(param) with LSUPublic {
   status.changeMaskGroup  := maskSelect.valid && !lsuRequest.valid
   status.instructionIndex := lsuRequestReg.instructionIndex
   status.startAddress     := Mux(addressQueue.deq.valid, addressQueue.deq.bits, alignedDequeueAddress)
-  status.endAddress       := ((lsuRequestReg.rs1Data >> param.cacheLineBits).asUInt + cacheLineNumberReg) ##
+  status.endAddress       := ((offsetBase >> param.cacheLineBits).asUInt + cacheLineNumberReg) ##
     0.U(param.cacheLineBits.W)
   dontTouch(status)
 

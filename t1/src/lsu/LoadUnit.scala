@@ -45,8 +45,9 @@ class LoadUnit(param: MSHRParam) extends StrideBase(param) with LSUPublic {
       validInstruction || (memRequest.fire && lastRequest)
     )
 
-  val requestAddress = ((lsuRequestReg.rs1Data >> param.cacheLineBits).asUInt + cacheLineIndex) ##
-    0.U(param.cacheLineBits.W)
+  // val requestAddress = ((lsuRequestReg.rs1Data >> param.cacheLineBits).asUInt + cacheLineIndex) ## 0.U(param.cacheLineBits.W)
+  val offsetBase = lsuRequestReg.rs1Data + rowOffset
+  val requestAddress = ((offsetBase >> param.cacheLineBits).asUInt + cacheLineIndex) ## 0.U(param.cacheLineBits.W)
   val writeReadyForLsu: Bool = true.B
 
   memRequest.bits.src     := cacheLineIndex
@@ -218,8 +219,8 @@ class LoadUnit(param: MSHRParam) extends StrideBase(param) with LSUPublic {
   status.changeMaskGroup  := maskSelect.valid && !lsuRequest.valid
   status.instructionIndex := lsuRequestReg.instructionIndex
   status.startAddress     := requestAddress
-  status.endAddress       := ((lsuRequestReg.rs1Data >> param.cacheLineBits).asUInt + cacheLineNumberReg) ##
-    0.U(param.cacheLineBits.W)
+  // status.endAddress       := ((lsuRequestReg.rs1Data >> param.cacheLineBits).asUInt + cacheLineNumberReg) ##
+  status.endAddress       := ((offsetBase >> param.cacheLineBits).asUInt + cacheLineNumberReg) ## 0.U(param.cacheLineBits.W) // offsetBase is for 2D memory addressing for different rows
   dontTouch(status)
 
   /** Internal signals probes

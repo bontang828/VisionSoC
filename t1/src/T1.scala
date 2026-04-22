@@ -36,7 +36,7 @@ import org.chipsalliance.amba.axi4.bundle.{AXI4BundleParameter, AXI4RWIrrevocabl
 import org.chipsalliance.rvdecoderdb.Instruction
 import org.chipsalliance.t1.rtl.decoder.{Decoder, DecoderParam}
 import org.chipsalliance.t1.rtl.lsu.{LSU, LSUParameter, LSUProbe}
-import org.chipsalliance.t1.rtl.vrf.{RamType, VRFParam}
+import org.chipsalliance.t1.rtl.vrf.{RamType, VRFParam, SharedVRF, SharedVRFParam}
 import org.chipsalliance.stdlib.GeneralOM
 
 import scala.collection.immutable.SeqMap
@@ -398,7 +398,8 @@ case class T1Parameter(
       if (useXsfmm) {
         throw new Exception("xsfmm is enabled but matrixAluColSize is not specified")
       } else { 0 }
-    )
+    ),
+    timeMultiplexBatch = timeMultiplexBatch
   )
   def vrfParam: VRFParam = VRFParam(vLen, laneNumber, datapathWidth, chainingSize, vrfBankSize, vrfRamType)
   def laneIFParam = LaneIFParameter(vLen, eLen, datapathWidth, laneNumber, chainingSize, fpuEnable, decoderParam)
@@ -488,6 +489,17 @@ class T1(val parameter: T1Parameter)
   val sequencerIF2D: Seq[Instance[SequencerInterface]] = Seq.tabulate(parameter.numRows)(_ => Instantiate(new SequencerInterface(parameter.seqIFParam)))
 
   val lsuIF2D: Seq[Instance[LSUInterface]] = Seq.tabulate(parameter.numRows)(_ => Instantiate(new LSUInterface(parameter.lsuIFParam)))
+
+  /**shared VRF: one per row and shared between the 2 lanes in that row */
+  val sharedVRFParam: SharedVRFParam = SharedVRFParam(
+    vLen               = parameter.vLen,
+    laneNumber         = parameter.laneNumber,
+    datapathWidth      = parameter.datapathWidth,
+    chainingSize       = parameter.chainingSize,
+    timeMultiplexBatch = parameter.timeMultiplexBatch
+  )
+  val sharedVRF2D: Seq[SharedVRF] = Seq.tabulate(parameter.numRows)(_ => Module(new SharedVRF(sharedVRFParam)))
+
 
   /** Register for 2D row return index **/
   val rowReturn: UInt = RegInit(0.U(log2Ceil(parameter.numRows).max(1).W))
@@ -758,11 +770,14 @@ class T1(val parameter: T1Parameter)
     )
   }
   //time multiplexing for fpga
-  //val replayFSM = Module(new time_multiplex_row_fsm(parameter.timeMultiplexBatch))
-  val replayFSM = Module(new time_multiplex_row_fsm(2))
+  val replayFSM = Module(new time_multiplex_row_fsm(parameter.timeMultiplexBatch))
+  // val replayFSM = Module(new time_multiplex_row_fsm(1)) // temp for testing
+  // val replayFSM = Module(new time_multiplex_row_fsm(3))
   val replayRowDone = Wire(Bool())
   replayFSM.rowDone := replayRowDone
 
+  //Connect rowCounter to all SharedVRFs
+  sharedVRF2D.foreach(_.rowCounter := replayFSM.rowCounter)
 
   // 0 0 -> don't update
   // 0 1 -> update to false
@@ -1192,6 +1207,10 @@ class T1(val parameter: T1Parameter)
 
       lane.laneIndex      := index.U
       laneIF.io.laneIndex := index.U
+      
+      //Connect lane's VRF ports to the SharedVRF
+      sharedVRF2D(row).lanePorts(index) <> lane.vrfPorts //SharedVRF only support 2 lanes for now, as there are only 2 physical ports on BRAM for the FPGA implementation
+
       lane.vrfReadAddressChannel <> laneIF.io.vrfReadRequest
 
       laneIF.io.maskRequestAck.ready := true.B
@@ -1313,6 +1332,7 @@ class T1(val parameter: T1Parameter)
     lsuIF.io.lsuRequest.ready         := lsu.request.ready
     lsu.request.bits                  := lsuIF.io.lsuRequest.bits.request
     lsu.csrInterface                  := lsuIF.io.lsuRequest.bits.csrInterface
+    lsu.rowCounter                    := replayFSM.rowCounter
     lsuIF.io.lsuReportToTop.valid     := true.B
     lsuIF.io.lsuReportToTop.bits.last := lsu.lastReport
     // connect lsu <-> lsu interface(lane related)

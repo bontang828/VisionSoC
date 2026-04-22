@@ -44,7 +44,8 @@ case class LSUParameter(
   useXsfmm:            Boolean,
   TE:                  Int,
   matrixAluRowSize:    Int,
-  matrixAluColSize: Int) {
+  matrixAluColSize:    Int,
+  timeMultiplexBatch:  Int = 1) {
   val sewMin: Int = 8
 
   val chaining1HBits: Int = 2 << log2Ceil(chainingSize)
@@ -79,7 +80,8 @@ case class LSUParameter(
       paWidth,
       transferSize,
       lsuReadShifterSize.head,
-      vrfReadLatency
+      vrfReadLatency,
+      timeMultiplexBatch
     )
 
   /** see [[VRFParam.regNumBits]] */
@@ -208,6 +210,10 @@ class LSU(param: LSUParameter) extends Module {
   @public
   val csrInterface: CSRInterface = IO(Input(new CSRInterface(param.vLenBits)))
 
+  /** rowCounter from the replayFSM for 2D mem addressing */
+  @public
+  val rowCounter: UInt = IO(Input(UInt(param.mshrParam.rowCounterBits.W)))
+
   /** offset of indexed load/store instructions. */
   @public
   val offsetReadResult: Vec[DecoupledIO[UInt]] = IO(
@@ -335,6 +341,7 @@ class LSU(param: LSUParameter) extends Module {
 
     // broadcast CSR
     mshr.csrInterface := csrInterface
+    mshr.rowCounter   := rowCounter // passing rowCOunter to MSHR of storeUnit, loadUnit and otherUnit for 2D memory addressing
   }
 
   /** TileLink D Channel write to VRF queue: TL-D -CrossBar-> MSHR -proxy-> write queue -CrossBar-> VRF

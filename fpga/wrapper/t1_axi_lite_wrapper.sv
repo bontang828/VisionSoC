@@ -364,10 +364,10 @@ module t1_axi_lite_wrapper #(
                 5'h05: s_axi_rdata <= reg_vl;//0x14
                 5'h06: s_axi_rdata <= reg_vstart; //0x18
                 5'h07: s_axi_rdata <= reg_vcsr; //0x1C
-                5'h08: s_axi_rdata <= {27'b0, !rd_fifo_empty, rd_fifo_count[3:0]}; //0x20
+                5'h08: s_axi_rdata <= {27'b0, !rd_fifo_empty, 4'(rd_fifo_count)}; //0x20
                 5'h09: s_axi_rdata <= rd_fifo_dout[31:0];  //0x24 RD_POP_DATA (pops FIFO)
                 5'h0A: s_axi_rdata <= {26'b0, rd_meta_latched}; //0x28 RD_POP_META
-                5'h0B: s_axi_rdata <= {27'b0, !csr_fifo_empty, csr_fifo_count[3:0]}; //0x2C
+                5'h0B: s_axi_rdata <= {27'b0, !csr_fifo_empty, 4'(csr_fifo_count)}; //0x2C
                 5'h0C: s_axi_rdata <= csr_fifo_dout[31:0]; //0x30 CSR_POP (pops FIFO)
                 5'h0D: s_axi_rdata <= csr_fflag_latched; //0x34
                 5'h0E: s_axi_rdata <= {24'b0, mem_count}; //0x38

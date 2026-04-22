@@ -14,7 +14,7 @@ import chisel3.util.{BitPat, _}
 import chisel3.util.experimental.decode.DecodeBundle
 import org.chipsalliance.t1.rtl.decoder.{Decoder, DecoderParam}
 import org.chipsalliance.t1.rtl.lane._
-import org.chipsalliance.t1.rtl.vrf.{RamType, VRF, VRFParam, VRFProbe}
+import org.chipsalliance.t1.rtl.vrf.{RamType, VRF, VRFParam, VRFProbe, LaneVRFPorts}
 import org.chipsalliance.dwbb.stdlib.queue.{Queue, QueueIO}
 import org.chipsalliance.stdlib.GeneralOM
 
@@ -28,10 +28,11 @@ class LaneOM(parameter: LaneParameter) extends GeneralOM[LaneParameter, Lane](pa
   @public
   val vfusIn = IO(Input(Property[Seq[AnyClassType]]()))
   vfus := vfusIn
-  val vrf   = IO(Output(Property[AnyClassType]()))
-  @public
-  val vrfIn = IO(Input(Property[AnyClassType]()))
-  vrf := vrfIn
+  // sharedVRF at T1 level
+  // val vrf   = IO(Output(Property[AnyClassType]()))
+  // @public
+  // val vrfIn = IO(Input(Property[AnyClassType]()))
+  // vrf := vrfIn
 }
 
 class LaneSlotProbe(instructionIndexBits: Int, datapathWidth: Int) extends Bundle {
@@ -436,9 +437,16 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
   dontTouch(writeBusPort2)
   val csrInterface: CSRInterface = laneRequest.bits.csrInterface
 
-  /** VRF instantces. */
-  val vrf: Instance[VRF] = Instantiate(new VRF(parameter.vrfParam))
-  omInstance.vrfIn := Property(vrf.om.asAnyClassType)
+  // /** VRF instantces. */
+  // val vrf: Instance[VRF] = Instantiate(new VRF(parameter.vrfParam))
+  // omInstance.vrfIn := Property(vrf.om.asAnyClassType)
+
+  /** External VRF port connected to SharedVRF at T1 level*/
+  @public
+  val vrfPorts: LaneVRFPorts = IO(Flipped(new LaneVRFPorts(parameter.vrfParam)))
+  private val vrf = vrfPorts
+
+
 
   val fullMask: UInt = (-1.S(parameter.datapathWidth.W)).asUInt
 
@@ -1458,7 +1466,10 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
       pb.bits.writeTag  := port.deq.bits.instructionIndex
       pb.bits.writeMask := port.deq.bits.mask
     }
-    probeWire.vrfProbe            := probe.read(vrf.vrfProbe)
+    // probeWire.vrfProbe            := probe.read(vrf.vrfProbe)
+    //  VRF probe needs to come from SharedVRF not supported for now
+    probeWire.vrfProbe            := 0.U.asTypeOf(new VRFProbe(parameter.vrfParam))
+
   }
 
 }
