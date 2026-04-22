@@ -155,6 +155,7 @@ pub(crate) struct Driver {
   vector_lsu_count: u8,
 
   shadow_mem: ShadowMem,
+  mirror_rtl_writes: bool,
 }
 
 impl Driver {
@@ -192,6 +193,7 @@ impl Driver {
       issued: 0,
       vector_lsu_count: 0,
       shadow_mem: ShadowMem::new(),
+      mirror_rtl_writes: std::env::var_os("T1_MIRROR_RTL_WRITES").is_some(),
     };
     self_.spike_runner.load_elf(elf_file).unwrap();
 
@@ -220,6 +222,9 @@ impl Driver {
     let size = 1 << awsize;
 
     self.shadow_mem.write_mem_axi(addr, size, self.dlen / 8, &strobe, data);
+    if self.mirror_rtl_writes {
+      self.spike_runner.mirror_axi_write(addr, strobe, data);
+    }
     let data_hex = hex::encode(data);
     trace!(
       "[{}] axi_write_high_bandwidth (addr={addr:#x}, size={size}, data={data_hex})",
@@ -248,6 +253,9 @@ impl Driver {
   ) {
     let size = 1 << awsize;
     self.shadow_mem.write_mem_axi(addr, size, 4, strobe, data);
+    if self.mirror_rtl_writes {
+      self.spike_runner.mirror_axi_write(addr, strobe, data);
+    }
     let data_hex = hex::encode(data);
     trace!(
       "[{}] axi_write_indexed_access_port (addr={addr:#x}, size={size}, data={data_hex})",

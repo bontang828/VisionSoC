@@ -57,7 +57,8 @@ let
           "-fvisibility=hidden"
           "-fno-PIC"
           "-g"
-          "-O3"
+          "-O2"
+          "-fno-inline-functions"
           # disable the support for the Run-Time Type Information, for example, `dynamic_cast`
           "-fno-rtti"
           # disable the support for C++ exceptions

@@ -116,6 +116,19 @@ impl SpikeRunner {
     load_elf(&mut *self.spike, fname)
   }
 
+  //Mirror RTL AXI beats into the spike.mem, so when printf the data could be visible from the scalar core.
+  //Spike did not simulate the extra row operations that the 2D T1 performed as is not part of the standard specs, so have to do this to override the spike.mem data in order to have printf extra data form spike.mem and working for test.
+  pub fn mirror_axi_write(&mut self, addr: u32, masks: &[bool], data: &[u8]) {
+    assert_eq!(masks.len(), data.len());
+    let bus_size = masks.len() as u32;
+    let addr_align = (addr & ((!bus_size) + 1)) as usize;
+    for i in 0..masks.len() {
+      if masks[i] {
+        self.spike.mem[addr_align + i] = data[i];
+      }
+    }
+  }
+
   // just execute one instruction for non-difftest
   pub fn exec(&self) -> anyhow::Result<()> {
     let spike = &self.spike;
