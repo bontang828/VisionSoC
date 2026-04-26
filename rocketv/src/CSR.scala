@@ -670,6 +670,9 @@ class CSR(val parameter: CSRParameter)
   // todo: need init?
   val reg_frm    = RegInit(0.U(3.W))
 
+  // Bon2D: custom CSR 0x7C0 bit 0 - vertical-mode select for processing elements in SharedVRF in vertical
+  val reg_verticalMode = RegInit(false.B)
+
   val reg_mcountinhibit = RegInit(0.U((CSR.firstHPM + nPerfCounters).W))
   io.inhibitCycle := reg_mcountinhibit(0)
   val reg_instret    = WideCounter(64, io.retire, inhibit = reg_mcountinhibit(2))
@@ -837,7 +840,9 @@ class CSR(val parameter: CSRParameter)
       CSRs.vstart -> v.states("vstart"),
       CSRs.vtype  -> vtype,
       CSRs.vl     -> v.states("vl"),
-      CSRs.vlenb  -> v.constants("vlenb")
+      CSRs.vlenb  -> v.constants("vlenb"),
+      // Bon2D: verticalMode CSR (0x7C0, bit 0 sticky).
+      0x7c0       -> reg_verticalMode.asUInt
     )
   }
 
@@ -1712,10 +1717,11 @@ class CSR(val parameter: CSRParameter)
       )
     val vcsr            = reg_frm ## vector.get.states("vxrm") ## vector.get.states("vxsat")
     io.csrToVector.foreach { v =>
-      v.vtype  := vtype
-      v.vl     := vector.get.states("vl")
-      v.vcsr   := vcsr
-      v.vstart := vector.get.states("vstart")
+      v.vtype        := vtype
+      v.vl           := vector.get.states("vl")
+      v.vcsr         := vcsr
+      v.vstart       := vector.get.states("vstart")
+      v.verticalMode := reg_verticalMode
     }
     // set vl type
     val vsetvli         = !io.inst(0)(31)
@@ -1808,6 +1814,10 @@ class CSR(val parameter: CSRParameter)
       when(decoded_addr(CSRs.vcsr)) {
         vector.get.states("vxrm")  := wdata(2, 1)
         vector.get.states("vxsat") := wdata(0)
+      }
+      // Bon2D: CSR 0x7C0 bit 0 toggles SharedVRF vertical-mode gather/scatter.
+      when(decoded_addr(0x7c0)) {
+        reg_verticalMode := wdata(0)
       }
     }
   } else {

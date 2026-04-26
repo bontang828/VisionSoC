@@ -32,3 +32,5 @@ fpga/system/vivado*.jou
 fpga/system/vivado*.log
 vivado*.jou
 vivado*.log
+mmio-event.jsonl
+wave_debug.json

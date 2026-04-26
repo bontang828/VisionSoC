@@ -29,8 +29,12 @@ cmdopt = "--instructionSets rv32_i --instructionSets rv_m --instructionSets rv_c
 [mudkip2d256small]
 cmdopt = "--instructionSets rv32_i --instructionSets rv_m --instructionSets rv_c --instructionSets rv_v --instructionSets zve32x --instructionSets zvl512b --cacheBlockBytes 32 --nPMPs 8 --cacheable 11111111111111111111111111111111 --sideEffects 00000000-1fffffff --dcacheNSets 64 --dcacheNWays 4 --dcacheRowBits 32 --iCacheNSets 32 --iCacheNWays 4 --iCachePrefetch false --dLen 128 --laneScale 1 --chainingSize 2 --vrfBankSize 1 --vrfRamType p0rp1w --vfuInstantiateParameter small --rowNumber 256"
 
+[mudkip2d128small1bram1chain2lanescale]
+cmdopt = "--instructionSets rv32_i --instructionSets rv_m --instructionSets rv_c --instructionSets rv_v --instructionSets zve32x --instructionSets zvl256b --cacheBlockBytes 32 --nPMPs 8 --cacheable 11111111111111111111111111111111 --sideEffects 00000000-1fffffff --dcacheNSets 64 --dcacheNWays 4 --dcacheRowBits 32 --iCacheNSets 32 --iCacheNWays 4 --iCachePrefetch false --dLen 128 --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
 [mudkip2d128small1bram1chain4lanescale]
 cmdopt = "--instructionSets rv32_i --instructionSets rv_m --instructionSets rv_c --instructionSets rv_v --instructionSets zve32x --instructionSets zvl256b --cacheBlockBytes 32 --nPMPs 8 --cacheable 11111111111111111111111111111111 --sideEffects 00000000-1fffffff --dcacheNSets 64 --dcacheNWays 4 --dcacheRowBits 32 --iCacheNSets 32 --iCacheNWays 4 --iCachePrefetch false --dLen 128 --laneScale 4 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
+
 
 
 [uxie]

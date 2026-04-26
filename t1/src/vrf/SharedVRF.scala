@@ -105,8 +105,10 @@ class LaneVRFPorts(param: VRFParam) extends Bundle {
 class SharedVRF(val parameter: SharedVRFParam) extends Module {
   val vrfParam: VRFParam = parameter.toVRFParam
 
-  val lanePorts:  Vec[LaneVRFPorts] = IO(Vec(parameter.laneNumber, new LaneVRFPorts(vrfParam)))
-  val rowCounter: UInt              = IO(Input(UInt(parameter.rowCounterBits.W)))
+  val lanePorts:    Vec[LaneVRFPorts] = IO(Vec(parameter.laneNumber, new LaneVRFPorts(vrfParam)))
+  val rowCounter:   UInt              = IO(Input(UInt(parameter.rowCounterBits.W)))
+  /** Bon2D: when high, read/write fabric switches to 8-way column gather/scatter across banks. */
+  val verticalMode: Bool              = IO(Input(Bool()))
 
   // ------ SRAM banks: 8 banks, each dual-ported (2 RW ports) -----
   val sramReady:      Bool = RegInit(false.B)
@@ -117,10 +119,12 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     when(sramResetCount.andR) { sramReady := true.B }
   }
 
-  val vrfSRAM: Seq[SRAMInterface[UInt]] = Seq.fill(parameter.numBanks)(
-    SRAM(
+  // Bon2D: byte-granular writes for vertical-mode scatter. Each SRAM element is a byte; mask selects which bytes update.
+  val byteCount: Int = parameter.ramWidth / 8
+  val vrfSRAM: Seq[SRAMInterface[Vec[UInt]]] = Seq.fill(parameter.numBanks)(
+    SRAM.masked(
       size = parameter.bankDepth,
-      tpe = UInt(parameter.memoryWidth.W),
+      tpe = Vec(byteCount, UInt(8.W)),
       numReadPorts = 0,
       numWritePorts = 0,
       numReadwritePorts = 2
@@ -128,16 +132,25 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
   )
 
   // ----- Compute bank index and bank-internal address ----
-  def bankSelect(vs: UInt, offset: UInt, laneIdx: Int): UInt = {
-    val logicalAddr = vs ## offset ## laneIdx.U(1.W)
-    UIntToOH((rowCounter +& logicalAddr)(2, 0), parameter.numBanks)
+  // Dynamic rc + dynamic laneIdx so vertical mode can feed per-byte rowCounter_i and byte-lane.
+  def bankSelectRC(vs: UInt, offset: UInt, laneIdx: UInt, rc: UInt): UInt = {
+    val logicalAddr = vs ## offset ## laneIdx(0)
+    UIntToOH((rc +& logicalAddr)(2, 0), parameter.numBanks)
   }
 
-  def bankInternalAddr(vs: UInt, offset: UInt, laneIdx: Int): UInt = {
-    val logicalAddr = vs ## offset ## laneIdx.U(1.W)
-    val flatAddr    = rowCounter ## logicalAddr
-    (flatAddr >> 3).asUInt(parameter.bankAddrBits - 1, 0)
+  def bankInternalAddrRC(vs: UInt, offset: UInt, laneIdx: UInt, rc: UInt): UInt = {
+    val logicalAddr = vs ## offset ## laneIdx(0)
+    val flatAddr    = rc ## logicalAddr
+    val shifted     = (flatAddr >> 3).asUInt
+    shifted(parameter.bankAddrBits - 1, 0)
   }
+
+  // Horizontal-mode convenience wrappers - use module's global rowCounter and compile-time laneIdx.
+  def bankSelect(vs: UInt, offset: UInt, laneIdx: Int): UInt =
+    bankSelectRC(vs, offset, laneIdx.U(1.W), rowCounter)
+
+  def bankInternalAddr(vs: UInt, offset: UInt, laneIdx: Int): UInt =
+    bankInternalAddrRC(vs, offset, laneIdx.U(1.W), rowCounter)
 
   // ---- Per-lane logic ------
   // Some of the logics are similar to the old VRF.scala (chaining record maintenance, hazard detection, write check), but the read/write arbitration and bank selection are redesigned to fit the shared SRAM architecture.
@@ -189,6 +202,16 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     )
     val recordValidVec: Seq[Bool] = chainingRecord.map(r => !r.bits.elementMask.andR && r.valid)
 
+    // Bon2D: lookup whether an in-flight instruction is an LSU op (vle/vse).
+    // Used to keep LSU traffic on the horizontal bank path even when verticalMode
+    // is asserted, so the vertical permutation only applies to lane-side compute.
+    // Without this, vle scatters into vertical banks and vse gathers them back -
+    // the two cancel and the slideup result becomes byte-identical to horizontal.
+    def isLSUInst(instIdx: UInt): Bool =
+      chainingRecord
+        .map(r => r.valid && (r.bits.instIndex === instIdx) && (r.bits.ls || r.bits.st))
+        .reduce(_ || _)
+
     // ------ Read check (chaining hazard detection, same logic as VRF.scala) ----
     ports.readCheck.zip(ports.readCheckResult).foreach { case (req, res) =>
       val recordSelect = chainingRecord
@@ -211,6 +234,12 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
 
     // --- Read arbitration across 8 banks (current config p0rw: 1 RW port per lane per bank) -----
     val checkSize: Int = readRequests.size
+
+    // Horizontal-mode per-port outputs. The fold writes these Wires (not the IO directly);
+    // a single explicit Mux below picks between horizontal and vertical outputs.
+    val hReady:  Vec[Bool] = Wire(Vec(readRequests.size, Bool()))
+    val hResult: Vec[UInt] = Wire(Vec(readResults.size, UInt(parameter.datapathWidth.W)))
+
     val (firstOccupied, _) = readRequests.zipWithIndex.foldLeft(
       (0.U(parameter.numBanks.W), 0.U(parameter.numBanks.W))
     ) {
@@ -246,41 +275,180 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
         } else {
           (bank & (~o)).orR
         }
-        v.ready := portReady && sramReady
+        hReady(i) := portReady && sramReady
 
         bankReadF(i) := bankCorrect & (~o)
 
         val pipeFire = Pipe(true.B, v.fire, parameter.vrfReadLatency).bits
-        readResults(i) := Mux(pipeFire, Mux1H(pipeBank, readResultF), 0.U)
+        hResult(i) := Mux(pipeFire, Mux1H(pipeBank, readResultF), 0.U)
 
         (o | bankCorrect, t) //update the occupied banks with the current request for the next request in the slot
     }
 
-    // ----- Write ready: write can proceed if its bank is not occupied by reads ---
-    write.ready := sramReady && (writeBank & (~firstOccupied)).orR // Checks that the target write bank are not occupied with OH AND
+    // ==========================================================================
+    // Bon2D: Vertical-mode read-gather and write-scatter overlay.
+    //
+    // Assumes SEW=8, LMUL=4, vl=128 (128x128 image grid). rowCounter reinterpreted
+    // as column index c in vertical mode. For a lane read request (vs,offset,L):
+    //   rc_i     = 8*(4*vs(1,0) + 2*offset(0) + L) + i  for i in 0..7
+    //   vs_s     = vs(4,2) ## cVsOff                     (absolute vs at column c)
+    //   off_s    = cGroup, laneIdx_s = cLane, byte_s = cByte
+    // Diagonal skew (bank = (rc+logicalAddr)(2,0)) guarantees the 8 rc_i hit 8
+    // distinct banks, so a single lane-cycle fires all 8 bank ports in parallel.
+    // ==========================================================================
+    val cVsOff: UInt = rowCounter(parameter.rowCounterBits - 1, parameter.rowCounterBits - 2)
+    val cGroup: UInt = rowCounter(parameter.rowCounterBits - 3)
+    val cLane:  UInt = rowCounter(parameter.rowCounterBits - 4)
+    val cByte:  UInt = rowCounter(2, 0)
 
-    val writeData: UInt = Mux(resetValid, 0.U(parameter.datapathWidth.W), writePipe.bits.data)
+    // Priority-select first valid read request - only one vertical read per lane per cycle.
+    val readValidVec:     Seq[Bool] = readRequests.map(_.valid)
+    val anyReadValid:     Bool      = readValidVec.reduce(_ || _)
+    val firstReadOH:      UInt      = PriorityEncoderOH(VecInit(readValidVec).asUInt)
+    val firstReadReq:     VRFReadRequest = Mux1H(firstReadOH, readRequests.map(_.bits))
+    val firstReadIdxPipe: UInt = Pipe(true.B, firstReadOH, parameter.vrfReadLatency).bits
+
+    // Bon2D: only fire the vertical read path for lane-side requests. LSU vse
+    // reads must take the horizontal bank path so they undo the same horizontal
+    // layout used by vle.
+    val firstReadFromLSU: Bool = isLSUInst(firstReadReq.instructionIndex)
+    val useVerticalRead:  Bool = verticalMode && !firstReadFromLSU
+    val vReadFire: Bool = useVerticalRead && anyReadValid && sramReady
+    val vsStore:   UInt = Cat(firstReadReq.vs(4, 2), cVsOff)(4, 0)
+
+    val rcBase: UInt = Cat(
+      firstReadReq.vs(1, 0),
+      firstReadReq.offset(0),
+      laneIdx.U(1.W),
+      0.U(3.W)
+    )
+    val rcI:    Seq[UInt] = Seq.tabulate(parameter.numBanks) { i =>
+      (rcBase + i.U)(parameter.rowCounterBits - 1, 0)
+    }
+    val vBankOHPerI: Seq[UInt] = rcI.map(rc => bankSelectRC(vsStore, cGroup, cLane, rc))
+    val vAddrPerI:   Seq[UInt] = rcI.map(rc => bankInternalAddrRC(vsStore, cGroup, cLane, rc))
+
+    // Per-bank: exactly one i maps here (diagonal skew); pick that i's address.
+    val vBankValid: Vec[Bool] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
+      VecInit(vBankOHPerI.map(_(b))).asUInt.orR && vReadFire
+    })
+    val vBankAddr: Vec[UInt] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
+      Mux1H(VecInit(vBankOHPerI.map(_(b))), vAddrPerI)
+    })
+    // vBankOHPerI_pipe indexed by i (not by bank). Used to re-assemble 8 bytes in output.
+    val vBankOHPerIPipe: Seq[UInt] = vBankOHPerI.map(oh => Pipe(true.B, oh, parameter.vrfReadLatency).bits)
+    val cBytePipe:       UInt      = Pipe(true.B, cByte, parameter.vrfReadLatency).bits
+    val vReadFirePipe:   Bool      = Pipe(true.B, vReadFire, parameter.vrfReadLatency).bits
+
+    // ----- Write ready: write can proceed if its bank is not occupied by reads ---
+    // In vertical mode, a firing vertical read consumes all 8 banks.
+    val verticalOccupy: UInt = Mux(vReadFire, ((BigInt(1) << parameter.numBanks) - 1).U, 0.U(parameter.numBanks.W))
+    val effectiveOccupied: UInt = Mux(useVerticalRead, verticalOccupy, firstOccupied)
+    write.ready := sramReady && (writeBank & (~effectiveOccupied)).orR
+
+    val writeData:    UInt = Mux(resetValid, 0.U(parameter.datapathWidth.W), writePipe.bits.data)
     val writeAddress: UInt = Mux(resetValid, sramResetCount, writeAddrPipe)
+    // Horizontal/reset writes update all bytes. Vertical scatter overrides per-bank below.
+    val writeByteVec: Vec[UInt] = VecInit(
+      Seq.tabulate(byteCount)(i => writeData(8 * i + 7, 8 * i))
+    )
+    val writeByteMaskAll: Vec[Bool] = VecInit(Seq.fill(byteCount)(true.B))
+
+    // Vertical write scatter: latched write bits live in writePipe. Interpret write as
+    // vertical column-c store when verticalMode. The 8 bytes of writePipe.data fan out to
+    // 8 banks at distinct rc_i, each at the same byte slot cByte_s = cByte.
+    // Bon2D: only fire the vertical write path for lane-side writebacks. LSU vle
+    // writes must take the horizontal bank path so vse can undo them later.
+    val writeFromLSU:     Bool = isLSUInst(writePipe.bits.instructionIndex)
+    val useVerticalWrite: Bool = verticalMode && !writeFromLSU
+    val vWriteFire:  Bool = useVerticalWrite && writePipe.valid
+    val vsStoreW:    UInt = Cat(writePipe.bits.vd(4, 2), cVsOff)(4, 0)
+    val rcBaseW:     UInt = Cat(
+      writePipe.bits.vd(1, 0),
+      writePipe.bits.offset(0),
+      laneIdx.U(1.W),
+      0.U(3.W)
+    )
+    val rcIW: Seq[UInt] = Seq.tabulate(parameter.numBanks) { i =>
+      (rcBaseW + i.U)(parameter.rowCounterBits - 1, 0)
+    }
+    val vWriteBankOHPerI: Seq[UInt] = rcIW.map(rc => bankSelectRC(vsStoreW, cGroup, cLane, rc))
+    val vWriteAddrPerI:   Seq[UInt] = rcIW.map(rc => bankInternalAddrRC(vsStoreW, cGroup, cLane, rc))
+    val writeByteOfI:     Seq[UInt] = Seq.tabulate(parameter.numBanks) { i =>
+      writePipe.bits.data(8 * i + 7, 8 * i)
+    }
+
+    // Per-bank vertical write: one i maps to each bank (diagonal skew).
+    val vWritePerBankValid: Vec[Bool] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
+      VecInit(vWriteBankOHPerI.map(_(b))).asUInt.orR && vWriteFire
+    })
+    val vWritePerBankAddr: Vec[UInt] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
+      Mux1H(VecInit(vWriteBankOHPerI.map(_(b))), vWriteAddrPerI)
+    })
+    val vWritePerBankByte: Vec[UInt] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
+      Mux1H(VecInit(vWriteBankOHPerI.map(_(b))), writeByteOfI)
+    })
 
     // ----- Connect to SRAM banks (lane's port) ----
     // Only lane 0 drives reset (avoids same-address dual-port write during reset)
     val laneResetValid: Bool = if (laneIdx == 0) resetValid else false.B
     vrfSRAM.zipWithIndex.foreach { case (rf, bank) =>
-      val writeValid:    Bool = writePipe.valid && writeBankPipe(bank)
-      val ramWriteValid: Bool = writeValid || laneResetValid
+      val hWriteValid: Bool = writePipe.valid && writeBankPipe(bank) && !useVerticalWrite
+      val vWriteValid: Bool = vWritePerBankValid(bank)
+      val ramWriteValid: Bool = hWriteValid || vWriteValid || laneResetValid
 
-      firstReadPipe(bank).bits.address :=
-        Mux1H(
-          bankReadF.map(_(bank)), // Extract the bit at index 'bank' to create a OH signal
-          readRequests.map(r => bankInternalAddr(r.bits.vs, r.bits.offset, laneIdx)) // generate a vec that have a list of address for OH selection 
-        )
-      firstReadPipe(bank).valid := bankReadF.map(_(bank)).reduce(_ || _)
+      val hReadAddr: UInt = Mux1H(
+        bankReadF.map(_(bank)),
+        readRequests.map(r => bankInternalAddr(r.bits.vs, r.bits.offset, laneIdx))
+      )
+      val hReadValid: Bool = bankReadF.map(_(bank)).reduce(_ || _)
 
-      rf.readwritePorts(laneIdx).address   := Mux(ramWriteValid, writeAddress, firstReadPipe(bank).bits.address)
+      val readAddr:  UInt = Mux(useVerticalRead, vBankAddr(bank), hReadAddr)
+      val readValid: Bool = Mux(useVerticalRead, vBankValid(bank), hReadValid)
+
+      firstReadPipe(bank).bits.address := readAddr
+      firstReadPipe(bank).valid        := readValid
+
+      // Vertical scatter: broadcast the 1-byte update to byte lane cByte of the 8-byte slot.
+      val vWriteByteVec: Vec[UInt] = VecInit(Seq.fill(byteCount)(vWritePerBankByte(bank)))
+      val vWriteMask:    Vec[Bool] = VecInit(Seq.tabulate(byteCount)(i => cByte === i.U))
+
+      val portWriteData: Vec[UInt] = Mux(useVerticalWrite && !laneResetValid, vWriteByteVec, writeByteVec)
+      val portWriteMask: Vec[Bool] = Mux(useVerticalWrite && !laneResetValid, vWriteMask, writeByteMaskAll)
+      val portWriteAddr: UInt      = Mux(useVerticalWrite && !laneResetValid, vWritePerBankAddr(bank), writeAddress)
+
+      rf.readwritePorts(laneIdx).address   := Mux(ramWriteValid, portWriteAddr, firstReadPipe(bank).bits.address)
       rf.readwritePorts(laneIdx).enable    := ramWriteValid || firstReadPipe(bank).valid
       rf.readwritePorts(laneIdx).isWrite   := ramWriteValid
-      rf.readwritePorts(laneIdx).writeData := writeData
-      readResultF(bank) := rf.readwritePorts(laneIdx).readData(parameter.ramWidth - 1, 0)
+      rf.readwritePorts(laneIdx).writeData := portWriteData
+      rf.readwritePorts(laneIdx).mask.get  := portWriteMask
+      readResultF(bank) := rf.readwritePorts(laneIdx).readData.asUInt
+    }
+
+    // Vertical-mode per-port outputs. Computed unconditionally; selected via Mux below.
+    // Gather 8 bytes: byte_i = cByte-th byte of readResultF(bank where rc_i landed).
+    val gatheredBytes: Seq[UInt] = vBankOHPerIPipe.map { oh =>
+      val bankResult: UInt     = Mux1H(oh, readResultF)
+      val byteVec:    Vec[UInt] = VecInit(Seq.tabulate(byteCount)(b => bankResult(8 * b + 7, 8 * b)))
+      byteVec(cBytePipe)
+    }
+    val gatheredWord: UInt = Cat(gatheredBytes.reverse)
+    val vReady:  Vec[Bool] = VecInit(Seq.tabulate(readRequests.size)(i => firstReadOH(i) && sramReady))
+    val vResult: Vec[UInt] = VecInit(Seq.tabulate(readResults.size)(i =>
+      Mux(firstReadIdxPipe(i) && vReadFirePipe, gatheredWord, 0.U)
+    ))
+
+    // Single explicit mode-select per IO sink
+    // readResults is pipelined by vrfReadLatency, so its mode select must use the
+    // useVerticalRead value from the cycle the read fired, not the current cycle.
+    // Otherwise the last-of-batch LSU response is stolen by a transient flip when
+    // firstReadFromLSU drops in the gap between LSU read batches.
+    val useVerticalReadPipe: Bool = Pipe(true.B, useVerticalRead, parameter.vrfReadLatency).bits
+    readRequests.zipWithIndex.foreach { case (r, i) =>
+      r.ready := Mux(useVerticalRead, vReady(i), hReady(i))
+    }
+    readResults.zipWithIndex.foreach { case (rr, i) =>
+      rr := Mux(useVerticalReadPipe, vResult(i), hResult(i))
     }
 
     // ---- Chaining record update (same logic as VRF.scala) ----

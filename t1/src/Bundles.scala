@@ -261,6 +261,9 @@ class CSRInterface(vlWidth: Int) extends Bundle {
     */
   val vma: Bool = Bool()
 
+  /** Bon2D: vertical-mode flag sourced from custom CSR 0x7C0. Selects SharedVRF 8-way gather/scatter for 2D column access. */
+  val verticalMode: Bool = Bool()
+
   // csr for zvm
   val tk:  UInt = UInt(4.W)
   val tm:  UInt = UInt(14.W)

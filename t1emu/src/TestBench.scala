@@ -14,6 +14,7 @@ import chisel3.util.circt.dpi.{
   RawUnclockedNonVoidFunctionCall
 }
 import chisel3.util.{HasExtModuleInline, PopCount, UIntToOH, Valid}
+import chisel3.util.circt.PlusArgsTest
 import org.chipsalliance.amba.axi4.bundle._
 import org.chipsalliance.t1.rtl.{T1, T1Parameter}
 import org.chipsalliance.t1.t1emu.dpi._
@@ -64,9 +65,11 @@ class TestBench(val parameter: T1Parameter)
   val simulationTime: UInt = RegInit(0.U(64.W))
   simulationTime := simulationTime + 1.U
 
-  dut.io.clock    := clock
-  dut.io.reset    := reset
-  omInstance.t1In := Property(dut.io.om.asAnyClassType)
+  dut.io.clock        := clock
+  dut.io.reset        := reset
+  // Drive verticalMode from the +t1_vertical_mode plusarg. Absent -> horizontal (default).
+  dut.io.verticalMode := PlusArgsTest("t1_vertical_mode")
+  omInstance.t1In     := Property(dut.io.om.asAnyClassType)
 
   // uint32_t -> svBitVecVal -> reference type with 7 length.
   class Issue  extends Bundle {

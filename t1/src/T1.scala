@@ -432,10 +432,12 @@ class T1Probe(parameter: T1Parameter) extends Bundle {
 }
 
 class T1Interface(parameter: T1Parameter) extends Record {
-  def clock  = elements("clock").asInstanceOf[Clock]
-  def reset  = elements("reset").asInstanceOf[Bool]
-  def issue  = elements("issue").asInstanceOf[DecoupledIO[T1Issue]]
-  def retire = elements("retire").asInstanceOf[T1Retire]
+  def clock        = elements("clock").asInstanceOf[Clock]
+  def reset        = elements("reset").asInstanceOf[Bool]
+  def issue        = elements("issue").asInstanceOf[DecoupledIO[T1Issue]]
+  def retire       = elements("retire").asInstanceOf[T1Retire]
+  /** Bon2D: scalar-core-agnostic vertical-mode select. Integrator drives from CSR 0x7C0 bit 0 (or equivalent). */
+  def verticalMode = elements("verticalMode").asInstanceOf[Bool]
   def highBandwidthLoadStorePort: AXI4RWIrrevocable    =
     elements("highBandwidthLoadStorePort").asInstanceOf[AXI4RWIrrevocable]
   def indexedLoadStorePort:       AXI4RWIrrevocable    = elements("indexedLoadStorePort").asInstanceOf[AXI4RWIrrevocable]
@@ -447,6 +449,7 @@ class T1Interface(parameter: T1Parameter) extends Record {
       "reset"                      -> Input(Bool()),
       "issue"                      -> Flipped(Decoupled(new T1Issue(parameter.xLen, parameter.vLen))),
       "retire"                     -> new T1Retire(parameter.xLen),
+      "verticalMode"               -> Input(Bool()),
       "highBandwidthLoadStorePort" -> new AXI4RWIrrevocable(parameter.axi4BundleParameterWithArbiter), //made to support multiple LSU in 2D
       "indexedLoadStorePort"       -> new AXI4RWIrrevocable(parameter.axi4BundleParameterWithArbiter.copy(dataWidth = 32)), //made to support multiple LSU in 2D
       "om"                         -> Output(Property[AnyClassType]()),
@@ -560,6 +563,12 @@ class T1(val parameter: T1Parameter)
   requestRegCSR.tk  := requestReg.bits.issue.vtype(13, 11)
   requestRegCSR.tm  := requestReg.bits.issue.vtype(29, 16)
   requestRegCSR.tew := requestReg.bits.issue.vtype(5, 3) << requestReg.bits.issue.vtype(10, 9)
+
+  //Bon2D: vertical-mode flag from scalar-core-agnostic top-level input io.verticalMode.
+  //Integrator drives this from CSR 0x7C0 bit 0 (or any equivalent source). Latched at issue.fire so
+  //it stays stable across the instruction even if the source CSR is rewritten mid-flight.
+  val verticalModeReg: Bool = RegEnable(io.verticalMode, false.B, io.issue.fire)
+  requestRegCSR.verticalMode := verticalModeReg
 
   // connect virtual channel
 
@@ -776,8 +785,9 @@ class T1(val parameter: T1Parameter)
   val replayRowDone = Wire(Bool())
   replayFSM.rowDone := replayRowDone
 
-  //Connect rowCounter to all SharedVRFs
+  //Connect rowCounter and verticalMode to all SharedVRFs
   sharedVRF2D.foreach(_.rowCounter := replayFSM.rowCounter)
+  sharedVRF2D.foreach(_.verticalMode := verticalModeReg)
 
   // 0 0 -> don't update
   // 0 1 -> update to false

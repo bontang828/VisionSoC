@@ -558,10 +558,12 @@ class DCSR extends Bundle {
 }
 
 class VCSR extends Bundle {
-  val vtype:  UInt = UInt(32.W)
-  val vl:     UInt = UInt(32.W)
-  val vcsr:   UInt = UInt(32.W)
-  val vstart: UInt = UInt(32.W)
+  val vtype:        UInt = UInt(32.W)
+  val vl:           UInt = UInt(32.W)
+  val vcsr:         UInt = UInt(32.W)
+  val vstart:       UInt = UInt(32.W)
+  /** Bon2D: custom CSR 0x7C0 bit 0 - selects SharedVRF vertical-mode 8-way gather/scatter. */
+  val verticalMode: Bool = Bool()
 }
 
 class MIP(nLocalInterrupts: Int) extends Bundle {
@@ -1579,8 +1581,10 @@ class FrontendBundle(
 
 // Interface between T1 <> Rocket integration
 class RocketCoreToT1(xLen: Int, vlWidth: Int) extends Bundle {
-  val issue:  DecoupledIO[T1Issue] = Decoupled(new T1Issue(xLen, vlWidth))
-  val retire: T1Retire             = Flipped(new T1Retire(xLen))
+  val issue:        DecoupledIO[T1Issue] = Decoupled(new T1Issue(xLen, vlWidth))
+  val retire:       T1Retire             = Flipped(new T1Retire(xLen))
+  /** Bon2D: CSR 0x7C0 bit 0 exported to T1 as an opaque flag (sticky until next csrw 0x7C0). */
+  val verticalMode: Bool                 = Output(Bool())
 }
 
 class T1Issue(xLen: Int, vlWidth: Int) extends Bundle {

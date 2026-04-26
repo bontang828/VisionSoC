@@ -49,6 +49,7 @@ TOP="t1emu"
 EMU_TYPE="verilator-emu"
 RUN_CHECK=false
 MAX_CYCLES=""
+VERTICAL_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -71,6 +72,10 @@ while [[ $# -gt 0 ]]; do
         --max-cycles)
             MAX_CYCLES="$2"
             shift 2
+            ;;
+        --vertical)
+            VERTICAL_MODE=true
+            shift
             ;;
         *)
             echo "Unknown option: $1"
@@ -144,6 +149,7 @@ echo "Configuration: $CONFIG"
 echo "Top module: $TOP"
 echo "Emulator type: $EMU_TYPE"
 echo "Trace enabled: $ENABLE_TRACE"
+echo "Vertical mode: $VERTICAL_MODE"
 echo "Max cycles: ${MAX_CYCLES:-none}"
 echo "Output directory: $OUTPUT_DIR"
 echo "Build logs: $OUTPUT_DIR/build.log"
@@ -185,6 +191,48 @@ if [ -z "$TEST_ELF" ]; then
     exit 1
 fi
 
+#Disassemble the test ELF so the asm used in the run is captured alongside the logs
+TEST_ASM="$OUTPUT_DIR/${TEST_BASE_NAME}.s"
+echo "Disassembling test ELF to: $TEST_ASM"
+OBJDUMP_BIN=""
+for cand in llvm-objdump riscv32-none-elf-objdump riscv64-none-elf-objdump riscv32-unknown-elf-objdump riscv64-unknown-elf-objdump; do
+    if command -v "$cand" >/dev/null 2>&1; then
+        OBJDUMP_BIN="$cand"
+        break
+    fi
+done
+
+#Fall back to scanning the nix store if no objdump is on PATH
+if [ -z "$OBJDUMP_BIN" ] && [ -d /nix/store ]; then
+    NIX_OBJDUMP=$(find /nix/store -maxdepth 3 -type f \
+        \( -name "riscv32-none-elf-objdump" -o -name "riscv64-none-elf-objdump" \
+           -o -name "riscv32-unknown-elf-objdump" -o -name "riscv64-unknown-elf-objdump" \
+           -o -name "llvm-objdump" \) 2>/dev/null | head -1)
+    if [ -n "$NIX_OBJDUMP" ]; then
+        OBJDUMP_BIN="$NIX_OBJDUMP"
+    fi
+fi
+
+if [ -n "$OBJDUMP_BIN" ]; then
+    ELF_ABS="$(readlink -f "$TEST_ELF")"
+    "$OBJDUMP_BIN" -d -S --mattr=+v "$ELF_ABS" > "$TEST_ASM" 2>/dev/null \
+        || "$OBJDUMP_BIN" -d -S "$ELF_ABS" > "$TEST_ASM" 2>/dev/null \
+        || "$OBJDUMP_BIN" -d "$ELF_ABS" > "$TEST_ASM"
+    echo "Disassembly saved (using $OBJDUMP_BIN)"
+else
+    echo "Warning: no objdump found on PATH or in /nix/store; skipping disassembly"
+fi
+
+#Also copy any .s files that the test build produced into the output dir
+PREBUILT_ASM=$(find -L "$OUTPUT_DIR/test-result" -maxdepth 4 -name "*.s" 2>/dev/null)
+if [ -n "$PREBUILT_ASM" ]; then
+    mkdir -p "$OUTPUT_DIR/asm"
+    while IFS= read -r f; do
+        cp "$f" "$OUTPUT_DIR/asm/" 2>/dev/null || true
+    done <<< "$PREBUILT_ASM"
+    echo "Copied prebuilt .s files to: $OUTPUT_DIR/asm/"
+fi
+
 echo "Running test: $TEST_CASE"
 echo "Test ELF: $TEST_ELF"
 #Determine simulator binary name based on top module and emulator type
@@ -204,6 +252,9 @@ SIM_ARGS=(
 )
 if [ -n "$MAX_CYCLES" ]; then
     SIM_ARGS+=("+t1_debug_global_timeout=$MAX_CYCLES")
+fi
+if [ "$VERTICAL_MODE" = true ]; then
+    SIM_ARGS+=("+t1_vertical_mode")
 fi
 
 #Add DRAMsim3 arguments if using t1rocketemu
