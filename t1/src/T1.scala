@@ -1409,6 +1409,8 @@ class T1(val parameter: T1Parameter)
     // maskUnit.io.gatherData.ready              := requestRegDequeue.fire
     //time multiplex: gatherData ready per row
     maskUnit.io.gatherData.ready              := replayFSM.rowFire
+    // Bon2D: per-instruction vertical mode flag, latched on issue (verticalModeReg).
+    maskUnit.io.verticalMode                  := verticalModeReg
   }
 
   // io.highBandwidthLoadStorePort <> lsu.axi4Port  

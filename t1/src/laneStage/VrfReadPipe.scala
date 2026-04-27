@@ -60,6 +60,11 @@ class VrfReadPipe(parameter: LaneParameter, arbitrate: Boolean = false) extends 
   vrfReadRequest.bits.readSource       := reqArbitrate.io.out.bits.readSource
   vrfReadRequest.bits.offset           := reqArbitrate.io.out.bits.offset
   vrfReadRequest.bits.instructionIndex := reqArbitrate.io.out.bits.instructionIndex
+  // Forward narrow-vertical fields from upstream queue entry. Lane compute
+  // keeps these at false/0 (set in LaneStage1); the mask unit's own read
+  // path uses a separate channel and overrides via Phase 3 wiring.
+  vrfReadRequest.bits.narrowVertical   := reqArbitrate.io.out.bits.narrowVertical
+  vrfReadRequest.bits.rowOverride      := reqArbitrate.io.out.bits.rowOverride
   reqArbitrate.io.out.ready            := vrfReadRequest.ready
 
   val vrfReadLatency = parameter.vrfParam.vrfReadLatency

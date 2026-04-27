@@ -781,6 +781,9 @@ class SimpleAccessUnit(param: MSHRParam) extends Module with LSUPublic {
   vrfReadDataPorts.bits.vs               := s0Reg.readVS
   vrfReadDataPorts.bits.readSource       := 2.U
   vrfReadDataPorts.bits.instructionIndex := lsuRequestReg.instructionIndex
+  // LSU reads always take the horizontal path - never narrow vertical.
+  vrfReadDataPorts.bits.narrowVertical   := false.B
+  vrfReadDataPorts.bits.rowOverride      := 0.U
 
   /** ready to read VRF to store to memory. */
   val readReady: Bool = !lsuRequestReg.instructionInformation.isStore || vrfReadDataPorts.ready
@@ -950,6 +953,9 @@ class SimpleAccessUnit(param: MSHRParam) extends Module with LSUPublic {
     )
   } else 0.U
   vrfWritePort.bits.offset := writeOffset
+  // LSU writes always take the horizontal path - never narrow vertical.
+  vrfWritePort.bits.narrowVertical := false.B
+  vrfWritePort.bits.rowOverride    := 0.U
 
   // update [[outstandingTLDMessages]]
   when((memReadResponse.fire || memReadRequest.fire) && !lsuRequestReg.instructionInformation.isStore) {

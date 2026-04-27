@@ -99,6 +99,10 @@ class LaneStage3(parameter: LaneParameter, isLastSlot: Boolean) extends Module {
     vrfWriteQueue.enq.bits.last             := DontCare
     vrfWriteQueue.enq.bits.instructionIndex := enqueue.bits.instructionIndex
     vrfWriteQueue.enq.bits.mask             := enqueue.bits.mask
+    // Lane writebacks operate on full datapath chunks; narrow-vertical is
+    // reserved for the mask unit's per-element scatter (Phase 3).
+    vrfWriteQueue.enq.bits.narrowVertical   := false.B
+    vrfWriteQueue.enq.bits.rowOverride      := 0.U
 
     enqueue.ready := vrfWriteReady
     stageValid    := vrfWriteQueue.deq.valid
@@ -118,6 +122,10 @@ class LaneStage3(parameter: LaneParameter, isLastSlot: Boolean) extends Module {
     vrfWriteQueue.enq.bits.last             := DontCare
     vrfWriteQueue.enq.bits.instructionIndex := enqueue.bits.instructionIndex
     vrfWriteQueue.enq.bits.mask             := enqueue.bits.mask
+    // Lane writebacks operate on full datapath chunks; narrow-vertical is
+    // reserved for the mask unit's per-element scatter (Phase 3).
+    vrfWriteQueue.enq.bits.narrowVertical   := false.B
+    vrfWriteQueue.enq.bits.rowOverride      := 0.U
 
     // Handshake
     enqueue.ready := vrfWriteQueue.enq.ready

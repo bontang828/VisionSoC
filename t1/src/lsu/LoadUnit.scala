@@ -190,6 +190,9 @@ class LoadUnit(param: MSHRParam) extends StrideBase(param) with LSUPublic {
       lsuRequestReg.instructionInformation.vs3 + accessPtr * segmentInstructionIndexInterval + (dataGroup >> writePort.bits.offset.getWidth).asUInt
     writePort.bits.last             := DontCare
     writePort.bits.instructionIndex := lsuRequestReg.instructionIndex
+    // LSU writes always take the horizontal path - never narrow vertical.
+    writePort.bits.narrowVertical   := false.B
+    writePort.bits.rowOverride      := 0.U
     when(writePort.fire) {
       accessState(laneIndex)       := false.B
       accessStateUpdate(laneIndex) := false.B

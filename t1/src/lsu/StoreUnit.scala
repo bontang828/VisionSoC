@@ -115,6 +115,9 @@ class StoreUnit(param: MSHRParam) extends StrideBase(param) with LSUPublic {
       readPort.bits.readSource       := 2.U
       readPort.bits.offset           := readCount
       readPort.bits.instructionIndex := lsuRequestReg.instructionIndex
+      // LSU reads always take the horizontal path - never narrow vertical.
+      readPort.bits.narrowVertical   := false.B
+      readPort.bits.rowOverride      := 0.U
 
       // latency queue enq
       AssertProperty(BoolSequence(!vrfReadQueueVec(laneIndex).enq.valid || vrfReadQueueVec(laneIndex).enq.ready))

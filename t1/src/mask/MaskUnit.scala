@@ -87,6 +87,10 @@ class MaskUnitInterface(parameter: T1Parameter) extends Bundle {
   val writeRDData:   UInt                              = Output(UInt(parameter.xLen.W))
   val gatherData:    DecoupledIO[UInt]                 = Decoupled(UInt(parameter.xLen.W))
   val gatherRead:    Bool                              = Input(Bool())
+  /** Bon2D: when high, MaskUnit-issued lane VRF reads/writes for vrgather.vi/.vx
+    * (and similar scattered-access ops) opt into the SharedVRF narrow-vertical
+    * path instead of the wide 8-bank gather/scatter. */
+  val verticalMode:  Bool                              = Input(Bool())
 
   val writeCountVec: Vec[Valid[WriteCountReport]] =
     Vec(
@@ -771,7 +775,9 @@ class MaskUnit(val parameter: T1Parameter)
     readVS1Req.vs         := instReg.vs1 + gatherGrowth
     readVS1Req.offset     := gatherOffset
     readVS1Req.readLane   := gatherLane
-    readVS1Req.dataOffset := gatherDatOffset
+    // Bon2D: narrow-vertical reads return the wanted byte already at byte
+    // lane 0 (SharedVRF Phase 2 path), so suppress the post-shift.
+    readVS1Req.dataOffset := Mux(io.verticalMode, 0.U, gatherDatOffset)
   }
 
   val compressUnitResultQueue: QueueIO[CompressOutput] = Queue.io(new CompressOutput(compressParam), 4, flow = true)
@@ -820,10 +826,24 @@ class MaskUnit(val parameter: T1Parameter)
     readChannel(index).bits.offset           := maskedWrite.readChannel(index).bits.offset
     readChannel(index).bits.readSource       := 2.U
     readChannel(index).bits.instructionIndex := instReg.instructionIndex
+    // Phase 1 default: keep existing behaviour (legacy horizontal/wide-vertical
+    // path). The vrgather.vi/.vx gather branch below overrides these so the
+    // SharedVRF can serve the per-element fetch via the narrow single-bank path
+    // when in vertical mode (Phase 2 narrow datapath).
+    readChannel(index).bits.narrowVertical   := false.B
+    readChannel(index).bits.rowOverride      := 0.U
     when(readVs1Valid && readVS1Req.readLane === index.U) {
       readChannel(index).valid       := true.B
       readChannel(index).bits.vs     := readVS1Req.vs
       readChannel(index).bits.offset := readVS1Req.offset
+      // Bon2D: only the gather state machine (vrgather.vi/.vx) opts in here;
+      // compress and other consumers of readVS1Req leave narrow off.
+      when((gatherSRead || gatherWaiteRead) && io.verticalMode) {
+        readChannel(index).bits.narrowVertical := true.B
+        // The source row R for vrgather.vi/.vx is the scalar/immediate index;
+        // SharedVRF derives bank/byte position from the global rowCounter (column).
+        readChannel(index).bits.rowOverride    := instReg.readFromScala
+      }
     }
     readVs1Fire(index)                       := request.fire && readVS1Req.readLane === index.U
     readVs1AckFire(index)                    := readResult(index).fire && readVS1Req.readLane === index.U
@@ -991,6 +1011,10 @@ class MaskUnit(val parameter: T1Parameter)
       parameter.laneParam.vrfOffsetBits
     )
     writePort.bits.offset           := queue.deq.bits.writeData.groupCounter
+    // Phase 1 default: keep existing behaviour (legacy horizontal/wide-vertical
+    // path). Phase 3 overrides for the gather writeback when verticalMode is on.
+    writePort.bits.narrowVertical   := false.B
+    writePort.bits.rowOverride      := 0.U
 
     val writeTokenSize    = 8
     val writeTokenWidth   = log2Ceil(writeTokenSize)

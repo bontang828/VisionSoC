@@ -193,6 +193,12 @@ class LaneStage1(parameter: LaneParameter, isLastSlot: Boolean) extends Module {
   beforeCheckQueueVec.foreach { q =>
     q.enq.bits.instructionIndex := enqueue.bits.instructionIndex
     q.enq.bits.groupIndex       := enqueue.bits.groupCounter
+    // Phase 1 default. The lane's vector compute reads operate on full
+    // datapath-wide chunks per cycle, which fit the wide horizontal/vertical
+    // overlay; the narrow-vertical path is reserved for the mask unit's
+    // per-element scatter, plumbed there in Phase 3.
+    q.enq.bits.narrowVertical   := false.B
+    q.enq.bits.rowOverride      := 0.U
   }
 
   enqueue.ready := allReadQueueReady && pipeQueue.enq.ready

@@ -96,6 +96,11 @@ class MaskedWrite(parameter: LaneParameter) extends Module {
   vrfReadRequest.bits.readSource       := 2.U
   vrfReadRequest.bits.offset           := enqueue.bits.offset
   vrfReadRequest.bits.instructionIndex := enqueue.bits.instructionIndex
+  // Phase 1 default. MaskedWrite issues WAR reads in datapath-wide chunks just
+  // like the lane's normal traffic, so wide-vertical is the right fit; the
+  // narrow path is reserved for the mask unit's per-element scatter (Phase 3).
+  vrfReadRequest.bits.narrowVertical   := false.B
+  vrfReadRequest.bits.rowOverride      := 0.U
 
   val vrfReadPipe: QueueIO[UInt] =
     Queue.io(UInt(parameter.datapathWidth.W), parameter.vrfParam.vrfReadLatency + 2)

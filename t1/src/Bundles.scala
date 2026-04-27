@@ -301,7 +301,8 @@ class V0Update(datapathWidth: Int, vrfOffsetBits: Int) extends Bundle {
 }
 
 /** Request to access VRF in each lanes. */
-class VRFReadRequest(regNumBits: Int, offsetBits: Int, instructionIndexBits: Int) extends Bundle {
+class VRFReadRequest(regNumBits: Int, offsetBits: Int, instructionIndexBits: Int,
+                     rowCounterBits: Int = 1) extends Bundle {
 
   /** address to access VRF.(v0, v1, v2, ...) */
   val vs: UInt = UInt(regNumBits.W)
@@ -315,9 +316,19 @@ class VRFReadRequest(regNumBits: Int, offsetBits: Int, instructionIndexBits: Int
 
   /** index for record the age of instruction, designed for handling RAW hazard */
   val instructionIndex: UInt = UInt(instructionIndexBits.W)
+
+  /** Bon2D narrow-vertical access: when high, SharedVRF treats this read as a
+    * scattered single-bank, single-byte fetch keyed on `rowOverride` instead of
+    * a full 8-bank vertical gather. Default false -> identical to legacy. */
+  val narrowVertical: Bool = Bool()
+
+  /** Image-row index R for narrow-vertical reads. The byte returned is the byte
+    * at column `rowCounter` of row R. Ignored when `narrowVertical=false`. */
+  val rowOverride: UInt = UInt(rowCounterBits.W)
 }
 
-class VRFReadQueueEntry(regNumBits: Int, offsetBits: Int, chainingSize: Int) extends Bundle {
+class VRFReadQueueEntry(regNumBits: Int, offsetBits: Int, chainingSize: Int,
+                        rowCounterBits: Int = 1) extends Bundle {
   val vs:               UInt = UInt(regNumBits.W)
   val offset:           UInt = UInt(offsetBits.W)
   // for debug
@@ -325,9 +336,14 @@ class VRFReadQueueEntry(regNumBits: Int, offsetBits: Int, chainingSize: Int) ext
   val readSource:       UInt = UInt(4.W)
   // Pipe due to fan-out
   val instructionIndex: UInt = UInt((log2Ceil(chainingSize) + 1).W)
+  // Bon2D narrow-vertical fields - lane-side reads keep these at default
+  // false/0 so the SharedVRF treats them as legacy horizontal/wide-vertical.
+  val narrowVertical:   Bool = Bool()
+  val rowOverride:      UInt = UInt(rowCounterBits.W)
 }
 
-class VRFWriteRequest(regNumBits: Int, offsetBits: Int, instructionIndexSize: Int, dataPathWidth: Int) extends Bundle {
+class VRFWriteRequest(regNumBits: Int, offsetBits: Int, instructionIndexSize: Int, dataPathWidth: Int,
+                      rowCounterBits: Int = 1) extends Bundle {
 
   /** address to access VRF.(v0, v1, v2, ...) */
   val vd: UInt = UInt(regNumBits.W)
@@ -347,6 +363,15 @@ class VRFWriteRequest(regNumBits: Int, offsetBits: Int, instructionIndexSize: In
 
   /** used to update the record in VRF. */
   val instructionIndex: UInt = UInt(instructionIndexSize.W)
+
+  /** Bon2D narrow-vertical write: when high, SharedVRF writes only one byte to
+    * a single bank at `rowOverride`, byte slot derived from the global
+    * rowCounter. Default false -> identical to legacy. The byte value used is
+    * `data(7,0)`. */
+  val narrowVertical: Bool = Bool()
+
+  /** Image-row index R for narrow-vertical writes. */
+  val rowOverride: UInt = UInt(rowCounterBits.W)
 }
 
 class LSUWriteCheck(regNumBits: Int, offsetBits: Int, instructionIndexSize: Int) extends Bundle {
