@@ -23,6 +23,7 @@
 int8_t grid_in[ROWS][COLS];
 int8_t grid_out[ROWS][COLS];
 int8_t grid_out2[ROWS][COLS];
+int8_t grid_out3[ROWS][COLS];
 int8_t indices_grid[ROWS][COLS];
 
 // volatile pointer casts force the compiler to emit scalar byte stores;
@@ -33,6 +34,7 @@ static void init_grid(void) {
     volatile int8_t *p_in  = (volatile int8_t *)&grid_in[0][0];
     volatile int8_t *p_out = (volatile int8_t *)&grid_out[0][0];
     volatile int8_t *p_out2 = (volatile int8_t *)&grid_out2[0][0];
+    volatile int8_t *p_out3 = (volatile int8_t *)&grid_out3[0][0];
     volatile int8_t *p_idx = (volatile int8_t *)&indices_grid[0][0];
     for (int i = 0; i < ROWS; i++) {
         for (int j = 0; j < COLS; j++) {
@@ -71,6 +73,12 @@ void grid_gather(int8_t *src, int8_t *idx, int8_t *dst, size_t n) {
         "vse8.v  v12, (a2)\n\t"
         "ret\n\t"
     );
+}
+
+static inline void set_vertical_mode(int enable) {
+    // Custom CSR 0x7c0 is the T1 verticalMode control on t1rocketemu.
+    unsigned long v = (unsigned long)enable;
+    __asm__ volatile("csrw 0x7c0, %0" :: "r"(v));
 }
 
 // Compare grid_out against the closed-form expectation for both modes and report which if any matched.
@@ -161,6 +169,51 @@ static void check_result2(void) {
     }
 }
 
+__attribute__((noinline))
+static void check_grid_result(const int8_t (*grid)[COLS]) {
+    int h_mismatch = 0, v_mismatch = 0;
+    int h_first_bad_r = -1, h_first_bad_c = -1;
+    int v_first_bad_r = -1, v_first_bad_c = -1;
+    int8_t h_got = 0, h_exp = 0, v_got = 0, v_exp = 0;
+
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            int8_t got = grid[r][c];
+            int8_t exp_h = (int8_t)((2 * r + c + 1) & (COLS - 1));
+            int8_t exp_v = (int8_t)((r + 2 * c + 1) & (COLS - 1));
+            if (got != exp_h) {
+                if (h_mismatch == 0) {
+                    h_first_bad_r = r; h_first_bad_c = c;
+                    h_got = got;       h_exp = exp_h;
+                }
+                h_mismatch++;
+            }
+            if (got != exp_v) {
+                if (v_mismatch == 0) {
+                    v_first_bad_r = r; v_first_bad_c = c;
+                    v_got = got;       v_exp = exp_v;
+                }
+                v_mismatch++;
+            }
+        }
+    }
+
+    if (h_mismatch == 0) {
+        printf("[CHECK] PASS horizontal: grid[r][c] == (2r+c+1)&127 for all %d cells\n",
+               ROWS * COLS);
+    } else if (v_mismatch == 0) {
+        printf("[CHECK] PASS vertical:   grid[r][c] == (r+2c+1)&127 for all %d cells\n",
+               ROWS * COLS);
+    } else {
+        printf("[CHECK] FAIL: %d cells mismatch horizontal, %d cells mismatch vertical\n",
+               h_mismatch, v_mismatch);
+        printf("[CHECK] first H mismatch at [%d][%d]: got %d, expected %d\n",
+               h_first_bad_r, h_first_bad_c, h_got, h_exp);
+        printf("[CHECK] first V mismatch at [%d][%d]: got %d, expected %d\n",
+               v_first_bad_r, v_first_bad_c, v_got, v_exp);
+    }
+}
+
 void test(void) {
     init_grid();
 
@@ -176,15 +229,29 @@ void test(void) {
     printf("[BEFORE] Print Grid Out2");
     print_grid(2, &grid_out[0][0]);
 
+    printf("[BEFORE] Print Grid Out3");
+    print_grid(2, &grid_out3[0][0]);
+
+    set_vertical_mode(0);
     grid_gather(&grid_in[0][0], &indices_grid[0][0], &grid_out[0][0], COLS);
+    set_vertical_mode(1);
     grid_gather(&grid_in[0][0], &indices_grid[0][0], &grid_out2[0][0], COLS);
+    set_vertical_mode(0);
+    grid_gather(&grid_in[0][0], &indices_grid[0][0], &grid_out3[0][0], COLS);
 
     printf("[AFTER] Print Grid Out");
     print_grid(4, &grid_out[0][0]);
 
     printf("[AFTER] Print Grid Out2");
     print_grid(4, &grid_out2[0][0]);
-    
-    check_result();
-    check_result2();
+
+    printf("[AFTER] Print Grid Out3");
+    print_grid(4, &grid_out3[0][0]);
+
+    // check_result();
+    // check_result2();
+    // check_result3();
+    check_grid_result(grid_out);
+    check_grid_result(grid_out2);
+    check_grid_result(grid_out3);
 }

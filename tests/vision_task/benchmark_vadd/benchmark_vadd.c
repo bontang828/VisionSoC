@@ -185,16 +185,28 @@
  *
  * Mode-aware tests (interleaved H + V compute, no LSU mode flip)
  * --------------------------------------------------------------
- *  TEST 7 - Full grid scalar reduction with hybrid finalisation
- *    Pass 1 (horizontal compute): vredsum.vs reduces each image row
- *      into element 0 of v12 in the corresponding hardware row.
- *    Pass 2 (horizontal store, vl=1): vse8 writes the 128 row sums to
- *      strided offsets row_sums_buf[r*COLS] = row_sum[r].
- *    Pass 3 (scalar C): the test wrapper sums those 128 strided values
- *      to produce the grid total. The vector portion delivered the 128:1
- *      reduction; finishing the last 128:1 in scalar code is two orders
- *      of magnitude smaller than the original 16384-element problem and
- *      avoids needing vertical-mode LSU. Counter tag = 7.
+ *  TEST 7 - Full grid scalar reduction, all-vector finalisation
+ *    Pass 1 (horizontal compute): vredsum.vs reduces each image row into
+ *      element 0 of v12 in the corresponding hardware row.
+ *      v12 layout: v12[0] of hw-row r = row_sum[r];
+ *                  v12[1..127] of hw-row r = vredsum tail (undefined).
+ *    Pass 2 (horizontal compute): mask-clean v12 so the garbage tail
+ *      doesn't poison the next reduction. vid.v + vmseq.vi builds
+ *      v0 = (i == 0), then vmerge.vvm with a zero source produces
+ *      v24 = [rs[r], 0, 0, ..., 0] in each hw-row. (We clear instead
+ *      of masking the next reduction so we don't have to reason about
+ *      v0 changing meaning when read in vertical mode - see R7.)
+ *    Pass 3 (vertical compute): vredsum.vs in vertical mode reduces v24
+ *      across hardware rows. Vertical lane 0 sees [rs0, rs1, ..., rs127]
+ *      (the meaningful column of v24, exposed by the vertical view's
+ *      transpose), so its reduction = grid total. Vertical lanes 1..127
+ *      see all-zero columns, so their reductions = 0.
+ *    Pass 4 (extract): vmv.x.s reads element 0 of vd back to the scalar
+ *      core. In the 2D fabric the natural origin is hw-row 0 element 0,
+ *      which holds vertical-lane-0's result, so this returns the grid
+ *      total directly. The kernel writes it as a 32-bit word to
+ *      *result so the C wrapper can printf it without re-loading any
+ *      strided byte buffer. Counter tag = 7.
  *
  *  TEST 8 - 3x3 separable box blur, single LSU round-trip
  *    Pure compute mode flip. v8 holds the image (one H load), then:
@@ -233,6 +245,49 @@
  *    Same vmseq.vi recipe, two different selectivity patterns - the
  *    test prints both outputs for visual confirmation. Counter tag = 10.
  *
+ * Open investigations (observed during a run, NOT settled hardware rules)
+ * -----------------------------------------------------------------------
+ *  P1. vredsum.vs apparently writes only hw-row 0's vd[0].
+ *      In TEST 6, after `vmv.v.i v12, 0; vredsum.vs v12, v8, v12`, only
+ *      grid_c[0][0] held a real row sum (-64); rows 1..7 stayed at 0
+ *      (the cleared default). TEST 7's vector-only grid total returned
+ *      -64 instead of the expected 0 (= grid total mod 256), and TEST 9
+ *      matvec produced a correct y[0]=28 with y[1..7]=0. The pattern is
+ *      consistent with "vredsum.vs is a single-scalar op and the 2D
+ *      fabric materialises only one of the 128 candidate results, that
+ *      of hw-row 0".
+ *      To investigate:
+ *        - confirm by reading t1/src/laneStage/MaskExchangeUnit.scala
+ *          (reduceResultOut is 1 scalar wire; check whether the fabric
+ *          fans out the result to all hw-rows' vd[0] or just one);
+ *        - try an explicit vmv.v.x broadcast of the scalar back into
+ *          v12 to see whether all hw-rows get populated.
+ *      To work around (not yet implemented in this file):
+ *        - per-row reduction: 7 steps of vslidedown.vi/.vx + vadd
+ *          within the register, leaving each hw-row's row sum in
+ *          element 0;
+ *        - grid total: 7 steps of vertical-mode vslidedown.vi/.vx +
+ *          vadd to collapse all hw-rows into hw-row 0, then a single
+ *          horizontal vredsum.vs gives the grid sum.
+ *      See fyp_doc/2d_fabric_handoff.md for the broader context.
+ *
+ *  P2. Mask v0 built under vertical mode behaves unexpectedly.
+ *      In TEST 10, the second pass (mask built and applied entirely in
+ *      vertical compute) produced an output identical to the input - no
+ *      pixels were boosted. The first pass (horizontal compute) produced
+ *      the expected column-stripe. The vertical mask seemingly evaluated
+ *      to all-zero from the vadd's perspective (or all-one with the .vt
+ *      polarity inverted - either way nothing got the +50). This is the
+ *      same family of issue R7 warns about, but the *exact* layout of
+ *      v0 in vertical view is what needs to be characterised before we
+ *      can build a working vertical-row-stripe mask.
+ *      To investigate:
+ *        - dump the v0 bytes after each construction step (vid.v ->
+ *          vand.vi -> vmseq.vi) using vse8 of v0 alongside;
+ *        - read t1/src/mask/MaskUnit.scala for how v0 is consumed under
+ *          verticalMode (look for `verticalMode` references in the mask
+ *          read path).
+ *
  * RESERVED tests (require vertical-mode LSU support; not yet implemented)
  * ----------------------------------------------------------------------
  *  R-TEST 7 - Full grid sum via H-reduce store + V-load + V-reduce.
@@ -241,6 +296,12 @@
  *              V-load + V-store of result.
  *  See the bottom of the file for the kernel sketches. They are
  *  retained as design notes for when the LSU gains a vertical mode.
+ *
+ * For incoming Claude Code sessions: read fyp_doc/2d_fabric_handoff.md
+ * BEFORE writing any new vector kernel. This is not stock RVV - many
+ * intuitions from textbook RVV programming (per-lane independence,
+ * predictable mask semantics, scalar-output reductions producing
+ * one scalar period) bend or break here.
  *****************************************************************************/
 
 #define ROWS  128
@@ -252,6 +313,21 @@
 int8_t grid_a[ROWS][COLS];
 int8_t grid_b[ROWS][COLS];
 int8_t grid_c[ROWS][COLS];
+
+// TEST 9 (matvec): pre-replicated input vector. Each row is a copy of the
+// same 128-element x[], so a horizontal vle8 puts x into every hardware row.
+__attribute__((aligned(128)))
+int8_t x_replicated[ROWS][COLS];
+
+// TEST 10 (mask demo): two-grid output buffer. First grid (rows 0..127) holds
+// the horizontal-mask result, second grid (rows 128..255) holds the
+// vertical-mask result.
+__attribute__((aligned(128)))
+int8_t mask_out[ROWS * 2][COLS];
+
+// TEST 7 (full grid sum): scalar landing slot for the kernel's vmv.x.s + sw.
+__attribute__((aligned(4)))
+int grid_total_word;
 
 /*--- init / debug helpers (scalar; volatile defeats auto-vectorisation) ---*/
 
@@ -495,6 +571,218 @@ void grid_row_sum(int8_t *a, int8_t *c, size_t cols, uintptr_t perf_reg) {
     );
 }
 
+/*
+ * TEST 7 kernel: full grid scalar reduction via interleaved H + V vredsum.
+ *
+ *   a0 = grid_a base, a1 = pointer to int32_t result_word,
+ *   a2 = COLS (= vl), a3 = PERF_REG_ADDR.
+ *
+ *   Phase 1 (H): per-row vredsum, row sums in v12[0] of each hw-row.
+ *   Phase 2 (H): mask + vmerge clean v12 to [rs[r], 0, 0, ..., 0]
+ *                so the vertical-lanes 1..127 see all-zero columns.
+ *   Phase 3 (V): cross-row vredsum on the cleaned register; vertical
+ *                lane 0 reduces the 128 row sums into the grid total.
+ *   Phase 4   : vmv.x.s extracts element 0 (= grid total) to a scalar
+ *                register; sw writes it to *result_word.
+ */
+__attribute__((naked, noinline))
+void grid_full_sum(int8_t *a, int *result_word, size_t cols,
+                   uintptr_t perf_reg) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"  // start in horizontal mode
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"
+
+        "li      t0, 7                      \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"  // counter START tag=7
+
+        // Phase 1: per-row reduction (horizontal compute)
+        "vmv.v.i v12, 0                     \n\t"
+        "vredsum.vs v12, v8, v12            \n\t"  // v12[0] in hw-row r = rs[r]
+
+        // Phase 2: clean v12 - keep element 0, zero elements 1..127.
+        // Mask construction must happen in horizontal compute mode so the
+        // bit pattern (bit 0 set, rest clear) corresponds to "element 0
+        // only" in the same view we're using for vmerge below.
+        "vid.v   v16                        \n\t"
+        "vmseq.vi v0, v16, 0                \n\t"  // v0[i] = (i == 0)
+        "vmv.v.i v20, 0                     \n\t"
+        "vmerge.vvm v24, v20, v12, v0       \n\t"  // v24[0]=rs[r], v24[1..]=0
+
+        // Phase 3: cross-row reduction (vertical compute)
+        "li      t3, 1                      \n\t"
+        "csrw    0x7c0, t3                  \n\t"
+        "vmv.v.i v28, 0                     \n\t"
+        "vredsum.vs v28, v24, v28           \n\t"  // vert-lane-0 -> grid total
+        "csrw    0x7c0, zero                \n\t"  // back to horizontal
+
+        "sw      t1, 0(a3)                  \n\t"  // counter STOP
+
+        // Phase 4: extract scalar back to scalar core
+        "vmv.x.s a4, v28                    \n\t"  // a4 = element 0 of v28
+        "sw      a4, 0(a1)                  \n\t"  // *result_word = grid total
+        "ret                                \n\t"
+    );
+}
+
+/*
+ * TEST 8 kernel: 3x3 separable box blur, single horizontal LSU round-trip.
+ *
+ *   a0 = input image, a1 = output image, a2 = COLS, a3 = PERF_REG_ADDR.
+ *
+ *   v8  = image (loaded once, horizontal LSU)
+ *   v12 = a_right (h slide)            -> a[r][c+1]
+ *   v16 = a_left  (h slide)            -> a[r][c-1]
+ *   v20 = a_left + a + a_right         -> 3-tap horizontal sum h_sum
+ *   csrw 0x7c0, 1                      -> compute mode flips to vertical
+ *   v8  = above-h_sum (v slide)        -> h_sum[r-1][c]   (reused)
+ *   v12 = below-h_sum (v slide)        -> h_sum[r+1][c]   (reused)
+ *   v16 = h_sum + above + below        -> full 3x3 box sum
+ *   v16 = v16 >> 3                     -> /8 (close enough to /9)
+ *   csrw 0x7c0, 0                      -> back to horizontal
+ *   vse8 v16                           -> output image
+ *
+ *   Boundary pixels see 0 from the slide fill on each side, so a 1-pixel
+ *   border of darker values is expected on the output.
+ */
+__attribute__((naked, noinline))
+void grid_blur3x3(int8_t *a, int8_t *c, size_t cols, uintptr_t perf_reg) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8, (a0)                   \n\t"
+
+        "li      t0, 8                      \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"  // counter START tag=8
+
+        // Horizontal compute: 1x3 horizontal sum
+        "vmv.v.i v12, 0                     \n\t"
+        "vmv.v.i v16, 0                     \n\t"
+        "vslidedown.vi v12, v8, 1           \n\t"  // c+1: right
+        "vslideup.vi   v16, v8, 1           \n\t"  // c-1: left
+        "vadd.vv v20, v8,  v12              \n\t"
+        "vadd.vv v20, v20, v16              \n\t"  // v20 = a_left + a + a_right
+
+        // Vertical compute: 1x3 vertical sum on v20 (h_sum)
+        "li      t3, 1                      \n\t"
+        "csrw    0x7c0, t3                  \n\t"
+        "vmv.v.i v8,  0                     \n\t"
+        "vmv.v.i v12, 0                     \n\t"
+        "vslidedown.vi v8,  v20, 1          \n\t"  // r+1: below in image
+        "vslideup.vi   v12, v20, 1          \n\t"  // r-1: above in image
+        "vadd.vv v16, v20, v8               \n\t"
+        "vadd.vv v16, v16, v12              \n\t"  // v16 = box-3x3 sum
+        "vsra.vi v16, v16, 3                \n\t"  // /8
+        "csrw    0x7c0, zero                \n\t"
+
+        "sw      t1, 0(a3)                  \n\t"  // counter STOP
+        "vse8.v  v16, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/*
+ * TEST 9 kernel: matrix-vector multiply y = A * x.
+ *   A is 128x128 in grid_a, x must be pre-replicated to x_replicated[r][:]
+ *   = x[:] for every r so that a horizontal vle8 puts x into every hw-row.
+ *
+ *   a0 = A base, a1 = X_REPL base, a2 = result_strided base
+ *        (result[r*COLS] = y[r]),
+ *   a3 = COLS, a4 = PERF_REG_ADDR.
+ *
+ *   Pure horizontal mode - no CSR flip needed because the result lands
+ *   strided in a way that horizontal-mode vse8(vl=1) writes correctly.
+ *
+ *   Note: i8*i8 may saturate. For full precision use vwmul.vv (i8 -> i16)
+ *   and vwredsum.vs (i16 -> i32); skipped here for kernel brevity.
+ */
+__attribute__((naked, noinline))
+void grid_matvec(int8_t *A, int8_t *X_REPL, int8_t *result_strided,
+                 size_t cols, uintptr_t perf_reg) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"  // A[r][:] in hw-row r
+        "vle8.v  v12, (a1)                  \n\t"  // x[:] in every hw-row
+
+        "li      t0, 9                      \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a4)                  \n\t"  // counter START tag=9
+
+        "vmul.vv v16, v8, v12               \n\t"  // i8*i8 -> i8 (may saturate)
+        "vmv.v.i v20, 0                     \n\t"
+        "vredsum.vs v20, v16, v20           \n\t"  // y[r] in v20[0] of hw-row r
+
+        "sw      t1, 0(a4)                  \n\t"  // counter STOP
+
+        "li      t2, 1                      \n\t"
+        "vsetvli zero, t2, e8, m1, ta, ma   \n\t"
+        "vse8.v  v20, (a2)                  \n\t"  // result[r*COLS] = y[r]
+        "ret                                \n\t"
+    );
+}
+
+/*
+ * TEST 10 kernel: mode-aware mask demo - same recipe, two patterns.
+ *
+ *   We build v0 with the SAME instructions under each mode and apply it
+ *   to the same vector add, but the resulting masked stripe runs in
+ *   different directions: horizontal-built mask -> column stripes;
+ *   vertical-built mask -> row stripes. R7 in the header explains why.
+ *
+ *   a0 = grid_a, a1 = output buffer, a2 = COLS,
+ *   a3 = PERF_REG_ADDR. Two writes to the output:
+ *       *(a1 + 0)             -> horizontal-mask result (column stripe)
+ *       *(a1 + ROWS*COLS)     -> vertical-mask  result (row stripe)
+ *
+ *   The "selectivity" is "even element index". In horizontal-compute view
+ *   element index = image-column index, so even columns get the increment.
+ *   In vertical-compute view element index = image-row index, so even
+ *   rows get the increment instead.
+ */
+__attribute__((naked, noinline))
+void grid_mask_modes(int8_t *a, int8_t *out, size_t cols,
+                     uintptr_t perf_reg) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"
+
+        "li      t0, 10                     \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"  // counter START tag=10
+
+        // ---- Horizontal compute pass: mask = even element indices ----
+        "vid.v   v12                        \n\t"
+        "vand.vi v12, v12, 1                \n\t"  // 0/1 toggle
+        "vmseq.vi v0, v12, 0                \n\t"  // mask: i % 2 == 0
+        "vmv.v.v v16, v8                    \n\t"  // copy image to output reg
+        "li      t4, 50                     \n\t"
+        "vadd.vx v16, v16, t4, v0.t         \n\t"  // +50 only on masked
+        "vse8.v  v16, (a1)                  \n\t"  // first output buffer
+
+        // ---- Vertical compute pass: same mask recipe -> different effect
+        "li      t3, 1                      \n\t"
+        "csrw    0x7c0, t3                  \n\t"
+        "vid.v   v12                        \n\t"  // same recipe under V mode
+        "vand.vi v12, v12, 1                \n\t"
+        "vmseq.vi v0, v12, 0                \n\t"
+        "vmv.v.v v16, v8                    \n\t"
+        "vadd.vx v16, v16, t4, v0.t         \n\t"  // V-mode masked vadd
+        "csrw    0x7c0, zero                \n\t"  // store under horizontal LSU
+
+        "sw      t1, 0(a3)                  \n\t"  // counter STOP
+
+        // Second output is one full grid above the first
+        "li      t5, 16384                  \n\t"  // ROWS * COLS = 128*128
+        "add     t6, a1, t5                 \n\t"
+        "vse8.v  v16, (t6)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
 /*--- test wrappers ---*/
 
 __attribute__((noinline))
@@ -563,6 +851,112 @@ static void test6_row_sum(void) {
 }
 
 __attribute__((noinline))
+static void test7_full_sum(void) {
+    printf("\n=== TEST 7: full-grid sum, H+V vredsum (counter tag=7) ===\n");
+    grid_total_word = 0;
+    grid_full_sum(&grid_a[0][0], &grid_total_word,
+                  (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    // i8 overflow is expected to wrap each per-row sum and the final
+    // sum independently; this is the value the hardware actually
+    // produces given the i8 datapath. Print as int8 to make it match
+    // the 8-bit datapath; also print as int32 to see the raw extracted
+    // word.
+    int total_word = grid_total_word;
+    int8_t total_i8 = (int8_t)(total_word & 0xff);
+    printf("[TEST 7] grid total (i8 wrap)  = %d\n", (int)total_i8);
+    printf("[TEST 7] grid total (raw word) = %d (0x%x)\n",
+           total_word, total_word);
+
+    // Independent scalar reference: sum every cell of grid_a as i32 and
+    // also as i8-wrapping accumulation; compare against the vector
+    // result so the test can self-check.
+    int ref_i32 = 0;
+    int8_t ref_i8 = 0;
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            ref_i32 += grid_a[r][c];
+            ref_i8  = (int8_t)(ref_i8 + grid_a[r][c]);
+        }
+    }
+    printf("[TEST 7] reference (i32) = %d, reference (i8 wrap) = %d\n",
+           ref_i32, (int)ref_i8);
+    if (total_i8 == ref_i8) {
+        printf("[TEST 7] PASS: vector i8 total matches scalar i8 reference\n");
+    } else {
+        printf("[TEST 7] CHECK: vector i8 (%d) vs scalar i8 (%d)\n",
+               (int)total_i8, (int)ref_i8);
+    }
+}
+
+__attribute__((noinline))
+static void test8_blur3x3(void) {
+    printf("\n=== TEST 8: 3x3 box blur, H+V slides (counter tag=8) ===\n");
+    clear_grid_c();
+    grid_blur3x3(&grid_a[0][0], &grid_c[0][0],
+                 (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    printf("[TEST 8] grid_c first 4 rows of blurred image:\n");
+    print_grid(4, &grid_c[0][0]);
+}
+
+__attribute__((noinline))
+static void replicate_x(const int8_t *x) {
+    volatile int8_t *p = (volatile int8_t *)&x_replicated[0][0];
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            p[r * COLS + c] = x[c];
+        }
+    }
+}
+
+__attribute__((noinline))
+static void test9_matvec(void) {
+    printf("\n=== TEST 9: matrix-vector multiply (counter tag=9) ===\n");
+    // Use a unit-ish vector to keep the i8 product in range. Sum of
+    // A[r][k] * x[k] for k=0..7 only (rest of x is 0). With grid_a[r][c]
+    // = (r+c)&127, expected y[r] = sum_{k=0..7} (r+k)&127 = small.
+    int8_t x[COLS];
+    volatile int8_t *p = (volatile int8_t *)x;
+    for (int i = 0; i < COLS; i++) p[i] = (i < 8) ? 1 : 0;
+    replicate_x(x);
+    clear_grid_c();
+    grid_matvec(&grid_a[0][0], &x_replicated[0][0], &grid_c[0][0],
+                (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    printf("[TEST 9] y[r] (= grid_c[r][0]) for r=0..7:\n");
+    for (int r = 0; r < 8; r++) {
+        // expected y[r] = sum over k=0..7 of (r+k)&127
+        int exp = 0;
+        for (int k = 0; k < 8; k++) exp += ((r + k) & (COLS - 1));
+        printf("  y[%d] = %d (expected i32 = %d, i8 wrap = %d)\n",
+               r, grid_c[r][0], exp, (int)(int8_t)exp);
+    }
+}
+
+__attribute__((noinline))
+static void test10_mask_modes(void) {
+    printf("\n=== TEST 10: mode-aware mask demo (counter tag=10) ===\n");
+    // Zero the dual output buffer before the kernel writes both halves.
+    volatile int8_t *po = (volatile int8_t *)&mask_out[0][0];
+    for (int r = 0; r < ROWS * 2; r++) {
+        for (int c = 0; c < COLS; c++) {
+            po[r * COLS + c] = 0;
+        }
+    }
+    grid_mask_modes(&grid_a[0][0], &mask_out[0][0],
+                    (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+
+    // First half: built under horizontal compute -> mask selects every
+    // other COLUMN. Print 3 rows: even columns should be image+50, odd
+    // columns should be image (unchanged).
+    printf("[TEST 10] horizontal mask (column-stripe), first 3 rows:\n");
+    print_grid(3, &mask_out[0][0]);
+    // Second half: built under vertical compute -> mask selects every
+    // other ROW. Print 4 rows so the row alternation is visible: rows
+    // 0/2 should be image+50, rows 1/3 should be image.
+    printf("[TEST 10] vertical mask (row-stripe), first 4 rows:\n");
+    print_grid(4, &mask_out[ROWS][0]);
+}
+
+__attribute__((noinline))
 static void check_vadd_result(void) {
     int errors = 0;
     int first_bad_r = -1, first_bad_c = -1;
@@ -609,6 +1003,10 @@ void test(void) {
     test4_blur_horiz();
     test5_blur_vert();
     test6_row_sum();
+    test7_full_sum();
+    test8_blur3x3();
+    test9_matvec();
+    test10_mask_modes();
 
     printf("\n=== benchmark_vadd done ===\n");
 }

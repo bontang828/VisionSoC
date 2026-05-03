@@ -25,8 +25,8 @@ int8_t grid_out[ROWS][COLS];
 int8_t indices_grid[ROWS][COLS];
 
 // volatile pointer casts force the compiler to emit scalar byte stores;
-// any auto-vectorisation here triggers the time-multiplex fanout and burns
-// the whole cycle budget before the kernel runs.
+// any auto-vectorisation here triggered by compiler optimisations can cause the test to fail 
+// as vector hardware does not support the way the compiler is intending to use it for generating the inital grid. 
 __attribute__((noinline))
 static void init_grid(void) {
     volatile int8_t *p_in  = (volatile int8_t *)&grid_in[0][0];

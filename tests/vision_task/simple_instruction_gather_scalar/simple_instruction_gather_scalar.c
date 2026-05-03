@@ -63,6 +63,29 @@ static void print_grid(int n, int8_t *grid) {
     if (n < ROWS) printf("...\n");
 }
 
+/* Closed-form expected value for cell (r,c) under (vert, masked).
+ * Diagonal cells r==c get vs2[rs1] of that hw-row (H) or vert-lane (V);
+ * for symmetric grid_in those coincide. Off-diagonal masked cells keep
+ * the vmv.v.v baseline = grid_in[r][c]. Unmasked cells get vs2[rs1]. */
+static inline int8_t expected(int r, int c, int vert, int masked) {
+    if (masked && r != c)
+        return (int8_t)((r + c) & (COLS - 1));            /* baseline grid_in[r][c] */
+    if (vert)
+        return (int8_t)((RS1 + c) & (COLS - 1));          /* grid_in[rs1][c] */
+    return (int8_t)((r + RS1) & (COLS - 1));              /* grid_in[r][rs1] */
+}
+
+static void print_expected(int n, int vert, int masked) {
+    printf("Expected first %d rows:\n", n);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < COLS; j++) {
+            printf("%d ", expected(i, j, vert, masked));
+        }
+        printf("\n");
+    }
+    if (n < ROWS) printf("...\n");
+}
+
 /* Unmasked vrgather.vx
  * args: src, dst, vl, vert
  *       a0   a1   a2  a3
@@ -109,16 +132,14 @@ void k_vrgather_vx_mask(int8_t *src, int8_t *diag, int8_t *dst, size_t vl, int v
 static const char *mode_str(int vert) { return vert ? "V" : "H"; }
 
 __attribute__((noinline))
-static void check_unmasked(int vert) {
+static void check(int vert, int masked) {
     int errors = 0;
     int br = -1, bc = -1;
     int8_t bgot = 0, bexp = 0;
     for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c < COLS; c++) {
             int8_t got = grid_out[r][c];
-            int8_t exp = vert
-                ? (int8_t)((RS1 + c) & (COLS - 1))   /* V: grid_in[rs1][c] = (rs1+c)&127 */
-                : (int8_t)((r + RS1) & (COLS - 1));  /* H: grid_in[r][rs1] = (r+rs1)&127 */
+            int8_t exp = expected(r, c, vert, masked);
             if (got != exp) {
                 if (errors == 0) {
                     br = r; bc = c; bgot = got; bexp = exp;
@@ -127,48 +148,13 @@ static void check_unmasked(int vert) {
             }
         }
     }
+    const char *kind = masked ? "masked" : "unmasked";
     if (errors == 0) {
-        printf("[CHECK] PASS vrgather.vx (%s) unmasked: grid_out[r][c] == %s\n",
-               mode_str(vert),
-               vert ? "grid_in[5][c] = (5+c)&127" : "grid_in[r][5] = (r+5)&127");
+        printf("[CHECK] PASS vrgather.vx (%s) %s\n", mode_str(vert), kind);
     } else {
-        printf("[CHECK] FAIL vrgather.vx (%s) unmasked: %d / %d errors; "
+        printf("[CHECK] FAIL vrgather.vx (%s) %s: %d / %d errors; "
                "first at [%d][%d] got %d exp %d\n",
-               mode_str(vert), errors, ROWS * COLS, br, bc, bgot, bexp);
-    }
-}
-
-__attribute__((noinline))
-static void check_masked(int vert) {
-    int errors = 0;
-    int br = -1, bc = -1;
-    int8_t bgot = 0, bexp = 0;
-    for (int r = 0; r < ROWS; r++) {
-        for (int c = 0; c < COLS; c++) {
-            int8_t got = grid_out[r][c];
-            /* Diagonal cell r==c gets vs2[rs1] of that hw-row (H) or vert-lane (V).
-             * H: grid_in[r][rs1] = (r+rs1)&127.
-             * V: grid_in[rs1][c] = (rs1+c)&127.
-             * For r==c these are equal because grid_in is symmetric.
-             * Off-diagonal cells keep the vmv.v.v baseline = grid_in[r][c]. */
-            int8_t exp = (r == c)
-                ? (int8_t)((r + RS1) & (COLS - 1))
-                : (int8_t)((r + c)   & (COLS - 1));
-            if (got != exp) {
-                if (errors == 0) {
-                    br = r; bc = c; bgot = got; bexp = exp;
-                }
-                errors++;
-            }
-        }
-    }
-    if (errors == 0) {
-        printf("[CHECK] PASS vrgather.vx (%s) masked: diag = grid_in[r][5], "
-               "off-diag = grid_in[r][c]\n", mode_str(vert));
-    } else {
-        printf("[CHECK] FAIL vrgather.vx (%s) masked: %d / %d errors; "
-               "first at [%d][%d] got %d exp %d\n",
-               mode_str(vert), errors, ROWS * COLS, br, bc, bgot, bexp);
+               mode_str(vert), kind, errors, ROWS * COLS, br, bc, bgot, bexp);
     }
 }
 
@@ -182,26 +168,30 @@ void test(void) {
     printf("\n--- TEST 1: vrgather.vx (H, unmasked) ---\n");
     clear_grid_out();
     k_vrgather_vx(&grid_in[0][0], &grid_out[0][0], COLS, /*vert=*/0);
-    print_grid(2, &grid_out[0][0]);
-    check_unmasked(0);
+    print_grid(4, &grid_out[0][0]);
+    print_expected(4, /*vert=*/0, /*masked=*/0);
+    check(/*vert=*/0, /*masked=*/0);
 
     printf("\n--- TEST 2: vrgather.vx (V, unmasked) ---\n");
     clear_grid_out();
     k_vrgather_vx(&grid_in[0][0], &grid_out[0][0], COLS, /*vert=*/1);
-    print_grid(2, &grid_out[0][0]);
-    check_unmasked(1);
+    print_grid(4, &grid_out[0][0]);
+    print_expected(4, /*vert=*/1, /*masked=*/0);
+    check(/*vert=*/1, /*masked=*/0);
 
     printf("\n--- TEST 3: vrgather.vx (H, diag mask) ---\n");
     clear_grid_out();
     k_vrgather_vx_mask(&grid_in[0][0], &diag_buf[0][0], &grid_out[0][0], COLS, /*vert=*/0);
-    print_grid(2, &grid_out[0][0]);
-    check_masked(0);
+    print_grid(4, &grid_out[0][0]);
+    print_expected(4, /*vert=*/0, /*masked=*/1);
+    check(/*vert=*/0, /*masked=*/1);
 
     printf("\n--- TEST 4: vrgather.vx (V, diag mask) ---\n");
     clear_grid_out();
     k_vrgather_vx_mask(&grid_in[0][0], &diag_buf[0][0], &grid_out[0][0], COLS, /*vert=*/1);
-    print_grid(2, &grid_out[0][0]);
-    check_masked(1);
+    print_grid(4, &grid_out[0][0]);
+    print_expected(4, /*vert=*/1, /*masked=*/1);
+    check(/*vert=*/1, /*masked=*/1);
 
     printf("\n=== vrgather.vx test done ===\n");
 }

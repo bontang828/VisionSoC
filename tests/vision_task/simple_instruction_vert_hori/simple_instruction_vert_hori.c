@@ -17,13 +17,20 @@ int8_t grid_hori[ROWS][COLS];
 int8_t grid_hori2[ROWS][COLS];
 
 
+__attribute__((noinline))
 static void init_grid(void) {
+    volatile int8_t *p_in    = (volatile int8_t *)&grid_in[0][0];
+    volatile int8_t *p_vert  = (volatile int8_t *)&grid_vert[0][0];
+    volatile int8_t *p_hori  = (volatile int8_t *)&grid_hori[0][0];
+    volatile int8_t *p_hori2 = (volatile int8_t *)&grid_hori2[0][0];
+
     for (int i = 0; i < ROWS; i++) {
         for (int j = 0; j < COLS; j++) {
-            grid_in[i][j]  = (int8_t)5;
-            grid_vert[i][j] = 0;
-            grid_hori[i][j] = 0;
-            grid_hori2[i][j] = 0;
+            int idx = i * COLS + j;
+            p_in[idx]    = (int8_t)(j + 1);
+            p_vert[idx]  = 0;
+            p_hori[idx]  = 0;
+            p_hori2[idx] = 0;
         }
     }
 }
@@ -54,6 +61,28 @@ void print_grid(int num_row_to_print, int8_t *grid) {
 //         "ret\n\t"
 //     );
 // }
+__attribute__((noinline))
+void csr_vert_set_grid_shift(int enable, int8_t *src, int8_t *dst, size_t n) {
+    if (!enable) {
+        printf("=== Running horizontal-mode shift ===\n");
+    } else {
+        printf("=== Running vertical-mode shift ===\n");
+    }
+
+    unsigned long v = (unsigned long)enable;
+
+    __asm__ volatile(
+        "csrw   0x7c0, %0\n\t"
+        "vsetvli zero, %3, e8, m4, ta, ma\n\t"
+        "vle8.v  v8,  (%1)\n\t"
+        "vslideup.vi v12, v8, 1\n\t"
+        "vse8.v  v12, (%2)\n\t"
+        :
+        : "r"(v), "r"(src), "r"(dst), "r"(n)
+        : "memory"
+    );
+}
+
 
 __attribute__((naked, noinline))
 void grid_shift(int8_t *src, int8_t *dst,  size_t n) {
@@ -114,16 +143,19 @@ void test(void) {
     
 
     printf("=== Running horizontal-mode shift ===\n");
-    set_vertical_mode(0);
-    grid_shift(&grid_in[0][0], &grid_hori[0][0], COLS);
+    // set_vertical_mode(0);
+    // grid_shift(&grid_in[0][0], &grid_hori[0][0], COLS);
+    csr_vert_set_grid_shift(1, &grid_in[0][0], &grid_hori[0][0], COLS);
 
     printf("=== Running vertical-mode shift ===\n");
-    set_vertical_mode(1);
-    grid_shift(&grid_in[0][0], &grid_vert[0][0], COLS);
+    // set_vertical_mode(1);
+    // grid_shift(&grid_in[0][0], &grid_vert[0][0], COLS);
+    csr_vert_set_grid_shift(1, &grid_in[0][0], &grid_vert[0][0], COLS);
 
     printf("=== Running horizontal-mode shift ===\n");
-    set_vertical_mode(0);
-    grid_shift(&grid_in[0][0], &grid_hori2[0][0], COLS);
+    // set_vertical_mode(0);
+    // grid_shift(&grid_in[0][0], &grid_hori2[0][0], COLS);
+    csr_vert_set_grid_shift(1, &grid_in[0][0], &grid_hori2[0][0], COLS);
 
 
 
