@@ -306,6 +306,24 @@ if [ -f "$OUTPUT_DIR/sim_result.json" ]; then
     if grep -q '"success": true' "$OUTPUT_DIR/sim_result.json"; then
         printf '\033[32m[== SUCCESS ==]\033[0m SIMULATION PASSED\n'
 
+        #Render the benchmark cycle bar chart for benchmark_* tests.
+        #plot_bench_cycles.py parses [PERF] counter pairs from run.log;
+        #non-benchmark tests don't emit those, so we skip them.
+        case "$TEST_CASE" in
+            *benchmark_*)
+                if [ -x "$VISIONSOC_DIR/plot_bench_cycles.py" ] || \
+                   [ -f "$VISIONSOC_DIR/plot_bench_cycles.py" ]; then
+                    echo ""
+                    echo "=== Plotting benchmark cycles ==="
+                    python3 "$VISIONSOC_DIR/plot_bench_cycles.py" \
+                        --log "$RUN_LOG" \
+                        --out "$OUTPUT_DIR/bench_cycles.png" \
+                        --title "$TEST_BASE_NAME ($CONFIG)" \
+                        || echo "warning: bench plot failed (continuing)"
+                fi
+                ;;
+        esac
+
         #Run offline checker if --check flag is provided
         if [ "$RUN_CHECK" = true ]; then
             echo ""
