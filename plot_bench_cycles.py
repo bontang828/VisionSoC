@@ -16,12 +16,10 @@ The PNG is saved next to the run.log by default
 (run.log/../bench_cycles.png).
 
 Counter-tag layout produced by tests/vision_task/benchmark_instructions:
-    1..12   H-mode compute (vadd, vmul, vrgather.vx, vrgather.vx mask,
-            vrgather.vv, vmv.s.x, vmv.v.v, vredsum.vs, vslideup.vx 1,
-            vslideup.vx 100, vslidedown.vx 1, vslidedown.vx 100)
-   13..16   H-mode LSU (vle.full, vle.masked, vse.full, vse.masked)
-   17..28   V-mode compute (same order as 1..12)
-   29..32   V-mode LSU (same order as 13..16)
+    1..24   H-mode compute
+   25..30   H-mode LSU
+   31..54   V-mode compute
+   55..60   V-mode LSU
 Tags outside this range are still parsed and shown as "tag <N>" with
 mode "?", so older benchmarks (e.g. benchmark_vadd) still produce a chart.
 """
@@ -47,14 +45,24 @@ TEST_OUTPUT_ROOT = REPO_ROOT / "test_output"
 INSTRUCTION_ORDER = [
     "vadd.vv",
     "vmul.vv",
+    "vmacc.vv",
+    "vmadd.vv",
     "vand.vv",
     "vor.vv",
+    "vsll.vi",
+    "vsra.vi",
+    "vmseq.vv",
+    "vmsle.vv",
+    "vmsgt.vx",
+    "vmslt.vv",
+    "vmand.mm",
     "vrgather.vx",
     "vrgather.vx (diag mask)",
     "vrgather.vv",
     "vmv.s.x",
     "vmv.v.v",
     "vredsum.vs",
+    "vredmax.vs",
     "vslideup.vx 1",
     "vslideup.vx 100",
     "vslidedown.vx 1",
@@ -63,6 +71,8 @@ INSTRUCTION_ORDER = [
     "vle8.v masked",
     "vse8.v full",
     "vse8.v masked",
+    "vlse8.v stride2",
+    "vsse8.v stride2",
 ]
 
 N_PER_MODE = len(INSTRUCTION_ORDER)
