@@ -21,6 +21,11 @@ const char *proc_disassemble(spike_processor_t *proc);
 void proc_reset(spike_processor_t *proc);
 spike_processor_t *spike_get_proc(spike_t *spike);
 spike_state_t *proc_get_state(spike_processor_t *proc);
+// Register a plain read/write CSR (basic_csr_t) at `addr` with `init` value.
+// Used to make custom T1 CSRs (e.g. 0x7c0 verticalMode) writable from the
+// scalar core simulated by spike without raising trap_illegal_instruction.
+void proc_register_basic_csr(spike_processor_t *proc, uint32_t addr,
+                             uint64_t init);
 
 uint64_t proc_func(spike_processor_t *proc);
 uint64_t proc_get_insn(spike_processor_t *proc);

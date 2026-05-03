@@ -264,6 +264,12 @@ unsafe extern "C" fn t1_cosim_watchdog() -> u8 {
   TARGET.with(|driver| driver.watchdog())
 }
 
+#[unsafe(no_mangle)]
+unsafe extern "C" fn t1_cosim_get_vertical_mode(dst: *mut SvBitVecVal) {
+  let value = TARGET.with(|driver| if driver.get_vertical_mode() { 1u32 } else { 0u32 });
+  *(dst as *mut u32) = value;
+}
+
 /// evaluate at instruction queue is not empty
 /// arg issue will be type cast from a struct to svBitVecVal*(uint32_t*)
 #[unsafe(no_mangle)]

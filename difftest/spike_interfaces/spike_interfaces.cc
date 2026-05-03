@@ -61,6 +61,13 @@ spike_processor_t *spike_get_proc(spike_t *spike) {
   return new spike_processor_t{spike->s->get_proc()};
 }
 
+void proc_register_basic_csr(spike_processor_t *proc, uint32_t addr,
+                             uint64_t init) {
+  auto *p = proc->p;
+  p->get_state()->csrmap[addr] =
+      std::make_shared<basic_csr_t>(p, addr, init);
+}
+
 void proc_reset(spike_processor_t *proc) { proc->p->reset(); }
 
 spike_state_t *proc_get_state(spike_processor_t *proc) {

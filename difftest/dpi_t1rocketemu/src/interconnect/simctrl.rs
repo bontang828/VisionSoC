@@ -79,6 +79,9 @@ impl RegDevice for SimCtrl {
       }
       0x10 => {
         self.append_event("uart-write", value);
+        use std::io::Write;
+        print!("{}", value as u8 as char);
+        std::io::stdout().flush().unwrap_or(());
       }
       0x14 => {
         self.append_event("profile", value);

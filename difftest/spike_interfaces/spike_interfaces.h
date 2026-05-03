@@ -2,6 +2,7 @@
 #define __SPIKE_INTERFCES_H__
 
 #include "cfg.h"
+#include "csrs.h"
 #include "decode_macros.h"
 #include "disasm.h"
 #include "mmu.h"

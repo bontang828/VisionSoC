@@ -12,6 +12,8 @@ use crate::dpi::*;
 use crate::get_t;
 use svdpi::SvScope;
 
+const VERTICAL_MODE_CSR: u32 = 0x7c0;
+
 struct ShadowMem {
   mem: Vec<u8>,
 }
@@ -156,6 +158,7 @@ pub(crate) struct Driver {
 
   shadow_mem: ShadowMem,
   mirror_rtl_writes: bool,
+  vertical_mode: bool,
 }
 
 impl Driver {
@@ -194,11 +197,42 @@ impl Driver {
       vector_lsu_count: 0,
       shadow_mem: ShadowMem::new(),
       mirror_rtl_writes: std::env::var_os("T1_MIRROR_RTL_WRITES").is_some(),
+      vertical_mode: false,
     };
     self_.spike_runner.load_elf(elf_file).unwrap();
 
     load_elf_to_buffer(&mut self_.shadow_mem.mem, elf_file).unwrap();
     self_
+  }
+
+  fn update_vertical_mode_from_csr(&mut self, se: &SpikeEvent) {
+    if se.opcode() != 0b1110011 || se.csr() != VERTICAL_MODE_CSR {
+      return;
+    }
+
+    let funct3 = (se.inst_bits >> 12) & 0x7;
+    let rs1 = se.rs1;
+    let rs1_bits = se.rs1_bits;
+    let zimm = (se.inst_bits >> 15) & 0x1f;
+    let old = if self.vertical_mode { 1u32 } else { 0u32 };
+
+    let new_val = match funct3 {
+      0b001 => Some(rs1_bits),
+      0b010 => if rs1 == 0 { None } else { Some(old | rs1_bits) },
+      0b011 => if rs1 == 0 { None } else { Some(old & !rs1_bits) },
+      0b101 => Some(zimm),
+      0b110 => if zimm == 0 { None } else { Some(old | zimm) },
+      0b111 => if zimm == 0 { None } else { Some(old & !zimm) },
+      _ => None,
+    };
+
+    if let Some(val) = new_val {
+      self.vertical_mode = (val & 1) != 0;
+    }
+  }
+
+  pub(crate) fn get_vertical_mode(&self) -> bool {
+    self.vertical_mode
   }
 
   pub(crate) fn axi_read_high_bandwidth(&mut self, addr: u32, arsize: u64) -> AxiReadPayload {
@@ -299,6 +333,7 @@ impl Driver {
       // step until the instruction is a vector / exit / scalar load / scalar store
       // push into the commit queue and return
       let se = self.spike_runner.spike_step();
+      self.update_vertical_mode_from_csr(&se);
       if se.is_v() || se.is_vfence() || se.is_load() || se.is_store() {
         self.spike_runner.commit_queue.push_front(se.clone());
         return se;

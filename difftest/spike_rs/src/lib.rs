@@ -138,6 +138,10 @@ impl Processor {
     unsafe { proc_get_rd(self.processor) }
   }
 
+  pub fn register_basic_csr(&self, addr: u32, init: u64) {
+    unsafe { proc_register_basic_csr(self.processor, addr, init) }
+  }
+
   // vu
   pub fn vu_get_vtype(&self) -> u32 {
     unsafe { proc_vu_get_vtype(self.processor) as u32 }
@@ -266,6 +270,7 @@ unsafe extern "C" {
   fn proc_get_rs1(proc: *mut ()) -> u32;
   fn proc_get_rs2(proc: *mut ()) -> u32;
   fn proc_get_rd(proc: *mut ()) -> u32;
+  fn proc_register_basic_csr(proc: *mut (), addr: u32, init: u64);
 
   fn proc_vu_get_vtype(proc: *mut ()) -> u64;
   fn proc_vu_get_vxrm(proc: *mut ()) -> u32;

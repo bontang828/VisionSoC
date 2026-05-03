@@ -94,6 +94,11 @@ impl SpikeRunner {
     let proc = spike.get_proc();
     let state = proc.get_state();
     proc.reset();
+    // Register T1 custom CSR 0x7c0 (verticalMode). Without this, spike traps
+    // with illegal_instruction when the test program executes `csrw 0x7c0, ...`.
+    // basic_csr_t just stores the value; the consumer (driver in dpi_t1emu)
+    // decodes the inst bits + rs1 to mirror the new value to the DUT.
+    proc.register_basic_csr(0x7c0, 0);
     state.set_pc(entry_addr);
 
     SpikeRunner {
