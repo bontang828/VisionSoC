@@ -57,14 +57,22 @@ class GatherRequest0(parameter: LaneParameter) extends Bundle {
   val readIndex:    UInt = UInt(parameter.eLen.W)
 }
 
-class PipeForSecondPipe(datapathWidth: Int, groupNumberBits: Int, laneNumberBits: Int, eLen: Int) extends Bundle {
+class PipeForSecondPipe(datapathWidth: Int, groupNumberBits: Int, laneNumberBits: Int, eLen: Int,
+                        rowCounterBits: Int = 1) extends Bundle {
   val readOffset:   UInt = UInt(log2Ceil(datapathWidth / 8).W)
   val writeSink:    UInt = UInt(laneNumberBits.W)
   val writeCounter: UInt = UInt(groupNumberBits.W)
   val writeOffset:  UInt = UInt(log2Ceil(datapathWidth / 8).W)
+
+  /** Bon2D narrow-vertical fields carried from cross-lane FreeWriteBusRequest
+    * through stage0 -> stage1 -> stage3 so the destination lane's VRF read enq
+    * (LaneStage1.scala:200) can opt into the SharedVRF narrow path. */
+  val narrowVertical: Bool = Bool()
+  val rowOverride:    UInt = UInt(rowCounterBits.W)
 }
 
-class GatherRequest1(datapathWidth: Int, groupNumberBits: Int, laneNumberBits: Int, eLen: Int) extends Bundle {
+class GatherRequest1(datapathWidth: Int, groupNumberBits: Int, laneNumberBits: Int, eLen: Int,
+                     rowCounterBits: Int = 1) extends Bundle {
   val readSink:    UInt = UInt(laneNumberBits.W)
   val readCounter: UInt = UInt(groupNumberBits.W)
   val skipRead:    Bool = Bool()
@@ -74,6 +82,10 @@ class GatherRequest1(datapathWidth: Int, groupNumberBits: Int, laneNumberBits: I
   val writeCounter: UInt = UInt(groupNumberBits.W)
   val writeOffset:  UInt = UInt(log2Ceil(datapathWidth / 8).W)
   val mask:         UInt = UInt((datapathWidth / 8).W)
+
+  /** Byte-aligned logical row index for the destination's narrow-vertical
+    * VRF read. Computed from per-element vs1[e] with a SEW shift. */
+  val rowOverride:  UInt = UInt(rowCounterBits.W)
 }
 
 class reduceMaskRequest(datapathWidth: Int) extends Bundle {
@@ -210,7 +222,8 @@ class MaskExchangeUnit(parameter: LaneParameter) extends Module {
         new FreeWriteBusRequest(
           parameter.datapathWidth,
           parameter.groupNumberBits,
-          parameter.laneNumberBits
+          parameter.laneNumberBits,
+          parameter.rowCounterBits
         )
       )
     )
@@ -751,7 +764,11 @@ class MaskExchangeUnit(parameter: LaneParameter) extends Module {
     val elementValid: Bool = !unChange && !elementIndex(elementIndex.getWidth - 1) && baseValid
     val notNeedRead:  Bool = readOverlap || !elementValid || lagerThanVL || unChange
     val reallyGrowth: UInt = changeUIntSize(accessRegGrowth, 3)
-    Seq(dataOffset, accessLane, offset, reallyGrowth, notNeedRead, elementValid)
+    // readAllDataPosition (=readIndex<<sewInt) is the byte-aligned logical row
+    // index - the per-element vs1[e] expressed in bytes. Surfaced so the
+    // narrow-vertical cross-lane gather can drive it onto rowOverride for the
+    // destination's SharedVRF read.
+    Seq(dataOffset, accessLane, offset, reallyGrowth, notNeedRead, elementValid, readAllDataPosition)
   }
 
   val analysisReadAdd:  UInt = Mux(maskPipeIsSlid, slideRequestReg0.bits.readAddress, gatherRequestReg0.bits.readIndex)
@@ -767,6 +784,7 @@ class MaskExchangeUnit(parameter: LaneParameter) extends Module {
   val reallyGrowth = Mux1H(maskPipeMessageReg.sew1H, checkResult.map(_(3)))
   val notNeedRead  = Mux1H(maskPipeMessageReg.sew1H, checkResult.map(_(4)))
   val elementValid = Mux1H(maskPipeMessageReg.sew1H, checkResult.map(_(5)))(0)
+  val rowByteIdx   = Mux1H(maskPipeMessageReg.sew1H, checkResult.map(_(6)))
 
   val mask = Mux1H(maskPipeMessageReg.sew1H, Seq(1.U, 3.U, 15.U))
 
@@ -826,7 +844,8 @@ class MaskExchangeUnit(parameter: LaneParameter) extends Module {
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
 
@@ -837,7 +856,8 @@ class MaskExchangeUnit(parameter: LaneParameter) extends Module {
           parameter.datapathWidth,
           parameter.groupNumberBits,
           parameter.laneNumberBits,
-          parameter.eLen
+          parameter.eLen,
+          parameter.rowCounterBits
         )
       )
     )
@@ -869,6 +889,13 @@ class MaskExchangeUnit(parameter: LaneParameter) extends Module {
   gatherRequest1.readCounter := reallyGrowth ## offset
   gatherRequest1.readOffset  := dataOffset
   gatherRequest1.skipRead    := notNeedRead
+  // Bon2D Phase 3c: rowOverride is the byte position within the destination's
+  // wide-fold window (= dataOffset, the same value the wide path uses for its
+  // post-read shift). SharedVRF combines this with rcBase computed from the
+  // destination's vs/offset/laneIdx to land on the right SRAM bank+addr,
+  // selecting the byte at word-byte 0 (cByte_n=0 in Phase 3c). dataOffset is
+  // cByteBits wide (one byte within the wide-fold's 8-byte gathered word).
+  gatherRequest1.rowOverride := dataOffset.pad(parameter.rowCounterBits)(parameter.rowCounterBits - 1, 0)
 
   // vrgather.vv vd, vs2, vs1, vm # vd[i] = (vs1[i] >= VLMAX) ? 0 : vs2[vs1[i]];
   // skipRead: vs1[i] >= VLMAX
@@ -879,13 +906,33 @@ class MaskExchangeUnit(parameter: LaneParameter) extends Module {
 
   val sameLane: Bool = gatherRequestReg1.bits.writeSink === laneIndex
 
+  // Bon2D: opt the cross-lane gather read into the SharedVRF narrow-vertical
+  // path when this instruction was issued under verticalMode. verticalMode is
+  // sourced from maskPipeMessageReg.csr (per-instruction CSR latched at issue,
+  // pipelined through laneRequest.csrInterface -> stage1/2.csr -> pipeForMask.csr)
+  // - NOT from a top-level IO - so an in-flight gather can't get its
+  // narrowVertical flipped by a later instruction with a different CSR.
+  // Bon2D Phase 3b/3c: cross-lane gather narrow opt-in.
+  // Phase 3b (structural, verified): bus carries narrowVertical/rowOverride
+  // end-to-end, Phase 2 baseline preserved when narrowEnable=false (gather V
+  // at 44427 cycles, PASS vertical).
+  // Phase 3c (in progress): SharedVRF narrow path now reconstructs rcBase
+  // from request's vs/offset/laneIdx and adds rowOverride; rowOverride here
+  // is dataOffset (the per-element byte position within the wide-fold's
+  // 8-byte gathered word). Empirically the test runs ~30% faster (31027 vs
+  // 44427 cycles) but still mismatches - the rowOverride/SRAM-layout
+  // mapping needs further debug with waveforms. Held at false until correct.
+  val gatherVerticalMode: Bool = maskPipeMessageReg.csr.verticalMode
+  val narrowEnable:       Bool = false.B
   freeCrossReqDeq.valid             := gatherRequestReg1.valid && !gatherRequestReg1.bits.skipRead
   freeCrossReqDeq.bits.readSink     := gatherRequestReg1.bits.readSink
   freeCrossReqDeq.bits.readCounter  := gatherRequestReg1.bits.readCounter
-  freeCrossReqDeq.bits.readOffset   := gatherRequestReg1.bits.readOffset
+  freeCrossReqDeq.bits.readOffset   := Mux(narrowEnable, 0.U, gatherRequestReg1.bits.readOffset)
   freeCrossReqDeq.bits.writeSink    := gatherRequestReg1.bits.writeSink
   freeCrossReqDeq.bits.writeCounter := gatherRequestReg1.bits.writeCounter
   freeCrossReqDeq.bits.writeOffset  := gatherRequestReg1.bits.writeOffset
+  freeCrossReqDeq.bits.narrowVertical := narrowEnable
+  freeCrossReqDeq.bits.rowOverride    := gatherRequestReg1.bits.rowOverride
 
   when(maskPipeIsGather) {
     freeCrossDataDeq.valid        := gatherRequestReg1.valid && gatherRequestReg1.bits.skipRead && !sameLane

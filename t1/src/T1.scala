@@ -317,7 +317,7 @@ case class T1Parameter(
   /** time multiplexing**/
   val targetElementNum: Int = vLen * 4 / 8 // 4 means LMUL=4 and 8 means 8 bit per element
   val timeMultiplexBatch: Int = targetElementNum / numRows // How many batches needed for time multiplexing after instantiating how many rows
-
+  val rowCounterBits: Int = log2Ceil(timeMultiplexBatch).max(1)
   /** paraemter for AXI4. */
   val axi4BundleParameter: AXI4BundleParameter = AXI4BundleParameter(
     idWidth = sourceWidth,
@@ -363,7 +363,8 @@ case class T1Parameter(
       maskRequestLatency = 2 * maskRequestLatency,
       vrfRamType = vrfRamType,
       decoderParam = decoderParam,
-      vfuInstantiateParameter = vfuInstantiateParameter
+      vfuInstantiateParameter = vfuInstantiateParameter,
+      timeMultiplexBatch = timeMultiplexBatch
     )
 
   /** Parameter for each LSU. */
@@ -402,7 +403,7 @@ case class T1Parameter(
     timeMultiplexBatch = timeMultiplexBatch
   )
   def vrfParam: VRFParam = VRFParam(vLen, laneNumber, datapathWidth, chainingSize, vrfBankSize, vrfRamType)
-  def laneIFParam = LaneIFParameter(vLen, eLen, datapathWidth, laneNumber, chainingSize, fpuEnable, decoderParam)
+  def laneIFParam = LaneIFParameter(vLen, eLen, datapathWidth, laneNumber, chainingSize, fpuEnable, decoderParam, timeMultiplexBatch)
   def seqIFParam  = SequencerIFParameter(vLen, eLen, datapathWidth, laneNumber, chainingSize, fpuEnable, decoderParam)
   def lsuIFParam  = LSUIFParameter(vLen, eLen, datapathWidth, laneNumber, chainingSize, fpuEnable, decoderParam)
 
@@ -564,10 +565,11 @@ class T1(val parameter: T1Parameter)
   requestRegCSR.tm  := requestReg.bits.issue.vtype(29, 16)
   requestRegCSR.tew := requestReg.bits.issue.vtype(5, 3) << requestReg.bits.issue.vtype(10, 9)
 
-  //Bon2D: vertical-mode flag from scalar-core-agnostic top-level input io.verticalMode.
-  //Integrator drives this from CSR 0x7C0 bit 0 (or any equivalent source). Latched at issue.fire so
-  //it stays stable across the instruction even if the source CSR is rewritten mid-flight.
-  val verticalModeReg: Bool = RegEnable(io.verticalMode, false.B, io.issue.fire)
+  // Bon2D: vertical-mode flag from scalar-core-agnostic top-level input io.verticalMode.
+  // The t1emu CSR mirror updates at the same boundary as the vector issue pulse,
+  // so sampling only on io.issue.fire can capture the previous mode for the
+  // whole replay. Use the live CSR mirror for replay-time VRF/mask routing.
+  val verticalModeReg: Bool = io.verticalMode
   requestRegCSR.verticalMode := verticalModeReg
 
   // connect virtual channel
@@ -883,7 +885,8 @@ class T1(val parameter: T1Parameter)
   val readType: VRFReadRequest = new VRFReadRequest(
     parameter.vrfParam.regNumBits,
     parameter.vrfParam.vrfOffsetBits,
-    parameter.instructionIndexBits
+    parameter.instructionIndexBits,
+    parameter.rowCounterBits
   )
 
   val gatherNeedRead:      Bool      = requestRegDequeue.valid && decodeResult(Decoder.gather) && !decodeResult(Decoder.vtype)
@@ -1409,6 +1412,12 @@ class T1(val parameter: T1Parameter)
     // maskUnit.io.gatherData.ready              := requestRegDequeue.fire
     //time multiplex: gatherData ready per row
     maskUnit.io.gatherData.ready              := replayFSM.rowFire
+    // Bon2D: route rowDone to the gather state machine so it parks in
+    // sWaitNextRow until rowCounter advances; ensures each row's vs2[rs1]
+    // read fires at that row's rowCounter, not the previous one.
+    maskUnit.io.gatherRowDone                 := replayRowDone
+    maskUnit.io.gatherReplayBusy              := replayFSM.busy
+    maskUnit.io.gatherRowCounter              := replayFSM.rowCounter
     // Bon2D: per-instruction vertical mode flag, latched on issue (verticalModeReg).
     maskUnit.io.verticalMode                  := verticalModeReg
   }
@@ -1444,11 +1453,8 @@ class T1(val parameter: T1Parameter)
   /** for lsu instruction lsu is ready, for normal instructions, lanes are ready. */
   val sequencerIF2DLsuRequestReady: Bool = sequencerIF2D.map(_.io.lsuRequest.ready).reduce(_ && _)
   //allLanesVrfIdle is added for time multiplexing, to expose the VRF state for firing the same instruction again without commiting
-  val allLanesVrfIdle: Bool = laneVec2D.flatten.map(_.vrfInstructionValid === 0.U).reduce(_ && _) 
+  val allLanesVrfIdle: Bool = laneVec2D.flatten.map(_.vrfInstructionValid === 0.U).reduce(_ && _)
 
-  val executionReady: Bool =
-    (!(isLoadStoreType || isZvma) || sequencerIF2DLsuRequestReady) && (noOffsetReadLoadStore || allLaneReady2DandR) && allLanesVrfIdle
-  replayFSM.executionReady := executionReady
   // - ready to issue instruction
   // - for vi and vx type of gather, it need to access vs2 for one time, we read vs2 firstly in `gatherReadFinish`
   //   and convert it to mv instruction.
@@ -1457,6 +1463,17 @@ class T1(val parameter: T1Parameter)
   //   we detect the hazard and decide should we issue this slide or
   //   issue the instruction after the slide which already in the slot.
   val maskUnitGatherDataValid = maskUnit2D.map(_.io.gatherData.valid).reduce(_ && _)
+  // Bon2D: gate per-row rowFire on gather data being valid for the current
+  // row. Combined with MaskUnit's sWaitNextRow park, this ensures hw-row R's
+  // lane consumes vs2[rs1] read at rowCounter=R (not R-1). Without this gate
+  // the lane would dispatch with stale or zero gatherData and write the wrong
+  // value to vd. Applies to vrgather.{vi,vx} which route through MaskUnit.
+  val gatherDataReadyForRow: Bool = !gatherNeedRead || maskUnitGatherDataValid
+
+  val executionReady: Bool =
+    (!(isLoadStoreType || isZvma) || sequencerIF2DLsuRequestReady) && (noOffsetReadLoadStore || allLaneReady2DandR) && allLanesVrfIdle &&
+      gatherDataReadyForRow
+  replayFSM.executionReady := executionReady
   requestRegDequeue.ready := executionReady && slotReady && (!gatherNeedRead || maskUnitGatherDataValid) &&
     tokenManager.issueAllow && instructionIndexFree && olderCheck && !replayFSM.busy
 

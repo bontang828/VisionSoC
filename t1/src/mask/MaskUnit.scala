@@ -87,6 +87,30 @@ class MaskUnitInterface(parameter: T1Parameter) extends Bundle {
   val writeRDData:   UInt                              = Output(UInt(parameter.xLen.W))
   val gatherData:    DecoupledIO[UInt]                 = Decoupled(UInt(parameter.xLen.W))
   val gatherRead:    Bool                              = Input(Bool())
+  /** Bon2D: pulse from replayFSM.rowDone for the per-instruction time-multiplex
+    * replay. Used to fence the gather state machine so that the read for row R+1
+    * cannot fire until rowCounter has actually advanced from R to R+1; otherwise
+    * the next read would fire while rowCounter is still R, returning hw-row R's
+    * vs2 data and the lane for row R+1 would consume the wrong row's element.
+    * See sWaitNextRow transition below. */
+  val gatherRowDone: Bool                              = Input(Bool())
+  /** Bon2D: replayFSM.busy. Used to gate the *first* gatherRequestFire of an
+    * instruction (= row 0): the maskUnit must wait until the previous
+    * instruction has fully released replayFSM (rowCounter settled to 0)
+    * before issuing row 0's vs2 read. Subsequent rows' fires are gated by
+    * gatherRowDone (sWaitNextRow -> idle), and ignore this signal.
+    *
+    * Re: clear of gatherInstActive - only `!gatherRead` is used. That suffices
+    * because io.issue.ready := !requestReg.valid in T1, which guarantees
+    * requestReg.valid (and hence gatherRead) drops to 0 for at least one
+    * cycle between any two issues, so gatherInstActive always clears at
+    * instruction boundary even for back-to-back .vx/.vi gathers. */
+  val gatherReplayBusy: Bool                           = Input(Bool())
+  /** Bon2D: replayFSM.rowCounter, used to index the per-hw-row v0 shadow.
+    * It is stable while a replay row is executing and advances only after
+    * rowDone, so lane v0 writes and later mask reads agree on the active
+    * time-multiplexed hardware row. */
+  val gatherRowCounter: UInt                           = Input(UInt(parameter.rowCounterBits.W))
   /** Bon2D: when high, MaskUnit-issued lane VRF reads/writes for vrgather.vi/.vx
     * (and similar scattered-access ops) opt into the SharedVRF narrow-vertical
     * path instead of the wide 8-bank gather/scatter. */
@@ -139,8 +163,10 @@ class MaskUnit(val parameter: T1Parameter)
   val askMaskVec    = io.askMaskVec
   val v0UpdateVec   = io.v0UpdateVec
   val writeRDData   = io.writeRDData
-  val gatherData    = io.gatherData
-  val gatherRead    = io.gatherRead
+  val gatherData       = io.gatherData
+  val gatherRowDone    = io.gatherRowDone
+  val gatherRowCounter = io.gatherRowCounter
+  val gatherRead       = io.gatherRead
 
   // todo: handle
   io.tokenIO.foreach { tk =>
@@ -161,10 +187,16 @@ class MaskUnit(val parameter: T1Parameter)
     parameter.eLen
   )
 
-  /** duplicate v0 for mask */
-  val v0: Vec[UInt] = RegInit(
-    VecInit(Seq.fill(parameter.vLen / parameter.datapathWidth)(0.U(parameter.datapathWidth.W)))
+  /** Bon2D: duplicate v0 per time-multiplexed hardware row. A single shared
+    * shadow loses row-local masks; for example a diagonal mask replayed over
+    * 128 rows leaves only row 127's mask visible to the following instruction.
+    */
+  val v0Vec: Vec[Vec[UInt]] = RegInit(
+    VecInit(Seq.fill(parameter.timeMultiplexBatch)(
+      VecInit(Seq.fill(parameter.vLen / parameter.datapathWidth)(0.U(parameter.datapathWidth.W)))
+    ))
   )
+  val v0: Vec[UInt] = v0Vec(gatherRowCounter)
 
   val slide            = io.maskPipeReq.bits.uop === BitPat("b001??")
   val gather           = io.maskPipeReq.bits.uop === BitPat("b0001?")
@@ -289,8 +321,8 @@ class MaskUnit(val parameter: T1Parameter)
   }
   io.maskE0 := v0(0)(0)
 
-  // write v0(mask)
-  v0.zipWithIndex.foreach { case (data, index) =>
+  // write v0(mask) for the currently replayed row.
+  v0Vec(gatherRowCounter).zipWithIndex.foreach { case (data, index) =>
     // 属于哪个lane
     val laneIndex: Int = index % parameter.laneNumber
     // 取出写的端口
@@ -387,22 +419,33 @@ class MaskUnit(val parameter: T1Parameter)
   }
   val (dataOffset, accessLane, offset, reallyGrowth, notNeedRead) =
     gatherIndex(instReq.bits.readFromScala, instReq.bits.vlmul, instReq.bits.sew)
-  val idle :: sRead :: wRead :: sResponse :: Nil = Enum(4)
+  // Bon2D: sWaitNextRow holds the gather state machine after a successful
+  // consume (gatherData.fire) until the *next* row's rowDone pulse arrives.
+  // The block prevents gatherRequestFire from re-asserting while rowCounter is
+  // still pinned to the just-consumed row R, which would make the new read
+  // return hw-row R's vs2 again instead of hw-row R+1's. See io.gatherRowDone.
+  val idle :: sRead :: wRead :: sResponse :: sWaitNextRow :: Nil = Enum(5)
   val gatherReadState:   UInt = RegInit(idle)
   val gatherRequestFire: Bool = Wire(Bool())
   val gatherSRead:       Bool = gatherReadState === sRead
   val gatherWaiteRead:   Bool = gatherReadState === wRead
   val gatherResponse:    Bool = gatherReadState === sResponse
+  val gatherWaitNextRow: Bool = gatherReadState === sWaitNextRow
   val gatherDatOffset:   UInt = RegEnable(dataOffset, 0.U, gatherRequestFire)
   val gatherLane:        UInt = RegEnable(accessLane, 0.U, gatherRequestFire)
   val gatherOffset:      UInt = RegEnable(offset, 0.U, gatherRequestFire)
   val gatherGrowth:      UInt = RegEnable(reallyGrowth, 0.U, gatherRequestFire)
 
+  val gatherReplayBusy = io.gatherReplayBusy
+  val gatherInstActive: Bool = RegInit(false.B)
+
   val instReg:     MaskUnitInstReq = RegEnable(instReq.bits, 0.U.asTypeOf(instReq.bits), instReq.valid)
   val enqMvRD:     Bool            = instReq.bits.decodeResult(Decoder.topUop) === BitPat("b01011")
   val instVlValid: Bool            =
     RegEnable((instReq.bits.vl.orR || enqMvRD) && instReq.valid, false.B, instReq.valid || lastReport.orR)
-  gatherRequestFire := gatherReadState === idle && gatherRead && !instVlValid
+  gatherRequestFire := gatherReadState === idle && gatherRead && !instVlValid && (gatherInstActive || !gatherReplayBusy)
+  when(gatherRequestFire) { gatherInstActive := true.B }
+  when(!gatherRead)       { gatherInstActive := false.B }
   // viota mask read vs2. Also pretending to be reading vs1
   val viotaReq:   Bool            = instReq.bits.decodeResult(Decoder.topUop) === "b01000".U
   when(instReq.valid && (viotaReq || enqMvRD) || gatherRequestFire) {
@@ -775,9 +818,7 @@ class MaskUnit(val parameter: T1Parameter)
     readVS1Req.vs         := instReg.vs1 + gatherGrowth
     readVS1Req.offset     := gatherOffset
     readVS1Req.readLane   := gatherLane
-    // Bon2D: narrow-vertical reads return the wanted byte already at byte
-    // lane 0 (SharedVRF Phase 2 path), so suppress the post-shift.
-    readVS1Req.dataOffset := Mux(io.verticalMode, 0.U, gatherDatOffset)
+    readVS1Req.dataOffset := gatherDatOffset
   }
 
   val compressUnitResultQueue: QueueIO[CompressOutput] = Queue.io(new CompressOutput(compressParam), 4, flow = true)
@@ -826,24 +867,15 @@ class MaskUnit(val parameter: T1Parameter)
     readChannel(index).bits.offset           := maskedWrite.readChannel(index).bits.offset
     readChannel(index).bits.readSource       := 2.U
     readChannel(index).bits.instructionIndex := instReg.instructionIndex
-    // Phase 1 default: keep existing behaviour (legacy horizontal/wide-vertical
-    // path). The vrgather.vi/.vx gather branch below overrides these so the
-    // SharedVRF can serve the per-element fetch via the narrow single-bank path
-    // when in vertical mode (Phase 2 narrow datapath).
+    // Keep vrgather.vi/.vx on the normal SharedVRF read path. In V-mode the
+    // SharedVRF wide-vertical path selects the fabric-correct data; the legacy
+    // narrow single-bank path is not used.
     readChannel(index).bits.narrowVertical   := false.B
     readChannel(index).bits.rowOverride      := 0.U
     when(readVs1Valid && readVS1Req.readLane === index.U) {
       readChannel(index).valid       := true.B
       readChannel(index).bits.vs     := readVS1Req.vs
       readChannel(index).bits.offset := readVS1Req.offset
-      // Bon2D: only the gather state machine (vrgather.vi/.vx) opts in here;
-      // compress and other consumers of readVS1Req leave narrow off.
-      when((gatherSRead || gatherWaiteRead) && io.verticalMode) {
-        readChannel(index).bits.narrowVertical := true.B
-        // The source row R for vrgather.vi/.vx is the scalar/immediate index;
-        // SharedVRF derives bank/byte position from the global rowCounter (column).
-        readChannel(index).bits.rowOverride    := instReg.readFromScala
-      }
     }
     readVs1Fire(index)                       := request.fire && readVS1Req.readLane === index.U
     readVs1AckFire(index)                    := readResult(index).fire && readVS1Req.readLane === index.U
@@ -1070,7 +1102,15 @@ class MaskUnit(val parameter: T1Parameter)
 
   gatherData.valid := gatherResponse
   gatherData.bits  := Mux(readVS1Reg.dataValid, readVS1Reg.data, 0.U)
+  // Bon2D: park in sWaitNextRow after the consume so the next gatherRequestFire
+  // is gated until rowCounter has actually advanced. The transition out of
+  // sWaitNextRow is driven by gatherRowDone (= replayFSM.rowDone). Without the
+  // park, the next read fires while rowCounter is still on the just-consumed
+  // row, returning the wrong hw-row's vs2 element.
   when(gatherData.fire) {
+    gatherReadState := sWaitNextRow
+  }
+  when(gatherWaitNextRow && gatherRowDone) {
     gatherReadState := idle
   }
 }

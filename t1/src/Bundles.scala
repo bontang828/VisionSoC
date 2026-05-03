@@ -558,7 +558,8 @@ class LaneExecuteStage(parameter: LaneParameter)(isLastSlot: Boolean) extends Bu
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
 }
@@ -913,7 +914,8 @@ class FreeWriteBusData(datapathWidth: Int, groupNumberBits: Int, laneNumberBits:
   val instructionIndex: UInt = UInt(instructionIndexBits.W)
 }
 
-class FreeWriteBusRequest(datapathWidth: Int, groupNumberBits: Int, laneNumberBits: Int) extends Bundle {
+class FreeWriteBusRequest(datapathWidth: Int, groupNumberBits: Int, laneNumberBits: Int,
+                          rowCounterBits: Int = 1) extends Bundle {
   val readSink:    UInt = UInt(laneNumberBits.W)
   val readCounter: UInt = UInt(groupNumberBits.W)
   val readOffset:  UInt = UInt(log2Ceil(datapathWidth / 8).W)
@@ -921,6 +923,16 @@ class FreeWriteBusRequest(datapathWidth: Int, groupNumberBits: Int, laneNumberBi
   val writeSink:    UInt = UInt(laneNumberBits.W)
   val writeCounter: UInt = UInt(groupNumberBits.W)
   val writeOffset:  UInt = UInt(log2Ceil(datapathWidth / 8).W)
+
+  /** Bon2D narrow-vertical opt-in for the destination lane's VRF read.
+    * When high, the destination's stage0 -> stage1 enq propagates these into
+    * the VRFReadRequest so SharedVRF activates a single bank, single byte
+    * keyed on `rowOverride`. Default false -> identical to legacy wide path. */
+  val narrowVertical: Bool = Bool()
+
+  /** Byte-aligned logical row index for the narrow-vertical read; SEW shift
+    * applied at producer (see plan: rowOverride contract). */
+  val rowOverride: UInt = UInt(rowCounterBits.W)
 }
 
 class LaneInterfaceIO(parameter: LaneIFParameter) extends Bundle {
@@ -1163,7 +1175,8 @@ class LaneInterfaceIO(parameter: LaneIFParameter) extends Bundle {
         new FreeWriteBusRequest(
           parameter.datapathWidth,
           parameter.groupNumberBits,
-          parameter.laneNumberBits
+          parameter.laneNumberBits,
+          parameter.rowCounterBits
         )
       )
     )
@@ -1173,7 +1186,8 @@ class LaneInterfaceIO(parameter: LaneIFParameter) extends Bundle {
       new FreeWriteBusRequest(
         parameter.datapathWidth,
         parameter.groupNumberBits,
-        parameter.laneNumberBits
+        parameter.laneNumberBits,
+        parameter.rowCounterBits
       )
     )
 

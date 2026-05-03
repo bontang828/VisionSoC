@@ -16,7 +16,8 @@ import org.chipsalliance.dwbb.stdlib.queue.{Queue, QueueIO}
 class VrfReadPipe(parameter: LaneParameter, arbitrate: Boolean = false) extends Module {
 
   val enqEntryType: VRFReadQueueEntry              =
-    new VRFReadQueueEntry(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.chainingSize)
+    new VRFReadQueueEntry(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.chainingSize,
+      parameter.rowCounterBits)
   // for vs2 | vd
   @public
   val enqueue:      DecoupledIO[VRFReadQueueEntry] = IO(Flipped(Decoupled(enqEntryType)))
@@ -29,7 +30,8 @@ class VrfReadPipe(parameter: LaneParameter, arbitrate: Boolean = false) extends 
   @public
   val vrfReadRequest: DecoupledIO[VRFReadRequest] = IO(
     Decoupled(
-      new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits)
+      new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits,
+        parameter.rowCounterBits)
     )
   )
 

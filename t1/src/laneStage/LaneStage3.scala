@@ -41,7 +41,8 @@ class LaneStage3Enqueue(parameter: LaneParameter, isLastSlot: Boolean) extends B
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
   val maskE0:            Bool                      = Bool()

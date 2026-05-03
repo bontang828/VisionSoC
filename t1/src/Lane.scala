@@ -104,9 +104,23 @@ case class LaneParameter(
   maskRequestLatency:               Int,
   vrfRamType:                       RamType,
   decoderParam:                     DecoderParam,
-  vfuInstantiateParameter:          VFUInstantiateParameter)
+  vfuInstantiateParameter:          VFUInstantiateParameter,
+  timeMultiplexBatch:               Int = 1)
     extends SerializableModuleParameter {
   val maskUnitVefWriteQueueSize: Int = 8
+
+  /** Bon2D narrow-vertical row index width. Sized to address every image-row
+    * batch in the time-multiplex schedule; matches SharedVRFParam.rowCounterBits.
+    * Drives the width of `rowOverride` carried on VRFReadRequest /
+    * VRFWriteRequest / FreeWriteBusRequest / PipeForSecondPipe so producers,
+    * cross-lane bus, and SharedVRF agree end-to-end. */
+  val rowCounterBits: Int = log2Ceil(timeMultiplexBatch).max(1)
+
+  /** Bon2D narrow-vertical rowOverride decomposition (mirrors SharedVRFParam).
+    * MaskExchangeUnit uses these to bit-reorder the per-element flat byte index
+    * into the rc encoding the SharedVRF expects. */
+  val cByteBits:  Int = log2Ceil(datapathWidth / 8)
+  val cLaneBits:  Int = log2Ceil(laneNumber)
 
   val laneScale: Int = datapathWidth / eLen
 
@@ -398,7 +412,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
         new FreeWriteBusRequest(
           parameter.datapathWidth,
           parameter.groupNumberBits,
-          parameter.laneNumberBits
+          parameter.laneNumberBits,
+          parameter.rowCounterBits
         )
       )
     )
@@ -411,7 +426,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
           new FreeWriteBusRequest(
             parameter.datapathWidth,
             parameter.groupNumberBits,
-            parameter.laneNumberBits
+            parameter.laneNumberBits,
+            parameter.rowCounterBits
           )
         )
       )
@@ -443,7 +459,7 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
 
   /** External VRF port connected to SharedVRF at T1 level*/
   @public
-  val vrfPorts: LaneVRFPorts = IO(Flipped(new LaneVRFPorts(parameter.vrfParam)))
+  val vrfPorts: LaneVRFPorts = IO(Flipped(new LaneVRFPorts(parameter.vrfParam, parameter.rowCounterBits)))
   private val vrf = vrfPorts
 
 
@@ -590,7 +606,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
       Vec(
         3,
         Decoupled(
-          new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits)
+          new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits,
+            parameter.rowCounterBits)
         )
       )
     )
@@ -609,7 +626,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
   val readCheckRequestVec: Vec[VRFReadRequest] = Wire(
     Vec(
       parameter.chainingSize * 3 + 2,
-      new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits)
+      new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits,
+        parameter.rowCounterBits)
     )
   )
 
@@ -1019,7 +1037,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
   {
     val readBeforeMaskedWrite: DecoupledIO[VRFReadRequest]      = Wire(
       Decoupled(
-        new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits)
+        new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits,
+          parameter.rowCounterBits)
       )
     )
     val readPortVec:           Seq[DecoupledIO[VRFReadRequest]] =
@@ -1028,7 +1047,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
     parameter.vrfParam.connectTree.zipWithIndex.foreach { case (connectSource, vrfPortIndex) =>
       val readArbiter = Module(
         new Arbiter(
-          new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits),
+          new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits,
+            parameter.rowCounterBits),
           connectSource.size
         )
       ).suggestName(s"vrfReadArbiter_${vrfPortIndex}")

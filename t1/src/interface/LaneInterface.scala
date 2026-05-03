@@ -10,16 +10,21 @@ import org.chipsalliance.dwbb.stdlib.queue.{Queue, QueueIO}
 import org.chipsalliance.t1.rtl.decoder.DecoderParam
 
 case class LaneIFParameter(
-  vLen:          Int,
-  eLen:          Int,
-  datapathWidth: Int,
-  laneNumber:    Int,
-  chainingSize:  Int,
-  fpuEnable:     Boolean,
-  decoderParam:  DecoderParam)
+  vLen:               Int,
+  eLen:               Int,
+  datapathWidth:      Int,
+  laneNumber:         Int,
+  chainingSize:       Int,
+  fpuEnable:          Boolean,
+  decoderParam:       DecoderParam,
+  timeMultiplexBatch: Int = 1)
     extends SerializableModuleParameter {
 
   val laneScale: Int = datapathWidth / eLen
+
+  /** Bon2D narrow-vertical row index width - must match LaneParameter.rowCounterBits
+    * so the lane <-> laneIF FreeWriteBusRequest connection is width-consistent. */
+  val rowCounterBits: Int = log2Ceil(timeMultiplexBatch).max(1)
 
   val chaining1HBits: Int = 2 << log2Ceil(chainingSize)
 

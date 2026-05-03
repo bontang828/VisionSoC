@@ -43,7 +43,8 @@ class LaneStage2Enqueue(parameter: LaneParameter, isLastSlot: Boolean) extends B
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
 }
@@ -74,7 +75,8 @@ class LaneStage2Dequeue(parameter: LaneParameter, isLastSlot: Boolean) extends B
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
 }

@@ -206,12 +206,6 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     when(write.fire) { writePipe.bits := write.bits }
     val writeBankPipe: UInt = RegNext(writeBank)
     val writeAddrPipe: UInt = RegNext(writeAddr)
-    // narrow write bank/addr is also pipelined to the SRAM-port loop below.
-    val nWriteBankRaw: UInt = Wire(UInt(parameter.numBanks.W))
-    val nWriteAddrRaw: UInt = Wire(UInt(parameter.bankAddrBits.W))
-    val nWriteBankPipe: UInt = RegNext(nWriteBankRaw)
-    val nWriteAddrPipe: UInt = RegNext(nWriteAddrRaw)
-    val nWriteValidPipe: Bool = RegNext(write.fire && write.bits.narrowVertical, false.B)
 
     // ---- Chaining records (same logic as VRF.scala) -----
     val chainingRecord:     Vec[ValidIO[VRFWriteReport]] = RegInit(
@@ -286,6 +280,12 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     def offsetField(off: UInt): UInt =
       if (parameter.cGroupBits == 0) 0.U(0.W) else off(parameter.cGroupBits - 1, 0)
 
+    // Bon2D Phase 3b: hoisted so the read fold below can suppress wide-vertical
+    // bankCorrect when a narrow request preempts the same cycle. Wide-vert
+    // would otherwise pollute bankReadF/hReadAddr with its bank_h address even
+    // though its r.ready is held low.
+    val anyNarrowReq: Bool = readRequests.map(r => r.valid && r.bits.narrowVertical).reduce(_ || _)
+
     val (firstOccupied, _) = readRequests.zipWithIndex.foldLeft(
       (0.U(parameter.numBanks.W), 0.U(parameter.numBanks.W))
     ) {
@@ -314,15 +314,37 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
         // Horizontal address compute (legacy).
         val bank_h = bankSelect(v.bits.vs, v.bits.offset, laneIdx)
 
-        // Narrow-vertical per-port address: rowOverride supplies the image-row R;
-        // the column-derived (cVsOff/cGroup/cLane/cByte) come from the global rowCounter.
-        // The byte slot inside the bank word is cByte_n_now (= rowCounter low bits at request time).
-        val rc_n      = v.bits.rowOverride
-        val cByte_n   = cByte
+        // Narrow-vertical per-port address (Phase 3c, layout-confirmed):
+        // The wide-vert fold reads bank/addr derived from
+        // (vsStore = upper(vs) ## cVsOff, cGroup, cLane, rcI = rcBase + i)
+        // with rcBase = Cat(vsLow_request, offset_request, laneIdx, 0). The
+        // returned byte at gathered_word[i] is byte cByte (= rowCounter[2:0])
+        // of the bank holding (rcI=rcBase+i, vsStore_c, cGroup_c, cLane_c) =
+        // grid_in[rcBase+i][c]. To return the same byte at offset dataOffset,
+        // narrow uses rc_n = rcBase + dataOffset (= rowOverride), but the
+        // logicalAddr fields (vsStore/cGroup/cLane) and the byte selector
+        // (cByte) MUST come from the current rowCounter - not from the
+        // request's vs/offset/laneIdx. Otherwise the narrow read hits a
+        // different SRAM cell than the wide-fold's i-th byte.
+        val rcBase_n: UInt = {
+          val vsLowPart   = if (parameter.cVsOffBits == 0) 0.U(0.W)
+                            else v.bits.vs(parameter.cVsOffBits - 1, 0)
+          val offsetPart  = if (parameter.cGroupBits == 0) 0.U(0.W)
+                            else v.bits.offset(parameter.cGroupBits - 1, 0)
+          val laneIdxPart = if (parameter.cLaneBits == 0) 0.U(0.W)
+                            else laneIdx.U(parameter.cLaneBits.W)
+          val byteZero    = 0.U(parameter.cByteBits.W)
+          Cat(vsLowPart, offsetPart, laneIdxPart, byteZero)
+        }
+        val rc_n      = (rcBase_n + v.bits.rowOverride)(parameter.rowCounterBits - 1, 0)
+        // logicalAddr fields tracked from rowCounter (matching wide-vert path).
+        val vsStoreUpper_n: UInt =
+          if (parameter.cVsOffBits == parameter.regNumBits) 0.U(0.W)
+          else v.bits.vs(parameter.regNumBits - 1, parameter.cVsOffBits)
+        val vsStore_n = Cat(vsStoreUpper_n, cVsOff)
         val cGroup_n  = cGroup
         val cLane_n   = cLane
-        val vsStore_n = if (parameter.cVsOffBits == parameter.regNumBits) cVsOff
-                        else Cat(v.bits.vs(parameter.regNumBits - 1, parameter.cVsOffBits), cVsOff)
+        val cByte_n   = cByte
         val bank_n    = bankSelectRC(vsStore_n, cGroup_n, cLane_n, rc_n)
         val addr_n    = bankInternalAddrRC(vsStore_n, cGroup_n, cLane_n, rc_n)
         nBankPerPort(i) := bank_n
@@ -332,7 +354,14 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
         // firstOccupied for unified arbitration with horizontal LSU traffic.
         val bank        = Mux(v.bits.narrowVertical, bank_n, bank_h)
         val pipeBank    = Pipe(true.B, bank, parameter.vrfReadLatency).bits
-        val bankCorrect = Mux(validCorrect, bank, 0.U(parameter.numBanks.W))
+        // Bon2D Phase 3b: when a narrow request preempts wide-vert this cycle,
+        // wide-vert reads stay valid but not ready (see r.ready logic below).
+        // Their bank_h must NOT contribute to bankCorrect/bankReadF, otherwise
+        // hReadAddr's Mux1H would steer the SRAM port to the wide-vert's bank_h
+        // address even though that read isn't actually firing.
+        val isWideVertReq_i  = !v.bits.narrowVertical && verticalMode && !isLSUInst(v.bits.instructionIndex)
+        val wideVertPreempt  = isWideVertReq_i && anyNarrowReq
+        val bankCorrect = Mux(validCorrect && !wideVertPreempt, bank, 0.U(parameter.numBanks.W))
 
         //p0rw: check against firstOccupied
         portConflictCheck := true.B
@@ -385,7 +414,12 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     // reads must take the horizontal bank path so they undo the same horizontal
     // layout used by vle.
     val firstReadFromLSU: Bool = isLSUInst(firstReadReq.instructionIndex)
-    val useVerticalRead:  Bool = verticalMode && !firstReadFromLSU
+    // Bon2D Phase 3b: narrow-vertical reads preempt wide-vertical reads in the
+    // same cycle. When any port has a narrow request valid, fall through to the
+    // horizontal SRAM-port path (which carries narrow's per-port nAddrPerPort
+    // via the bankReadF Mux1H). Wide-vert reads concurrent with narrow are
+    // stalled below by the per-port r.ready logic.
+    val useVerticalRead:  Bool = verticalMode && !firstReadFromLSU && !anyNarrowReq
     val vReadFire: Bool = useVerticalRead && anyReadValid && sramReady
     // vsStore replaces the bottom cVsOffBits of the requested vs with the column-derived cVsOff.
     val vsStoreUpper: UInt =
@@ -420,27 +454,23 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     val cBytePipe:       UInt      = Pipe(true.B, cByte, parameter.vrfReadLatency).bits
     val vReadFirePipe:   Bool      = Pipe(true.B, vReadFire, parameter.vrfReadLatency).bits
 
-    // ----- Narrow-vertical write: per-request single-bank, single-byte path. ----
-    // Mirrors the read narrow path: rowOverride supplies image row R; the column-
-    // derived (cVsOff/cGroup/cLane/cByte) come from the global rowCounter.
-    val nWriteVsStore: UInt =
-      if (parameter.cVsOffBits == parameter.regNumBits) cVsOff
-      else Cat(write.bits.vd(parameter.regNumBits - 1, parameter.cVsOffBits), cVsOff)
-    val nWriteBank: UInt = bankSelectRC(nWriteVsStore, cGroup, cLane, write.bits.rowOverride)
-    val nWriteAddr: UInt = bankInternalAddrRC(nWriteVsStore, cGroup, cLane, write.bits.rowOverride)
-    nWriteBankRaw := nWriteBank
-    nWriteAddrRaw := nWriteAddr
-
     // ----- Write ready: write can proceed if its bank is not occupied by reads ---
-    // Wide vertical read locks all 8 banks for that cycle; narrow-vertical write
-    // uses only 1 bank and only contends with firstOccupied (which already
-    // includes any narrow reads issued the same cycle).
-    val verticalOccupy: UInt = Mux(vReadFire, ((BigInt(1) << parameter.numBanks) - 1).U, 0.U(parameter.numBanks.W))
+    // Wide vertical read locks all 8 banks for that cycle; horizontal/LSU writes
+    // touch a single bank.
+    // Bon2D Phase 3c: a wide-vertical WRITE scatters across all 8 banks
+    // (vWritePerBankValid is gated by writePipe.bits.mask per byte, so banks
+    // whose corresponding byte is masked-out do not fire - see the per-bank
+    // valid below). For arbitration we still expand to all-banks here, which
+    // is a conservative no-overlap check: a scatter write stalls if any narrow
+    // read is pending on any of the 8 potential banks, even if the mask would
+    // gate that bank out. Tightening this is a perf opt, not a correctness fix.
+    val writeWouldScatter: Bool =
+      verticalMode && !isLSUInst(write.bits.instructionIndex)
+    val allBanksMask: UInt = ((BigInt(1) << parameter.numBanks) - 1).U(parameter.numBanks.W)
+    val verticalOccupy: UInt = Mux(vReadFire, allBanksMask, 0.U(parameter.numBanks.W))
     val effectiveOccupied: UInt = Mux(useVerticalRead, verticalOccupy, firstOccupied)
-    val effWriteBank: UInt = Mux(write.bits.narrowVertical, nWriteBank, writeBank)
-    val effOccupiedForWrite: UInt =
-      Mux(write.bits.narrowVertical, firstOccupied, effectiveOccupied)
-    write.ready := sramReady && (effWriteBank & (~effOccupiedForWrite)).orR
+    val effWriteBank: UInt = Mux(writeWouldScatter, allBanksMask, writeBank)
+    write.ready := sramReady && (effWriteBank & effectiveOccupied) === 0.U
 
     val writeData:    UInt = Mux(resetValid, 0.U(parameter.datapathWidth.W), writePipe.bits.data)
     val writeAddress: UInt = Mux(resetValid, sramResetCount, writeAddrPipe)
@@ -479,8 +509,16 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     }
 
     // Per-bank vertical write: one i maps to each bank (diagonal skew).
+    // Bon2D Phase 3c: gate by the upstream per-byte mask. Without this, a
+    // gather-style write (mask=1<<writeOffset, only byte writeOffset valid)
+    // would still scatter the other 7 zero bytes into 7 sibling banks,
+    // clobbering neighbour vd[i+1..i+7] cells at the current cByte slot.
+    // For full-mask wide-vert writes (e.g. vector compute) all 8 mask bits
+    // are 1, so every bank still fires - preserves Phase 2 baseline.
     val vWritePerBankValid: Vec[Bool] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
-      VecInit(vWriteBankOHPerI.map(_(b))).asUInt.orR && vWriteFire
+      val maskedHits: Seq[Bool] = (0 until parameter.numBanks).map(i =>
+        vWriteBankOHPerI(i)(b) && writePipe.bits.mask(i))
+      VecInit(maskedHits).asUInt.orR && vWriteFire
     })
     val vWritePerBankAddr: Vec[UInt] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
       Mux1H(VecInit(vWriteBankOHPerI.map(_(b))), vWriteAddrPerI)
@@ -493,14 +531,9 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     // Only lane 0 drives reset (avoids same-address dual-port write during reset)
     val laneResetValid: Bool = if (laneIdx == 0) resetValid else false.B
     vrfSRAM.zipWithIndex.foreach { case (rf, bank) =>
-      // Narrow-vertical write fires only on the bank `nWriteBankPipe` selects,
-      // and only when this latched write was tagged narrowVertical and is not
-      // an LSU write (LSU is forced horizontal by isLSUInst gating earlier).
-      val nWriteValidBank: Bool =
-        nWriteValidPipe && writePipe.valid && nWriteBankPipe(bank) && !writeFromLSU
-      val hWriteValid: Bool = writePipe.valid && writeBankPipe(bank) && !useVerticalWrite && !writePipe.bits.narrowVertical
-      val vWriteValid: Bool = vWritePerBankValid(bank) && !writePipe.bits.narrowVertical
-      val ramWriteValid: Bool = hWriteValid || vWriteValid || laneResetValid || nWriteValidBank
+      val hWriteValid: Bool = writePipe.valid && writeBankPipe(bank) && !useVerticalWrite
+      val vWriteValid: Bool = vWritePerBankValid(bank)
+      val ramWriteValid: Bool = hWriteValid || vWriteValid || laneResetValid
 
       // Per-port read address: legacy horizontal uses bankInternalAddr; narrow
       // overrides with the per-port narrow address (rowOverride-derived).
@@ -523,21 +556,12 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
       val vWriteByteVec: Vec[UInt] = VecInit(Seq.fill(byteCount)(vWritePerBankByte(bank)))
       val vWriteMask:    Vec[Bool] = VecInit(Seq.tabulate(byteCount)(i => cByte === i.U))
 
-      // Narrow-vertical write: data(7,0) broadcast across byte lanes, mask one-hot
-      // on cByte (same shape as wide scatter, but only one bank fires).
-      val nWriteByte:    UInt      = writePipe.bits.data(7, 0)
-      val nWriteByteVec: Vec[UInt] = VecInit(Seq.fill(byteCount)(nWriteByte))
-      val nWriteMask:    Vec[Bool] = VecInit(Seq.tabulate(byteCount)(i => cByte === i.U))
-
       val portWriteData: Vec[UInt] =
-        Mux(nWriteValidBank, nWriteByteVec,
-          Mux(useVerticalWrite && !laneResetValid, vWriteByteVec, writeByteVec))
+        Mux(useVerticalWrite && !laneResetValid, vWriteByteVec, writeByteVec)
       val portWriteMask: Vec[Bool] =
-        Mux(nWriteValidBank, nWriteMask,
-          Mux(useVerticalWrite && !laneResetValid, vWriteMask, writeByteMaskAll))
+        Mux(useVerticalWrite && !laneResetValid, vWriteMask, writeByteMaskAll)
       val portWriteAddr: UInt =
-        Mux(nWriteValidBank, nWriteAddrPipe,
-          Mux(useVerticalWrite && !laneResetValid, vWritePerBankAddr(bank), writeAddress))
+        Mux(useVerticalWrite && !laneResetValid, vWritePerBankAddr(bank), writeAddress)
 
       rf.readwritePorts(laneIdx).address   := Mux(ramWriteValid, portWriteAddr, firstReadPipe(bank).bits.address)
       rf.readwritePorts(laneIdx).enable    := ramWriteValid || firstReadPipe(bank).valid
@@ -569,7 +593,14 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     readRequests.zipWithIndex.foreach { case (r, i) =>
       // Narrow-vertical reads use 1 bank; treat them like horizontal for ready
       // (they participate in the same firstOccupied accumulation already).
-      r.ready := Mux(useVerticalRead && !r.bits.narrowVertical, vReady(i), hReady(i))
+      // Wide-vertical reads need the wide gather path; when narrow preempts
+      // (useVerticalRead=false because anyNarrowReq), they must stall until
+      // the narrow clears. Routing them through hReady would be wrong because
+      // hResult returns horizontal-layout data, not the vertical fold.
+      val isWideVerticalReq = verticalMode && !firstReadFromLSU && !r.bits.narrowVertical
+      r.ready := Mux(isWideVerticalReq,
+                     useVerticalRead && vReady(i),
+                     hReady(i))
     }
     readResults.zipWithIndex.foreach { case (rr, i) =>
       // Three-way: narrow takes priority because nPipe(i) is per-port and only set
@@ -578,12 +609,12 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
             Mux(useVerticalReadPipe, vResult(i), hResult(i)))
     }
 
-    // Phase 2 invariant: narrow and wide vertical paths are mutually exclusive
-    // per lane port - a narrow request is supposed to take the horizontal-style
-    // single-bank fold rather than the wide gather.
-    val anyNarrowReq: Bool = readRequests.map(r => r.valid && r.bits.narrowVertical).reduce(_ || _)
+    // Phase 3b invariant: narrow preempts wide-vertical at the useVerticalRead
+    // gating (line ~395), so this assertion now holds by construction. Wide-vert
+    // reads concurrent with narrow are stalled via r.ready; the SRAM port serves
+    // narrow's hReadAddr that cycle.
     assert(!(useVerticalRead && anyNarrowReq),
-      s"lane $laneIdx: a narrow-vertical read collided with a wide-vertical read in the same cycle")
+      s"lane $laneIdx: useVerticalRead must be 0 when any narrow read is valid (Phase 3b invariant)")
 
     // ---- Chaining record update (same logic as VRF.scala) ----
     val initRecord: ValidIO[VRFWriteReport] = WireDefault(0.U.asTypeOf(Valid(new VRFWriteReport(vrfParam))))

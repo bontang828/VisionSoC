@@ -30,10 +30,12 @@ trap finish EXIT
 # -e <emu-type> emulator type:              e.g. verilator-emu, verilator-emu-trace
 # --check run offline checker after simulation
 # --max-cycles <n> max cycles until termination without fatal for waves
+# --vertical enable vertical mode in the simulator which enables vertical processing in vector execution
 
 #Example usage:
 # ./run-test.sh intrinsic.linear_normalization -c machamp -i t1rocketemu
 # ./run-test.sh intrinsic.linear_normalization -e verilator-emu-trace --check
+# ./run-test.sh intrinsic.linear_normalization -e verilator-emu-trace --max-cycles 60000 --vertical
 
 
 if [ -z "$1" ]; then

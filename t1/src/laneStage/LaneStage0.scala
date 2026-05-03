@@ -91,7 +91,8 @@ class LaneStage0Dequeue(parameter: LaneParameter, isLastSlot: Boolean) extends B
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
   val maskE0:            Bool                      = Bool()
@@ -118,7 +119,8 @@ class LaneStage0(parameter: LaneParameter, isLastSlot: Boolean)
           new FreeWriteBusRequest(
             parameter.datapathWidth,
             parameter.groupNumberBits,
-            parameter.laneNumberBits
+            parameter.laneNumberBits,
+            parameter.rowCounterBits
           )
         )
       )
@@ -360,14 +362,18 @@ class LaneStage0(parameter: LaneParameter, isLastSlot: Boolean)
     bypassDeqValid            := bypassTokenAllocate && freeCrossReqEnq.get.valid
     freeCrossReqEnq.get.ready := bypassTokenAllocate && dequeue.ready
     when(bypassDeqValid) {
-      deqWire.secondPipe.get                     := true.B
-      deqWire.pipeForSecondPipe.get.readOffset   := freeCrossReqEnq.get.bits.readOffset
-      deqWire.pipeForSecondPipe.get.writeSink    := freeCrossReqEnq.get.bits.writeSink
-      deqWire.pipeForSecondPipe.get.writeCounter := freeCrossReqEnq.get.bits.writeCounter
-      deqWire.pipeForSecondPipe.get.writeOffset  := freeCrossReqEnq.get.bits.writeOffset
-      deqWire.groupCounter                       := freeCrossReqEnq.get.bits.readCounter
+      deqWire.secondPipe.get                       := true.B
+      deqWire.pipeForSecondPipe.get.readOffset     := freeCrossReqEnq.get.bits.readOffset
+      deqWire.pipeForSecondPipe.get.writeSink      := freeCrossReqEnq.get.bits.writeSink
+      deqWire.pipeForSecondPipe.get.writeCounter   := freeCrossReqEnq.get.bits.writeCounter
+      deqWire.pipeForSecondPipe.get.writeOffset    := freeCrossReqEnq.get.bits.writeOffset
+      // Bon2D: carry the cross-lane gather narrow-vertical opt-in through the
+      // pipe so LaneStage1's read enq can drive the SharedVRF narrow path.
+      deqWire.pipeForSecondPipe.get.narrowVertical := freeCrossReqEnq.get.bits.narrowVertical
+      deqWire.pipeForSecondPipe.get.rowOverride    := freeCrossReqEnq.get.bits.rowOverride
+      deqWire.groupCounter                         := freeCrossReqEnq.get.bits.readCounter
       // second pipe for gather need read vs2.
-      deqWire.decodeResult(Decoder.vtype)        := true.B
+      deqWire.decodeResult(Decoder.vtype)          := true.B
     }
 
     val stateGather         = RegInit(false.B)

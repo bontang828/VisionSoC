@@ -25,20 +25,24 @@
 #define ROWS 128
 #define COLS 128
 #define RS1  5
+#define RS1B 9
 
 int8_t grid_in[ROWS][COLS];
 int8_t grid_out[ROWS][COLS];
+int8_t grid_out_b[ROWS][COLS];
 int8_t diag_buf[ROWS][COLS];
 
 __attribute__((noinline))
 static void init_grids(void) {
     volatile int8_t *p_in   = (volatile int8_t *)&grid_in[0][0];
     volatile int8_t *p_out  = (volatile int8_t *)&grid_out[0][0];
+    volatile int8_t *p_out_b = (volatile int8_t *)&grid_out_b[0][0];
     volatile int8_t *p_diag = (volatile int8_t *)&diag_buf[0][0];
     for (int i = 0; i < ROWS; i++) {
         for (int j = 0; j < COLS; j++) {
             p_in  [i * COLS + j] = (int8_t)((i + j) & (COLS - 1));
             p_out [i * COLS + j] = 0;
+            p_out_b[i * COLS + j] = 0;
             p_diag[i * COLS + j] = (i == j) ? (int8_t)1 : (int8_t)0;
         }
     }
@@ -47,9 +51,12 @@ static void init_grids(void) {
 __attribute__((noinline))
 static void clear_grid_out(void) {
     volatile int8_t *p_out = (volatile int8_t *)&grid_out[0][0];
+    volatile int8_t *p_out_b = (volatile int8_t *)&grid_out_b[0][0];
     for (int i = 0; i < ROWS; i++)
-        for (int j = 0; j < COLS; j++)
+        for (int j = 0; j < COLS; j++) {
             p_out[i * COLS + j] = 0;
+            p_out_b[i * COLS + j] = 0;
+        }
 }
 
 static void print_grid(int n, int8_t *grid) {
@@ -129,6 +136,29 @@ void k_vrgather_vx_mask(int8_t *src, int8_t *diag, int8_t *dst, size_t vl, int v
     );
 }
 
+/* Two back-to-back unmasked vrgather.vx instructions. This intentionally has
+ * no intervening scalar/vector op between the gathers, so it can catch a stale
+ * gatherInstActive state leaking across gather instruction boundaries.
+ *
+ * args: src, dst_a, dst_b, vl
+ *       a0   a1     a2     a3
+ */
+__attribute__((naked, noinline))
+void k_vrgather_vx_back_to_back(int8_t *src, int8_t *dst_a, int8_t *dst_b, size_t vl) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8, (a0)                   \n\t"
+        "li      t3, 5                      \n\t"
+        "vrgather.vx v16, v8, t3            \n\t"
+        "li      t3, 9                      \n\t"
+        "vrgather.vx v20, v8, t3            \n\t"
+        "vse8.v  v16, (a1)                  \n\t"
+        "vse8.v  v20, (a2)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
 static const char *mode_str(int vert) { return vert ? "V" : "H"; }
 
 __attribute__((noinline))
@@ -155,6 +185,40 @@ static void check(int vert, int masked) {
         printf("[CHECK] FAIL vrgather.vx (%s) %s: %d / %d errors; "
                "first at [%d][%d] got %d exp %d\n",
                mode_str(vert), kind, errors, ROWS * COLS, br, bc, bgot, bexp);
+    }
+}
+
+__attribute__((noinline))
+static void check_back_to_back(void) {
+    int errors = 0;
+    int br = -1, bc = -1, which = -1;
+    int8_t bgot = 0, bexp = 0;
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            int8_t exp_a = (int8_t)((r + RS1) & (COLS - 1));
+            int8_t exp_b = (int8_t)((r + RS1B) & (COLS - 1));
+            int8_t got_a = grid_out[r][c];
+            int8_t got_b = grid_out_b[r][c];
+            if (got_a != exp_a) {
+                if (errors == 0) {
+                    br = r; bc = c; which = 0; bgot = got_a; bexp = exp_a;
+                }
+                errors++;
+            }
+            if (got_b != exp_b) {
+                if (errors == 0) {
+                    br = r; bc = c; which = 1; bgot = got_b; bexp = exp_b;
+                }
+                errors++;
+            }
+        }
+    }
+    if (errors == 0) {
+        printf("[CHECK] PASS vrgather.vx (H) back-to-back\n");
+    } else {
+        printf("[CHECK] FAIL vrgather.vx (H) back-to-back: %d / %d errors; "
+               "first in dst%d at [%d][%d] got %d exp %d\n",
+               errors, ROWS * COLS * 2, which, br, bc, bgot, bexp);
     }
 }
 
@@ -192,6 +256,15 @@ void test(void) {
     print_grid(4, &grid_out[0][0]);
     print_expected(4, /*vert=*/1, /*masked=*/1);
     check(/*vert=*/1, /*masked=*/1);
+
+    printf("\n--- TEST 5: vrgather.vx (H, back-to-back unmasked) ---\n");
+    clear_grid_out();
+    k_vrgather_vx_back_to_back(&grid_in[0][0], &grid_out[0][0], &grid_out_b[0][0], COLS);
+    printf("First gather output:\n");
+    print_grid(4, &grid_out[0][0]);
+    printf("Second gather output:\n");
+    print_grid(4, &grid_out_b[0][0]);
+    check_back_to_back();
 
     printf("\n=== vrgather.vx test done ===\n");
 }

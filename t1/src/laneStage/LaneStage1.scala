@@ -46,7 +46,8 @@ class LaneStage1Enqueue(parameter: LaneParameter, isLastSlot: Boolean) extends B
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
   val maskE0:            Bool                      = Bool()
@@ -92,7 +93,8 @@ class LaneStage1Dequeue(parameter: LaneParameter, isLastSlot: Boolean) extends B
       parameter.datapathWidth,
       parameter.groupNumberBits,
       parameter.laneNumberBits,
-      parameter.eLen
+      parameter.eLen,
+      parameter.rowCounterBits
     )
   )
   val maskE0:            Bool                      = Bool()
@@ -103,7 +105,8 @@ class LaneStage1Dequeue(parameter: LaneParameter, isLastSlot: Boolean) extends B
 @instantiable
 class LaneStage1(parameter: LaneParameter, isLastSlot: Boolean) extends Module {
   val readRequestType: VRFReadRequest =
-    new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits)
+    new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits,
+      parameter.rowCounterBits)
   @public
   val enqueue    = IO(Flipped(Decoupled(new LaneStage1Enqueue(parameter, isLastSlot))))
   @public
@@ -143,7 +146,8 @@ class LaneStage1(parameter: LaneParameter, isLastSlot: Boolean) extends Module {
   val readRequestQueueSizeAfterCheck:  Int = 4
   val dataQueueSize:                   Int = 4
   val vrfReadEntryType =
-    new VRFReadQueueEntry(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.chainingSize)
+    new VRFReadQueueEntry(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.chainingSize,
+      parameter.rowCounterBits)
 
   // read request queue for vs1 vs2 vd
   val queueAfterCheck1:  QueueIO[VRFReadQueueEntry] =
@@ -190,15 +194,21 @@ class LaneStage1(parameter: LaneParameter, isLastSlot: Boolean) extends Module {
     Seq(queueAfterCheck1, queueAfterCheck2, queueAfterCheckVd) ++
       queueAfterCheckLSB ++ queueAfterCheckMSB
   val allReadQueueReady:   Bool                            = beforeCheckQueueVec.map(_.enq.ready).reduce(_ && _)
+  // Bon2D Phase 3b: when the request entered as a cross-lane gather secondPipe
+  // (LaneStage0 bypassDeqValid path), forward the narrow-vertical opt-in and
+  // per-element rowOverride from pipeForSecondPipe into the VRF read queue so
+  // the destination's SharedVRF read uses the narrow path. Otherwise default
+  // to legacy wide horizontal/vertical (Phase 1).
+  val isSecondPipeReq: Bool = enqueue.bits.secondPipe.getOrElse(false.B)
+  val secondPipeNarrowVertical: Bool =
+    enqueue.bits.pipeForSecondPipe.map(_.narrowVertical).getOrElse(false.B)
+  val secondPipeRowOverride: UInt =
+    enqueue.bits.pipeForSecondPipe.map(_.rowOverride).getOrElse(0.U)
   beforeCheckQueueVec.foreach { q =>
     q.enq.bits.instructionIndex := enqueue.bits.instructionIndex
     q.enq.bits.groupIndex       := enqueue.bits.groupCounter
-    // Phase 1 default. The lane's vector compute reads operate on full
-    // datapath-wide chunks per cycle, which fit the wide horizontal/vertical
-    // overlay; the narrow-vertical path is reserved for the mask unit's
-    // per-element scatter, plumbed there in Phase 3.
-    q.enq.bits.narrowVertical   := false.B
-    q.enq.bits.rowOverride      := 0.U
+    q.enq.bits.narrowVertical   := isSecondPipeReq && secondPipeNarrowVertical
+    q.enq.bits.rowOverride      := Mux(isSecondPipeReq, secondPipeRowOverride, 0.U)
   }
 
   enqueue.ready := allReadQueueReady && pipeQueue.enq.ready

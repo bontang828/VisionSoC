@@ -30,7 +30,8 @@ class MaskedWrite(parameter: LaneParameter) extends Module {
   @public
   val vrfReadRequest: DecoupledIO[VRFReadRequest]  = IO(
     Decoupled(
-      new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits)
+      new VRFReadRequest(parameter.vrfParam.regNumBits, parameter.vrfOffsetBits, parameter.instructionIndexBits,
+        parameter.rowCounterBits)
     )
   )
 
