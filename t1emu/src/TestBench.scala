@@ -71,6 +71,7 @@ class TestBench(val parameter: T1Parameter)
 
   // uint32_t -> svBitVecVal -> reference type with 7 length.
   class Issue  extends Bundle {
+    val verticalMode: UInt = UInt(32.W)
     val instruction: UInt = UInt(32.W)
     val src1Data:    UInt = UInt(32.W)
     val src2Data:    UInt = UInt(32.W)
@@ -127,6 +128,7 @@ class TestBench(val parameter: T1Parameter)
   dut.io.issue.bits.vl          := issue.vl
   dut.io.issue.bits.vstart      := issue.vstart
   dut.io.issue.bits.vcsr        := issue.vcsr
+  dut.io.issue.bits.verticalMode := issue.verticalMode(0).asBool
   dut.io.issue.valid            := issue.meta === 1.U
 
   val retire = Wire(new Retire)

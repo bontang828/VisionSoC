@@ -565,12 +565,11 @@ class T1(val parameter: T1Parameter)
   requestRegCSR.tm  := requestReg.bits.issue.vtype(29, 16)
   requestRegCSR.tew := requestReg.bits.issue.vtype(5, 3) << requestReg.bits.issue.vtype(10, 9)
 
-  // Bon2D: vertical-mode flag from scalar-core-agnostic top-level input io.verticalMode.
-  // The t1emu CSR mirror updates at the same boundary as the vector issue pulse,
-  // so sampling only on io.issue.fire can capture the previous mode for the
-  // whole replay. Use the live CSR mirror for replay-time VRF/mask routing.
+  // Bon2D: vertical-mode flag from the per-instruction issue payload. The live
+  // io.verticalMode side-channel is racy for LSU because vle/vse drain after
+  // later CSR writes can update the mirror.
   val verticalModeReg: Bool = io.verticalMode
-  requestRegCSR.verticalMode := verticalModeReg
+  requestRegCSR.verticalMode := requestReg.bits.issue.verticalMode
 
   // connect virtual channel
 

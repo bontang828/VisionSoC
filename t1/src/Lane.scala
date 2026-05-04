@@ -1307,7 +1307,8 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
     entranceControl.instructionFinished && !laneRequest.bits.decodeResult(Decoder.readOnly) && (writeCount === 0.U)
   val needWaitCrossWrite:                 Bool = laneRequest.bits.decodeResult(Decoder.crossWrite) && csrInterface.vl.orR
   // normal instruction, LSU instruction will be report to VRF.
-  vrf.instructionWriteReport.valid                       := laneRequest.bits.issueInst && (!instructionFinishAndNotReportByTop || needWaitCrossWrite)
+  vrf.instructionWriteReport.valid                       := laneRequest.bits.issueInst &&
+    (laneRequest.bits.loadStore || !instructionFinishAndNotReportByTop || needWaitCrossWrite)
   vrf.instructionWriteReport.bits.instIndex              := laneRequest.bits.instructionIndex
   vrf.instructionWriteReport.bits.vd.bits                := laneRequest.bits.vd
   vrf.instructionWriteReport.bits.vd.valid               := !laneRequest.bits.decodeResult(
@@ -1327,6 +1328,7 @@ class Lane(val parameter: LaneParameter) extends Module with SerializableModule[
       laneRequest.bits.decodeResult(Decoder.maskPipeUop) === BitPat("b0001?")
   vrf.instructionWriteReport.bits.ls                     := laneRequest.bits.loadStore
   vrf.instructionWriteReport.bits.st                     := laneRequest.bits.store
+  vrf.instructionWriteReport.bits.verticalMode           := csrInterface.verticalMode
   vrf.instructionWriteReport.bits.crossWrite             := laneRequest.bits.decodeResult(Decoder.crossWrite)
   vrf.instructionWriteReport.bits.crossRead              := laneRequest.bits.decodeResult(Decoder.crossRead)
   vrf.instructionWriteReport.bits.unalignedReadVs1       := laneRequest.bits.decodeResult(

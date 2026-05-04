@@ -219,14 +219,16 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     )
     val recordValidVec: Seq[Bool] = chainingRecord.map(r => !r.bits.elementMask.andR && r.valid)
 
-    // Bon2D: lookup whether an in-flight instruction is an LSU op (vle/vse).
-    // Used to keep LSU traffic on the horizontal bank path even when verticalMode
-    // is asserted, so the vertical permutation only applies to lane-side compute.
-    // Without this, vle scatters into vertical banks and vse gathers them back -
-    // the two cancel and the slideup result becomes byte-identical to horizontal.
+    // Bon2D: lookup whether an in-flight instruction is an LSU op (vle/vse)
+    // and the verticalMode snapshot captured when that instruction reached Lane.
     def isLSUInst(instIdx: UInt): Bool =
       chainingRecord
         .map(r => r.valid && (r.bits.instIndex === instIdx) && (r.bits.ls || r.bits.st))
+        .reduce(_ || _)
+
+    def instVerticalMode(instIdx: UInt): Bool =
+      chainingRecord
+        .map(r => r.valid && (r.bits.instIndex === instIdx) && r.bits.verticalMode)
         .reduce(_ || _)
 
     // ------ Read check (chaining hazard detection, same logic as VRF.scala) ----
@@ -359,7 +361,9 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
         // Their bank_h must NOT contribute to bankCorrect/bankReadF, otherwise
         // hReadAddr's Mux1H would steer the SRAM port to the wide-vert's bank_h
         // address even though that read isn't actually firing.
-        val isWideVertReq_i  = !v.bits.narrowVertical && verticalMode && !isLSUInst(v.bits.instructionIndex)
+        val readTakeVertical_i =
+          Mux(isLSUInst(v.bits.instructionIndex), instVerticalMode(v.bits.instructionIndex), verticalMode)
+        val isWideVertReq_i  = !v.bits.narrowVertical && readTakeVertical_i
         val wideVertPreempt  = isWideVertReq_i && anyNarrowReq
         val bankCorrect = Mux(validCorrect && !wideVertPreempt, bank, 0.U(parameter.numBanks.W))
 
@@ -410,16 +414,15 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     val firstReadReq:     VRFReadRequest = Mux1H(firstReadOH, readRequests.map(_.bits))
     val firstReadIdxPipe: UInt = Pipe(true.B, firstReadOH, parameter.vrfReadLatency).bits
 
-    // Bon2D: only fire the vertical read path for lane-side requests. LSU vse
-    // reads must take the horizontal bank path so they undo the same horizontal
-    // layout used by vle.
     val firstReadFromLSU: Bool = isLSUInst(firstReadReq.instructionIndex)
+    val firstReadVertEffective: Bool =
+      Mux(firstReadFromLSU, instVerticalMode(firstReadReq.instructionIndex), verticalMode)
     // Bon2D Phase 3b: narrow-vertical reads preempt wide-vertical reads in the
     // same cycle. When any port has a narrow request valid, fall through to the
     // horizontal SRAM-port path (which carries narrow's per-port nAddrPerPort
     // via the bankReadF Mux1H). Wide-vert reads concurrent with narrow are
     // stalled below by the per-port r.ready logic.
-    val useVerticalRead:  Bool = verticalMode && !firstReadFromLSU && !anyNarrowReq
+    val useVerticalRead:  Bool = firstReadVertEffective && !anyNarrowReq
     val vReadFire: Bool = useVerticalRead && anyReadValid && sramReady
     // vsStore replaces the bottom cVsOffBits of the requested vs with the column-derived cVsOff.
     val vsStoreUpper: UInt =
@@ -465,7 +468,7 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     // read is pending on any of the 8 potential banks, even if the mask would
     // gate that bank out. Tightening this is a perf opt, not a correctness fix.
     val writeWouldScatter: Bool =
-      verticalMode && !isLSUInst(write.bits.instructionIndex)
+      Mux(isLSUInst(write.bits.instructionIndex), instVerticalMode(write.bits.instructionIndex), verticalMode)
     val allBanksMask: UInt = ((BigInt(1) << parameter.numBanks) - 1).U(parameter.numBanks.W)
     val verticalOccupy: UInt = Mux(vReadFire, allBanksMask, 0.U(parameter.numBanks.W))
     val effectiveOccupied: UInt = Mux(useVerticalRead, verticalOccupy, firstOccupied)
@@ -483,11 +486,22 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     // Vertical write scatter: latched write bits live in writePipe. Interpret write as
     // vertical column-c store when verticalMode. The 8 bytes of writePipe.data fan out to
     // 8 banks at distinct rc_i, each at the same byte slot cByte_s = cByte.
-    // Bon2D: only fire the vertical write path for lane-side writebacks. LSU vle
-    // writes must take the horizontal bank path so vse can undo them later.
     val writeFromLSU:     Bool = isLSUInst(writePipe.bits.instructionIndex)
-    val useVerticalWrite: Bool = verticalMode && !writeFromLSU
+    val useVerticalWrite: Bool =
+      Mux(writeFromLSU, instVerticalMode(writePipe.bits.instructionIndex), verticalMode)
     val vWriteFire:  Bool = useVerticalWrite && writePipe.valid
+    when(writePipe.valid && writeFromLSU) {
+      when(useVerticalWrite) {
+        assert(instVerticalMode(writePipe.bits.instructionIndex),
+          "LSU on vertical write path but its snapshot is 0 - " +
+            "gate is reading live verticalMode instead of snapshot")
+      }
+      when(instVerticalMode(writePipe.bits.instructionIndex)) {
+        assert(useVerticalWrite,
+          "LSU snapshot is vertical but gate routed horizontal - " +
+            "gate is reading live verticalMode instead of snapshot")
+      }
+    }
     // Mirror of vsStore/rcBase but for the write side.
     val vsStoreWUpper: UInt =
       if (parameter.cVsOffBits == parameter.regNumBits) 0.U(0.W)
@@ -597,7 +611,7 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
       // (useVerticalRead=false because anyNarrowReq), they must stall until
       // the narrow clears. Routing them through hReady would be wrong because
       // hResult returns horizontal-layout data, not the vertical fold.
-      val isWideVerticalReq = verticalMode && !firstReadFromLSU && !r.bits.narrowVertical
+      val isWideVerticalReq = firstReadVertEffective && !r.bits.narrowVertical
       r.ready := Mux(isWideVerticalReq,
                      useVerticalRead && vReady(i),
                      hReady(i))

@@ -79,6 +79,7 @@ pub(crate) struct IssueData {
   pub src2_bits: u32,
   pub src1_bits: u32,
   pub instruction_bits: u32,
+  pub vertical_mode: u32,
 }
 
 pub static ISSUE_NOT_VALID: u32 = 0;

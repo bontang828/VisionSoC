@@ -403,6 +403,7 @@ class VRFWriteReport(param: VRFParam) extends Bundle {
   val instIndex:        UInt          = UInt(param.instructionIndexBits.W)
   val ls:               Bool          = Bool()
   val st:               Bool          = Bool()
+  val verticalMode:     Bool          = Bool()
   val gather:           Bool          = Bool()
   // unaligned read vs1: compress read vs1 as 1bit, gather16 read vs1 as 16bit
   val unalignedReadVs1: Bool          = Bool()
@@ -653,6 +654,9 @@ class T1Issue(xLen: Int, vlWidth: Int) extends Bundle {
   val vl:      UInt = UInt(32.W)
   val vstart:  UInt = UInt(32.W)
   val vcsr:    UInt = UInt(32.W)
+
+  // Bon2D vertical LSU: per-instruction snapshot of CSR 0x7c0 from the issue payload.
+  val verticalMode: Bool = Bool()
 }
 
 object T1Issue {

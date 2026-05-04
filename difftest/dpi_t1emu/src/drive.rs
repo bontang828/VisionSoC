@@ -408,6 +408,7 @@ impl Driver {
           vstart: se.vstart as u32,
           vcsr: se.vcsr(),
           meta: ISSUE_VALID,
+          vertical_mode: if self.vertical_mode { 1 } else { 0 },
         }
       };
     }
