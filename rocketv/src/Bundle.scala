@@ -1595,6 +1595,8 @@ class T1Issue(xLen: Int, vlWidth: Int) extends Bundle {
   val vl:          UInt = UInt(32.W)
   val vstart:      UInt = UInt(32.W)
   val vcsr:        UInt = UInt(32.W)
+  // Bon2D vertical LSU: snapshot CSR 0x7c0 with the rest of the vector issue payload.
+  val verticalMode: Bool = Bool()
 }
 
 object T1Issue {

@@ -1566,6 +1566,7 @@ class Rocket(val parameter: RocketParameter)
       t1IssueQueue.enq.bits.vl          := csr.io.csrToVector.get.vl
       t1IssueQueue.enq.bits.vstart      := csr.io.csrToVector.get.vstart
       t1IssueQueue.enq.bits.vcsr        := csr.io.csrToVector.get.vcsr
+      t1IssueQueue.enq.bits.verticalMode := csr.io.csrToVector.get.verticalMode
       t1.issue.valid                    := t1IssueQueue.deq.valid
       t1.issue.bits                     := t1IssueQueue.deq.bits
       t1IssueQueue.deq.ready            := t1.issue.ready
