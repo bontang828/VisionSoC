@@ -1583,8 +1583,6 @@ class FrontendBundle(
 class RocketCoreToT1(xLen: Int, vlWidth: Int) extends Bundle {
   val issue:        DecoupledIO[T1Issue] = Decoupled(new T1Issue(xLen, vlWidth))
   val retire:       T1Retire             = Flipped(new T1Retire(xLen))
-  /** Bon2D: CSR 0x7C0 bit 0 exported to T1 as an opaque flag (sticky until next csrw 0x7C0). */
-  val verticalMode: Bool                 = Output(Bool())
 }
 
 class T1Issue(xLen: Int, vlWidth: Int) extends Bundle {

@@ -231,10 +231,6 @@ impl Driver {
     }
   }
 
-  pub(crate) fn get_vertical_mode(&self) -> bool {
-    self.vertical_mode
-  }
-
   pub(crate) fn axi_read_high_bandwidth(&mut self, addr: u32, arsize: u64) -> AxiReadPayload {
     let size = 1 << arsize;
     let data = self.shadow_mem.read_mem_axi(addr, size, self.dlen / 8);

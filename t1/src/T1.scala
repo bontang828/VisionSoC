@@ -437,8 +437,6 @@ class T1Interface(parameter: T1Parameter) extends Record {
   def reset        = elements("reset").asInstanceOf[Bool]
   def issue        = elements("issue").asInstanceOf[DecoupledIO[T1Issue]]
   def retire       = elements("retire").asInstanceOf[T1Retire]
-  /** Bon2D: scalar-core-agnostic vertical-mode select. Integrator drives from CSR 0x7C0 bit 0 (or equivalent). */
-  def verticalMode = elements("verticalMode").asInstanceOf[Bool]
   def highBandwidthLoadStorePort: AXI4RWIrrevocable    =
     elements("highBandwidthLoadStorePort").asInstanceOf[AXI4RWIrrevocable]
   def indexedLoadStorePort:       AXI4RWIrrevocable    = elements("indexedLoadStorePort").asInstanceOf[AXI4RWIrrevocable]
@@ -450,7 +448,6 @@ class T1Interface(parameter: T1Parameter) extends Record {
       "reset"                      -> Input(Bool()),
       "issue"                      -> Flipped(Decoupled(new T1Issue(parameter.xLen, parameter.vLen))),
       "retire"                     -> new T1Retire(parameter.xLen),
-      "verticalMode"               -> Input(Bool()),
       "highBandwidthLoadStorePort" -> new AXI4RWIrrevocable(parameter.axi4BundleParameterWithArbiter), //made to support multiple LSU in 2D
       "indexedLoadStorePort"       -> new AXI4RWIrrevocable(parameter.axi4BundleParameterWithArbiter.copy(dataWidth = 32)), //made to support multiple LSU in 2D
       "om"                         -> Output(Property[AnyClassType]()),
@@ -565,10 +562,7 @@ class T1(val parameter: T1Parameter)
   requestRegCSR.tm  := requestReg.bits.issue.vtype(29, 16)
   requestRegCSR.tew := requestReg.bits.issue.vtype(5, 3) << requestReg.bits.issue.vtype(10, 9)
 
-  // Bon2D: vertical-mode flag from the per-instruction issue payload. The live
-  // io.verticalMode side-channel is racy for LSU because vle/vse drain after
-  // later CSR writes can update the mirror.
-  val verticalModeReg: Bool = io.verticalMode
+  // Bon2D: vertical-mode flag from the per-instruction issue payload.
   requestRegCSR.verticalMode := requestReg.bits.issue.verticalMode
 
   // connect virtual channel
@@ -788,7 +782,7 @@ class T1(val parameter: T1Parameter)
 
   //Connect rowCounter and verticalMode to all SharedVRFs
   sharedVRF2D.foreach(_.rowCounter := replayFSM.rowCounter)
-  sharedVRF2D.foreach(_.verticalMode := verticalModeReg)
+  sharedVRF2D.foreach(_.verticalMode := requestRegCSR.verticalMode)
 
   // 0 0 -> don't update
   // 0 1 -> update to false
@@ -798,10 +792,11 @@ class T1(val parameter: T1Parameter)
   // time multiplex: only release requestReg on last row
   //requestReg.valid := Mux(io.issue.fire ^ requestRegDequeue.fire, io.issue.fire, requestReg.valid)
   requestReg.valid := Mux(io.issue.fire ^ replayFSM.lastRowFire, io.issue.fire, requestReg.valid)
+  val issueWritebackDrained: Bool = Wire(Bool())
   
   // time multiplex: doesn't support back-to-back pipelining, so we can remove the `|| requestRegDequeue.ready` condition to ensure repeating row can obtain the same instruction data at requestReg
   //io.issue.ready          := !requestReg.valid || requestRegDequeue.ready
-  io.issue.ready          := !requestReg.valid
+  io.issue.ready          := !requestReg.valid && issueWritebackDrained
   // manually maintain a queue for requestReg.
   requestRegDequeue.bits  := requestReg.bits.issue
   requestRegDequeue.valid := requestReg.valid
@@ -1417,8 +1412,8 @@ class T1(val parameter: T1Parameter)
     maskUnit.io.gatherRowDone                 := replayRowDone
     maskUnit.io.gatherReplayBusy              := replayFSM.busy
     maskUnit.io.gatherRowCounter              := replayFSM.rowCounter
-    // Bon2D: per-instruction vertical mode flag, latched on issue (verticalModeReg).
-    maskUnit.io.verticalMode                  := verticalModeReg
+    // Bon2D: per-instruction vertical mode flag from the issue payload snapshot.
+    maskUnit.io.verticalMode                  := requestRegCSR.verticalMode
   }
 
   // io.highBandwidthLoadStorePort <> lsu.axi4Port  
@@ -1475,6 +1470,7 @@ class T1(val parameter: T1Parameter)
   replayFSM.executionReady := executionReady
   requestRegDequeue.ready := executionReady && slotReady && (!gatherNeedRead || maskUnitGatherDataValid) &&
     tokenManager.issueAllow && instructionIndexFree && olderCheck && !replayFSM.busy
+  issueWritebackDrained := slots.map(_.state.idle).reduce(_ && _) && !replayFSM.busy
 
   // instructionToSlotOH := Mux(requestRegDequeue.fire, slotToEnqueue, 0.U)
   // time multiplex: slot allocation on first row only

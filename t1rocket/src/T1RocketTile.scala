@@ -524,8 +524,6 @@ class T1RocketTile(val parameter: T1RocketTileParameter)
   // match connect
   t1.io.issue <> rocket.io.t1.get.issue
   rocket.io.t1.get.retire <> t1.io.retire
-  // Bon2D: drive T1 vertical-mode from Rocket CSR 0x7C0 bit 0.
-  t1.io.verticalMode := rocket.io.t1.get.verticalMode
   // used by trace module
   rocket.io.bpwatch    := DontCare
   // don't use for now, this is design for report the custom cease status.

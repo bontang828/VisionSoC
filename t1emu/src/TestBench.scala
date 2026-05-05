@@ -103,13 +103,6 @@ class TestBench(val parameter: T1Parameter)
   val doIssue: Bool = dut.io.issue.ready && !fence && hasBeenReset
   outstanding := outstanding + (RegNext(doIssue) && (issue.meta === 1.U)) - dut.io.issue.valid
   val plusargVertical: Bool = PlusArgsTest("t1_vertical_mode")
-  val verticalModeReg: Bool = RegInit(false.B)
-  val verticalModeDpi: UInt = RawClockedNonVoidFunctionCall("t1_cosim_get_vertical_mode", UInt(32.W))(
-    clock,
-    doIssue
-  )
-  when(doIssue) { verticalModeReg := verticalModeDpi(0).asBool }
-  dut.io.verticalMode := plusargVertical || verticalModeReg
   // TODO: refactor driver to spawn 3 scoreboards for record different retirement.
   val t1Probe = probe.read(dut.io.t1Probe)
   fence                         := Mux(RegNext(doIssue), issue.meta === 2.U, fence && !t1Probe.retireValid && !(outstanding === 0.U))
@@ -128,7 +121,7 @@ class TestBench(val parameter: T1Parameter)
   dut.io.issue.bits.vl          := issue.vl
   dut.io.issue.bits.vstart      := issue.vstart
   dut.io.issue.bits.vcsr        := issue.vcsr
-  dut.io.issue.bits.verticalMode := issue.verticalMode(0).asBool
+  dut.io.issue.bits.verticalMode := plusargVertical || issue.verticalMode(0).asBool
   dut.io.issue.valid            := issue.meta === 1.U
 
   val retire = Wire(new Retire)

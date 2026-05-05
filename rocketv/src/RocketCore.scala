@@ -1570,8 +1570,6 @@ class Rocket(val parameter: RocketParameter)
       t1.issue.valid                    := t1IssueQueue.deq.valid
       t1.issue.bits                     := t1IssueQueue.deq.bits
       t1IssueQueue.deq.ready            := t1.issue.ready
-      // Bon2D: export sticky CSR 0x7C0 bit 0 directly - T1 latches it at its own io.issue.fire.
-      t1.verticalMode                   := csr.io.csrToVector.get.verticalMode
       // For each different retirements, it should maintain different scoreboard
       val t1CSRRetireQueue: QueueIO[T1CSRRetire] =
         Queue.io(chiselTypeOf(t1.retire.csr.bits), maxCount)
