@@ -34,3 +34,4 @@ vivado*.jou
 vivado*.log
 mmio-event.jsonl
 wave_debug.json
+*.lock
