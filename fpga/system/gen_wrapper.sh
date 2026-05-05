@@ -48,7 +48,9 @@ module t1_fpga_top (
     input  wire        aresetn,
 
     // AXI4-Lite Slave (from PS GP0 - control plane)
-    input  wire [6:0]  s_axi_ctrl_awaddr,
+    // ADDR_WIDTH bumped 7 -> 8 to fit 0x44..0x54 (VERTICAL_MODE + perf regs);
+    // BD assigns 64K which auto-truncates to these 8 bits.
+    input  wire [7:0]  s_axi_ctrl_awaddr,
     input  wire [2:0]  s_axi_ctrl_awprot,
     input  wire        s_axi_ctrl_awvalid,
     output wire        s_axi_ctrl_awready,
@@ -59,7 +61,7 @@ module t1_fpga_top (
     output wire [1:0]  s_axi_ctrl_bresp,
     output wire        s_axi_ctrl_bvalid,
     input  wire        s_axi_ctrl_bready,
-    input  wire [6:0]  s_axi_ctrl_araddr,
+    input  wire [7:0]  s_axi_ctrl_araddr,
     input  wire [2:0]  s_axi_ctrl_arprot,
     input  wire        s_axi_ctrl_arvalid,
     output wire        s_axi_ctrl_arready,
@@ -160,6 +162,7 @@ module t1_fpga_top (
     wire [31:0] issue_bits_vl;
     wire [31:0] issue_bits_vstart;
     wire [31:0] issue_bits_vcsr;
+    wire        issue_bits_verticalMode;
 
     wire        retire_rd_valid;
     wire [4:0]  retire_rd_bits_rdAddress;
@@ -210,6 +213,7 @@ module t1_fpga_top (
         .issue_bits_vl              (issue_bits_vl),
         .issue_bits_vstart          (issue_bits_vstart),
         .issue_bits_vcsr            (issue_bits_vcsr),
+        .issue_bits_verticalMode    (issue_bits_verticalMode),
         // Retire
         .retire_rd_valid            (retire_rd_valid),
         .retire_rd_bits_rdAddress   (retire_rd_bits_rdAddress),
@@ -239,6 +243,7 @@ module t1_fpga_top (
         .issue_bits_vl              (issue_bits_vl),
         .issue_bits_vstart          (issue_bits_vstart),
         .issue_bits_vcsr            (issue_bits_vcsr),
+        .issue_bits_verticalMode    (issue_bits_verticalMode),
         // Retire
         .retire_rd_valid            (retire_rd_valid),
         .retire_rd_bits_rdAddress   (retire_rd_bits_rdAddress),

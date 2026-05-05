@@ -104,7 +104,7 @@ set_property -dict [list \
     CONFIG.PSU__MAXIGP0__DATA_WIDTH     {32} \
     CONFIG.PSU__SAXIGP0__DATA_WIDTH     {128} \
     CONFIG.PSU__SAXIGP2__DATA_WIDTH     {32} \
-    CONFIG.PSU__CRL_APB__PL0_REF_CTRL__FREQMHZ {80} \
+    CONFIG.PSU__CRL_APB__PL0_REF_CTRL__FREQMHZ {60} \
 ] [get_bd_cells zynq_ps]
 
 

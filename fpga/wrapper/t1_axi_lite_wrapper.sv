@@ -29,12 +29,17 @@
 //                            [1] enable IRQ on csr FIFO non-empty
 //                            [2] enable IRQ on mem_count > 0
 //  0x40   IRQ_STATUS    RO:  [0] rd pending, [1] csr pending, [2] mem pending
+//  0x44   VERTICAL_MODE RW:  [0] vertical_mode, latched on issue handshake (drives issue_bits_verticalMode)
+//  0x48   PERF_TAG      W:   [7:0] tag; nonzero = START, 0 = STOP (mimics simulator place_counter)
+//  0x4C   PERF_DELTA    RO:  [31:0] cycles between most recent START / STOP write pair
+//  0x50   PERF_CYCLES_LO RO: [31:0] low 32b of free-running aclk counter
+//  0x54   PERF_CYCLES_HI RO: [31:0] high 32b of free-running aclk counter
 
 
 
 
 module t1_axi_lite_wrapper #(
-    parameter int ADDR_WIDTH  = 7,//128 bytes register space (17 registers)
+    parameter int ADDR_WIDTH  = 8,//256 bytes register space, must cover 0x54
     parameter int DATA_WIDTH  = 32,
     parameter int RD_FIFO_DEPTH  = 4, //match chainingSize, current design have chaining no more than 4 instructions
     parameter int CSR_FIFO_DEPTH = 4
@@ -77,6 +82,7 @@ module t1_axi_lite_wrapper #(
     output logic [31:0]             issue_bits_vl,
     output logic [31:0]             issue_bits_vstart,
     output logic [31:0]             issue_bits_vcsr,
+    output logic                    issue_bits_verticalMode,
 
     //T1 Retire Interface (directly from T1 ports)
     input  logic                    retire_rd_valid,
@@ -100,6 +106,7 @@ module t1_axi_lite_wrapper #(
     logic [31:0] reg_vl;
     logic [31:0] reg_vstart;
     logic [31:0] reg_vcsr;
+    logic        reg_vertical_mode;
     logic        issue_pending;  //issue_valid held high until ready
 
     //Drive T1 issue port
@@ -111,6 +118,7 @@ module t1_axi_lite_wrapper #(
     assign issue_bits_vl         = reg_vl;
     assign issue_bits_vstart     = reg_vstart;
     assign issue_bits_vcsr       = reg_vcsr;
+    assign issue_bits_verticalMode = reg_vertical_mode;
     //issue_pending is driven by the CTRL register write block below
 
 
@@ -297,29 +305,31 @@ module t1_axi_lite_wrapper #(
     assign s_axi_bresp = 2'b00;  // OKAY
 
     //Register writes
-    logic [4:0] wr_addr;
-    assign wr_addr = aw_addr_reg[6:2];
+    logic [5:0] wr_addr;
+    assign wr_addr = aw_addr_reg[7:2];
 
     always_ff @(posedge aclk or negedge aresetn) begin
         if (!aresetn) begin
-            reg_instruction <= '0;
-            reg_rs1_data    <= '0;
-            reg_rs2_data    <= '0;
-            reg_vtype       <= '0;
-            reg_vl          <= '0;
-            reg_vstart      <= '0;
-            reg_vcsr        <= '0;
-            reg_irq_en      <= '0;
+            reg_instruction   <= '0;
+            reg_rs1_data      <= '0;
+            reg_rs2_data      <= '0;
+            reg_vtype         <= '0;
+            reg_vl            <= '0;
+            reg_vstart        <= '0;
+            reg_vcsr          <= '0;
+            reg_irq_en        <= '0;
+            reg_vertical_mode <= 1'b0;
         end else if (wr_en) begin
             case (wr_addr)
-                5'h01: reg_instruction <= w_data_reg;       //0x04
-                5'h02: reg_rs1_data    <= w_data_reg;       //0x08
-                5'h03: reg_rs2_data    <= w_data_reg;       //0x0C
-                5'h04: reg_vtype       <= w_data_reg;       //0x10
-                5'h05: reg_vl          <= w_data_reg;       //0x14
-                5'h06: reg_vstart      <= w_data_reg;       //0x18
-                5'h07: reg_vcsr        <= w_data_reg;       //0x1C
-                5'h0F: reg_irq_en      <= w_data_reg[2:0];  //0x3C
+                6'h01: reg_instruction   <= w_data_reg;       //0x04
+                6'h02: reg_rs1_data      <= w_data_reg;       //0x08
+                6'h03: reg_rs2_data      <= w_data_reg;       //0x0C
+                6'h04: reg_vtype         <= w_data_reg;       //0x10
+                6'h05: reg_vl            <= w_data_reg;       //0x14
+                6'h06: reg_vstart        <= w_data_reg;       //0x18
+                6'h07: reg_vcsr          <= w_data_reg;       //0x1C
+                6'h0F: reg_irq_en        <= w_data_reg[2:0];  //0x3C
+                6'h11: reg_vertical_mode <= w_data_reg[0];    //0x44 VERTICAL_MODE
                 default: ;
             endcase
         end
@@ -331,12 +341,48 @@ module t1_axi_lite_wrapper #(
             issue_pending <= 1'b0;
         else if (issue_pending && issue_ready)
             issue_pending <= 1'b0;
-        else if (wr_en && wr_addr == 5'h00 && w_data_reg[0])
+        else if (wr_en && wr_addr == 6'h00 && w_data_reg[0])
             issue_pending <= 1'b1;
     end
 
     //MEM_COUNT W1C (write 1 to 0x38 bit[0] to decrement)
-    assign mem_count_dec = wr_en && (wr_addr == 5'h0E) && w_data_reg[0];
+    assign mem_count_dec = wr_en && (wr_addr == 6'h0E) && w_data_reg[0];
+
+    //Free-running aclk cycle counter (64b). Used by PERF_CYCLES_LO/HI and as the source for perf delta.
+    logic [63:0] perf_cycles;
+    always_ff @(posedge aclk or negedge aresetn) begin
+        if (!aresetn) perf_cycles <= '0;
+        else          perf_cycles <= perf_cycles + 64'b1;
+    end
+
+    //Tag-driven perf delta: writing nonzero tag = START, writing 0 = STOP.
+    //perf_tag_w is the new (combinational) tag value being written this cycle;
+    //perf_tag is the latched tag, so the START/STOP edges below compare new vs latched.
+    logic [7:0]  perf_tag_w;
+    logic        perf_tag_we;
+    logic [7:0]  perf_tag;
+    logic [63:0] perf_start;
+    logic [31:0] perf_delta;
+
+    assign perf_tag_we = wr_en && (wr_addr == 6'h12);
+    assign perf_tag_w  = w_data_reg[7:0];
+
+    always_ff @(posedge aclk or negedge aresetn) begin
+        if (!aresetn) begin
+            perf_tag    <= '0;
+            perf_start  <= '0;
+            perf_delta  <= '0;
+        end else if (perf_tag_we) begin
+            perf_tag <= perf_tag_w;
+            if (perf_tag == 8'h00 && perf_tag_w != 8'h00) begin
+                //0 -> nonzero edge: START
+                perf_start <= perf_cycles;
+            end else if (perf_tag != 8'h00 && perf_tag_w == 8'h00) begin
+                //nonzero -> 0 edge: STOP, latch delta
+                perf_delta <= perf_cycles[31:0] - perf_start[31:0];
+            end
+        end
+    end
 
 
 
@@ -344,8 +390,8 @@ module t1_axi_lite_wrapper #(
 
 
     // AXI4-Lite Read Channel
-    logic [4:0] rd_addr;
-    assign rd_addr = s_axi_araddr[6:2];
+    logic [5:0] rd_addr;
+    assign rd_addr = s_axi_araddr[7:2];
 
     assign s_axi_arready = !s_axi_rvalid;
 
@@ -356,23 +402,27 @@ module t1_axi_lite_wrapper #(
         end else if (s_axi_arvalid && s_axi_arready) begin
             s_axi_rvalid <= 1'b1;
             case (rd_addr)
-                5'h00: s_axi_rdata <= {29'b0, issue_pending, issue_ready, 1'b0};  //CTRL
-                5'h01: s_axi_rdata <= reg_instruction; //0x04
-                5'h02: s_axi_rdata <= reg_rs1_data; //0x08
-                5'h03: s_axi_rdata <= reg_rs2_data; //0x0C
-                5'h04: s_axi_rdata <= reg_vtype; //0x10
-                5'h05: s_axi_rdata <= reg_vl;//0x14
-                5'h06: s_axi_rdata <= reg_vstart; //0x18
-                5'h07: s_axi_rdata <= reg_vcsr; //0x1C
-                5'h08: s_axi_rdata <= {27'b0, !rd_fifo_empty, 4'(rd_fifo_count)}; //0x20
-                5'h09: s_axi_rdata <= rd_fifo_dout[31:0];  //0x24 RD_POP_DATA (pops FIFO)
-                5'h0A: s_axi_rdata <= {26'b0, rd_meta_latched}; //0x28 RD_POP_META
-                5'h0B: s_axi_rdata <= {27'b0, !csr_fifo_empty, 4'(csr_fifo_count)}; //0x2C
-                5'h0C: s_axi_rdata <= csr_fifo_dout[31:0]; //0x30 CSR_POP (pops FIFO)
-                5'h0D: s_axi_rdata <= csr_fflag_latched; //0x34
-                5'h0E: s_axi_rdata <= {24'b0, mem_count}; //0x38
-                5'h0F: s_axi_rdata <= {29'b0, reg_irq_en}; //0x3C
-                5'h10: s_axi_rdata <= {29'b0, irq_pending}; //0x40
+                6'h00: s_axi_rdata <= {29'b0, issue_pending, issue_ready, 1'b0};  //CTRL
+                6'h01: s_axi_rdata <= reg_instruction; //0x04
+                6'h02: s_axi_rdata <= reg_rs1_data; //0x08
+                6'h03: s_axi_rdata <= reg_rs2_data; //0x0C
+                6'h04: s_axi_rdata <= reg_vtype; //0x10
+                6'h05: s_axi_rdata <= reg_vl;//0x14
+                6'h06: s_axi_rdata <= reg_vstart; //0x18
+                6'h07: s_axi_rdata <= reg_vcsr; //0x1C
+                6'h08: s_axi_rdata <= {27'b0, !rd_fifo_empty, 4'(rd_fifo_count)}; //0x20
+                6'h09: s_axi_rdata <= rd_fifo_dout[31:0];  //0x24 RD_POP_DATA (pops FIFO)
+                6'h0A: s_axi_rdata <= {26'b0, rd_meta_latched}; //0x28 RD_POP_META
+                6'h0B: s_axi_rdata <= {27'b0, !csr_fifo_empty, 4'(csr_fifo_count)}; //0x2C
+                6'h0C: s_axi_rdata <= csr_fifo_dout[31:0]; //0x30 CSR_POP (pops FIFO)
+                6'h0D: s_axi_rdata <= csr_fflag_latched; //0x34
+                6'h0E: s_axi_rdata <= {24'b0, mem_count}; //0x38
+                6'h0F: s_axi_rdata <= {29'b0, reg_irq_en}; //0x3C
+                6'h10: s_axi_rdata <= {29'b0, irq_pending}; //0x40
+                6'h11: s_axi_rdata <= {31'b0, reg_vertical_mode}; //0x44 VERTICAL_MODE
+                6'h13: s_axi_rdata <= perf_delta;          //0x4C PERF_DELTA
+                6'h14: s_axi_rdata <= perf_cycles[31:0];   //0x50 PERF_CYCLES_LO
+                6'h15: s_axi_rdata <= perf_cycles[63:32];  //0x54 PERF_CYCLES_HI
                 default: s_axi_rdata <= '0;
             endcase
         end else if (s_axi_rready) begin
@@ -382,7 +432,7 @@ module t1_axi_lite_wrapper #(
     assign s_axi_rresp = 2'b00; //Okie done
 
     //FIFO pops triggered by read of the POP registers
-    assign rd_fifo_pop  = s_axi_arvalid && s_axi_arready && (rd_addr == 5'h09);//0x24
-    assign csr_fifo_pop = s_axi_arvalid && s_axi_arready && (rd_addr == 5'h0C);//0x30
+    assign rd_fifo_pop  = s_axi_arvalid && s_axi_arready && (rd_addr == 6'h09);//0x24
+    assign csr_fifo_pop = s_axi_arvalid && s_axi_arready && (rd_addr == 6'h0C);//0x30
 
 endmodule
