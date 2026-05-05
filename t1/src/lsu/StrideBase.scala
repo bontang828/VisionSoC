@@ -151,8 +151,12 @@ abstract class StrideBase(param: MSHRParam) extends Module {
   val bufferBaseCacheLineIndex: UInt      = RegInit(0.U(param.cacheLineIndexBits.W))
   val cacheLineIndexInBuffer:   UInt      = RegInit(0.U(bufferCounterBits.W))
 
-  //2D row offset
-  val rowStride: UInt = (csrInterfaceReg.vl << dataEEW).asUInt
+  // 2D row offset. Keep logical memory row pitch independent from the
+  // current instruction vl, so vl=1 stores element 0 of every hardware row
+  // to grid[row][0] instead of packing rows into grid[0][row].
+  val logicalRowElements = 128
+  // val rowStride: UInt = (csrInterfaceReg.vl << dataEEW).asUInt
+  val rowStride: UInt = (logicalRowElements.U << dataEEW).asUInt
   val rowOffset: UInt = rowCounter * rowStride
 
   // 初始偏移

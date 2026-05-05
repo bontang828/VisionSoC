@@ -813,9 +813,13 @@ class SimpleAccessUnit(param: MSHRParam) extends Module with LSUPublic {
 
   s0DequeueFire                        := s1EnqQueue.enq.fire
   s1EnqQueue.enq.valid                 := s0Valid && readReady
-  //2D row offset: rowCounter * (vl << eew) bytes
-  //(vl << eew) is how many bytes for a row
-  val rowStride: UInt = (csrInterfaceReg.vl << lsuRequestReg.instructionInformation.eew).asUInt
+  // 2D row offset: rowCounter * rowPitchBytes.
+  // The logical image row pitch is fixed at 128 elements for the current
+  // 128x128 e8 fabric tests; it must not shrink when an instruction uses
+  // vl=1 to store only element 0 from each hardware row.
+  val logicalRowElements = 128
+  // val rowStride: UInt = (csrInterfaceReg.vl << lsuRequestReg.instructionInformation.eew).asUInt
+  val rowStride: UInt = (logicalRowElements.U << lsuRequestReg.instructionInformation.eew).asUInt
   val rowOffset: UInt = rowCounter * rowStride
   s1EnqQueue.enq.bits.address          := lsuRequestReg.rs1Data + s0Reg.addressOffset + rowOffset
   s1EnqQueue.enq.bits.indexInMaskGroup := s0Reg.indexInGroup
