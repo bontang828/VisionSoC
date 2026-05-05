@@ -74,16 +74,33 @@ Slides and the related mask-pipe ops (`vrgather`, etc.) are the main reason
 vertical mode exists. Everything else (`vadd`, `vmul`) gives the same final
 data layout under either mode, *as long as the operands and the destination
 are read/written through the same mode*. Mixing modes within a single kernel
-works (see `simple_instruction_vert_hori.c` for the canonical example), but
-mode changes do not commute with memory ops:
+works (see `simple_instruction_vert_hori.c` for the canonical example).
 
-> **Load/store always run in horizontal mode.**
-> CSR `0x7c0` does not affect `vle8.v` / `vse8.v`. The "isLSUInst" gate in
-> `SharedVRF.scala` is the enforcer. There is currently **no vertical-mode
-> LSU**. Anything that wants to read or write data column-wise has to use
-> a compute-only mode flip plus slides; it cannot use a mode-flipped LSU.
-> See "RESERVED tests" in `benchmark_vadd.c` for designs that are blocked
-> on this.
+**LSU honours CSR 0x7c0.** As of 2026-05-04, `vle8.v` and `vse8.v` are
+mode-aware. CSR `0x7c0` is captured at issue time in a per-instruction
+snapshot that travels with the instruction through the chaining record;
+SharedVRF's gate selects the vertical scatter/gather path for LSU
+instructions whose snapshot is 1, independent of any subsequent CSR
+flip during drain. Memory addressing stays row-major in both modes
+(hw-row r touches `&base[r * COLS]`); only the VRF-side layout flips.
+The LSU row pitch is a logical image-row pitch, currently fixed in RTL as
+128 e8 elements for the 128x128 grid tests, and is intentionally independent
+of the current instruction `vl`. Therefore a `vl=1` store writes element 0
+from every hardware row to `grid[row][0]`, not a packed vector into
+`grid[0][0..127]`:
+
+  * `vle8.v` (vert): row-major load from memory, transposed layout in
+    VRF. A subsequent **horizontal** read of vd sees the transpose Mᵀ
+    of the loaded matrix.
+  * `vse8.v` (vert): vertical gather from VRF, row-major store to
+    memory. If vd held M, memory receives Mᵀ.
+  * vle-vert + vse-vert is a no-op transpose-of-transpose (round-trips
+    data unchanged). This used to be enforced by hardware; it is now
+    just programmer arithmetic.
+
+The full design rationale, gate formula, and difftest fence are
+documented in `fyp_doc/LSU_vertical_mode_handoff.md`. Read that
+before debugging any vert-LSU correctness issue.
 
 ---
 
@@ -127,9 +144,11 @@ The robust fix is to never let the compiler think it needs to spill:
     `grid_vadd_per_iter` shows the pattern.
 
 If you need to save vector state across a call, do it explicitly with
-`vse8.v` / `vle8.v` (LSU is horizontal-only and 2D-fabric-aware) into a
-buffer that you sized as `ROWS * COLS` bytes per LMUL=1 register. Don't
-trust the compiler-generated spill code.
+`vse8.v` / `vle8.v` into a buffer that you sized as `ROWS * COLS` bytes
+per LMUL=1 register. Don't trust the compiler-generated spill code.
+Make sure CSR `0x7c0` is 0 (horizontal mode) when you do the spill/restore
+— otherwise the spill writes the transpose of the register's content, and
+the restore reads back the wrong layout.
 
 ### 3.3 LMUL stays at 4
 
@@ -151,46 +170,71 @@ positions and you'll see hard-to-diagnose chaining hazards.
 
 ### 3.5 Toggle vertical mode via `csrw 0x7c0`
 
-  * `csrw 0x7c0, t3` (where `t3` is loaded with 1) turns vertical compute
-    on for the next issue.
+  * `csrw 0x7c0, t3` (where `t3` is loaded with 1) turns vertical mode
+    on for subsequent vector instructions.
   * `csrw 0x7c0, zero` turns it off.
-  * Spike on t1emu must register the CSR (we do this in
-    `difftest/spike_rs/src/runner.rs:proc_register_basic_csr(0x7c0, 0)`),
-    otherwise `csrw 0x7c0` traps as illegal_instruction.
-  * The DPI driver `difftest/dpi_t1emu/src/drive.rs:update_vertical_mode_from_csr`
-    mirrors Spike's CSR file write to the DUT's `verticalMode` input, so
-    the toggle takes effect in RTL the same way as on t1rocketemu.
-  * There is also a `+t1_vertical_mode` plusarg path that pins vertical
-    mode on for the entire run; pass `--vertical` to `run-test.sh`. Use
-    that if you can't (or don't want to) toggle per-instruction.
+  * The CSR is sticky and architecturally programmer-visible
+    (`csrr 0x7c0` returns the current value).
+
+How the value reaches the vector unit:
+
+  * **t1emu**: Spike maintains the CSR via
+    `difftest/spike_rs/src/runner.rs` (`proc_register_basic_csr(0x7c0, 0)`,
+    else `csrw 0x7c0` traps as illegal_instruction). The DPI driver
+    `difftest/dpi_t1emu/src/drive.rs::update_vertical_mode_from_csr`
+    mirrors Spike's CSR writes into a Rust-side `vertical_mode: bool`
+    on `Driver`. When `Driver::issue_instruction` builds the next
+    `IssueData` payload, it reads that mirror and populates
+    `IssueData.vertical_mode`. RTL latches it as part of `T1Issue` at
+    `io.issue.fire`.
+  * **t1rocketemu**: Rocket's CSR file owns CSR 0x7c0 (`reg_verticalMode`
+    in `rocketv/src/CSR.scala:674`). At vector issue time, RocketCore
+    reads it and bundles into `T1Issue.verticalMode` alongside `vtype`,
+    `vl`, `vstart`, `vcsr` (`rocketv/src/RocketCore.scala:1565+`).
+
+In both cases, the CSR snapshot is captured **at issue time** and stable
+for the entire instruction lifetime — including any LSU drain that
+extends past the next CSR write. This is a behaviour-preserving change
+from the older live-IO design (which had several timing races); the
+programmer-visible contract is unchanged.
+
+There is also a `+t1_vertical_mode` plusarg path (t1emu only) that
+overrides `IssueData.vertical_mode` to 1 on every issue. Pass
+`--vertical` to `run-test.sh` to use it. This is a debug aid; prefer
+per-instruction `csrw` in real kernels.
 
 ---
 
 ## 4. Things that bend or break (open issues)
 
-### 4.1 Reductions only materialise hw-row 0's result
+### 4.1 Reductions and `vl=1` stores
 
-`vredsum.vs` (and almost certainly the rest of the
-vredmax/vredmin/vredand/etc. family) emit one scalar to vd[0]. In this
-fabric, **only hw-row 0's vd is written**. Hardware rows 1..127 keep their
-previous vd contents.
+`vredsum.vs` emits its scalar result to element 0 of the destination
+register group for each hardware row in the 2D replay. Earlier versions of
+this note claimed only hw-row 0 materialised; that was a false diagnosis.
+The observed symptom came from LSU row addressing: the store after the
+reduction changed to `vl=1`, and the old LSU row pitch used
+`rowCounter * vl`, so rows 0..127 were packed into `grid[0][0..127]`
+instead of landing at `grid[row][0]`.
 
-We confirmed this with `benchmark_vadd.c` TEST 6:
+As of 2026-05-04, the LSU row pitch is fixed to the logical 128-element
+image row, so the canonical reduction store works:
 
 ```
 vmv.v.i v12, 0
 vredsum.vs v12, v8, v12         # v8 holds image rows 0..127
+vsetvli zero, one, e8, m4, ta, ma
+vse8.v v12, (a1)
 # afterwards:
-#   v12[0] in hw-row 0 = sum of grid_a[0][:] = -64 (i8 wrap of 8128)
-#   v12[0] in hw-row 1..127 = 0 (untouched, retains the vmv.v.i value)
+#   grid_c[r][0] = sum of grid_a[r][:] = -64 (i8 wrap of 8128)
+#   for every hw-row r = 0..127
 ```
 
 Implications for ports of stock-RVV algorithms:
 
-  * **Per-row reduction** is not one instruction. Use `log2(vl)` steps of
-    `vslidedown` + `vadd` within the register. After 7 steps with vl=128,
-    every hw-row's element 0 holds that hw-row's reduction. Other elements
-    hold partial sums and can be ignored.
+  * **Per-row reduction** can use `vredsum.vs` when the result shape is
+    "one scalar per hardware row." Store it with `vl=1` if you only want
+    `grid[row][0]`; the LSU row pitch keeps rows separated in memory.
 
   * **Grid-wide reduction** needs cross-hw-row collapsing first. Do 7
     steps of *vertical-mode* `vslidedown` + `vadd`. Vertical-mode slide
@@ -204,11 +248,10 @@ Implications for ports of stock-RVV algorithms:
     over the entire register, replicated to all lanes." That's not how
     this fabric implements it.
 
-To investigate before treating this as fixed: read
-`t1/src/laneStage/MaskExchangeUnit.scala`. The `reduceResultOut` wire is
-a single scalar; the fold state machine is a tree-reduce on vlmax
-elements. The question is whether the fabric *could* fan out the scalar
-to each hw-row's vd[0] (it currently does not).
+Still worth testing before relying on the full family: `vredmax.vs`,
+`vredmin.vs`, `vredand.vs`, etc. should each get the same per-row scalar
+store coverage as `vredsum.vs`. The current evidence is from
+`benchmark_vadd.c` TEST 6 and TEST 11-15.
 
 ### 4.2 Mask v0 in vertical mode is mode-dependent
 
@@ -227,19 +270,49 @@ each mode, the safe rule is: **build the mask under the mode you intend to
 use it in**, and don't expect a "horizontal even-columns" mask and a
 "vertical even-rows" mask to come from the same source code.
 
+**No auto-transpose on mode flip.** Switching CSR `0x7c0` does *not*
+rewrite v0. The bytes that landed in v0 under one mode stay in the same
+physical bank slots after the `csrw`, but the read path now applies the
+other mode's scatter to them — which is a transpose, not a noop. So
+when you switch from H to V (or V to H), **rebuild the mask under the
+target mode** with a fresh `vid.v + vand.vi + vmseq.vi` (or whichever
+recipe applies) before applying it. Same in reverse. There is no shadow
+register or cache that gives you a "matched H/V pair" of v0 for free —
+the H-mask and V-mask coexist in v0 only in the sense that the same
+bit-pattern can be re-interpreted, and that re-interpretation almost
+never gives you the mask you wanted. Programmer-side discipline is the
+only contract until § 4.2 gets a hardware investigation.
+
 To investigate: emit `vse8.v v0, (buf)` after each mask-construction step
 and printf the bytes from C. Also re-read `t1/src/mask/MaskUnit.scala`
 near every `verticalMode` reference for the mask read path.
 
-### 4.3 LSU is horizontal-only
+### 4.3 ~~LSU is horizontal-only~~ — RESOLVED 2026-05-04
 
-(Restated for emphasis.) Anything you might have considered doing with a
-vertical-mode load/store - image transpose via H-load + V-store, column
-stride loads, pre-permuted stores - does not work today. The scatter
-fabric explicitly bypasses vertical permutation for LSU traffic so that
-`vle` + `vse` round-trip data unchanged. Designs that need vertical LSU
-are kept as "RESERVED" tests at the bottom of `benchmark_vadd.c` as a
-checklist for when this lands.
+This was an open issue until PR-1/2/3 of the vertical-LSU work; see
+`fyp_doc/LSU_vertical_mode_handoff.md` for the full design and
+verification trail. Image transpose via H-load + V-store (or V-load +
+H-store) now works as expected. The "RESERVED" tests at the bottom of
+`benchmark_vadd.c` should be ported to runnable tests; the canonical
+working example is
+`tests/vision_task/simple_instruction_vert_lsu/simple_instruction_vert_lsu.c`.
+
+Two practical caveats remain after the resolution:
+
+  * **Difftest fence on vert-LSU events.** Spike's reference model
+    treats vle/vse as plain row-major and cannot represent the
+    diagonal scatter. The offline checker therefore skips byte-equality
+    comparison for any LSU instruction whose IssueData snapshot was
+    `vertical_mode=1`, plus any subsequent vstore that reads
+    vertically-tainted VRF state. Horizontal LSU stays strictly
+    checked. See § 5.4 of the LSU handoff.
+  * **Spike's `shadow_mem` diverges in vert-store regions.** After a
+    vse-vert, real memory holds Mᵀ but `shadow_mem` holds M. A
+    *subsequent* Spike-checked scalar load from that region will
+    diverge. Either clear/overwrite the buffer before the C-side
+    validator reads it, or arrange for the validator's reads to be
+    skip-flagged. The C drivers in `simple_instruction_vert_lsu` show
+    one workable pattern.
 
 ---
 
@@ -247,13 +320,34 @@ checklist for when this lands.
 
 ### 5.1 Hardware (Scala / Chisel)
 
-  * `t1/src/T1.scala` - top-level wiring. Search for `verticalMode` to see
-    how the CSR plumbs through; `requestRegCSR.verticalMode :=
-    verticalModeReg`.
-  * `t1/src/vrf/SharedVRF.scala` - the bank scatter and the
-    `isLSUInst` gating that keeps LSU on the horizontal path.
-    Look for `verticalMode &&` to find every scatter-vs-no-scatter
-    branch.
+  * `t1/src/T1.scala` - top-level wiring. Search for `verticalMode` to
+    trace the CSR snapshot path:
+    `requestRegCSR.verticalMode := requestReg.bits.issue.verticalMode`
+    (the per-instruction snapshot from the issue payload, latched on
+    `io.issue.fire`). The non-LSU consumers (`SharedVRF.verticalMode`
+    IO, `MaskUnit.io.verticalMode`) read this directly. The LSU
+    consumers read the chaining-record snapshot via
+    `instVerticalMode(instIdx)` in SharedVRF, populated when
+    `instructionWriteReport` fires from Lane (see `Lane.scala:~1310`).
+    There is no live-IO `io.verticalMode` any more — it was deleted
+    in PR-3 of the vert-LSU work along with the
+    `t1_cosim_get_vertical_mode` DPI side-channel and the Rocket-side
+    `t1.verticalMode` wire.
+  * `t1/src/T1.scala::issueWritebackDrained` - the gate that holds
+    `io.issue.ready` low until ALL writeback paths for the current
+    instruction have drained, not just `replayFSM.lastRowFire`.
+    Without this, slow non-LSU writebacks (e.g. vrgather/MaskUnit)
+    can extend past the next instruction's issue, leaking the next
+    instruction's CSR snapshot into the still-draining current one.
+    Don't loosen this without re-running `simple_instruction_gather_scalar`
+    and `simple_instruction_vert_lsu`.
+  * `t1/src/vrf/SharedVRF.scala` - the bank scatter and the per-source
+    selector that decides scatter vs no-scatter for each VRF
+    transaction. The selector is
+    `Mux(isLSUInst(idx), instVerticalMode(idx), verticalMode)` at five
+    sites; LSU branch reads the snapshot, non-LSU branch reads the
+    live (per-instruction-stable) verticalMode IO. Search
+    `verticalMode &&` and `instVerticalMode` for every site.
   * `t1/src/laneStage/MaskExchangeUnit.scala` - mask gather/scatter,
     reductions, vrgather. The `gatherVerticalMode`, `reduceState`, and
     `narrowVertical` machinery is what makes vertical-mode compute work
@@ -261,6 +355,14 @@ checklist for when this lands.
   * `t1/src/decoder/attribute/*.scala` - per-instruction attributes that
     the decoder uses. If you suspect an instruction takes the wrong
     pipeline, find it here first.
+  * `rocketv/src/RocketCore.scala:1565+` - Rocket-side bundling of
+    `verticalMode` (and `vtype`/`vl`/`vstart`/`vcsr`) into `T1Issue`
+    via `csr.io.csrToVector.get.verticalMode`. If t1rocketemu sees a
+    vert-mode bug that t1emu does not, it is most likely here.
+  * `difftest/dpi_t1emu/src/drive.rs::Driver::issue_instruction` -
+    where t1emu populates `IssueData.vertical_mode` from
+    `self.vertical_mode` (the Rust-side mirror updated by
+    `update_vertical_mode_from_csr` whenever Spike commits a `csrw 0x7c0`).
 
 ### 5.2 Tests that work (good starting points)
 
@@ -268,17 +370,31 @@ checklist for when this lands.
     - canonical 1-shot vle + vrgather + vse with a naked kernel and a
       volatile-pointer init. The cleanest "this is how you write a
       kernel" example.
+  * `tests/vision_task/simple_instruction_gather_scalar/simple_instruction_gather_scalar.c`
+    - vrgather.vx (scalar-broadcast index) under H and V modes,
+      masked and unmasked. The test that motivated the original
+      `verticalModeReg := io.verticalMode` live-IO wiring; now it
+      passes against the IssueData snapshot path. Run this as the
+      regression for any change touching CSR 0x7c0 plumbing.
   * `tests/vision_task/simple_instruction_vert_hori/simple_instruction_vert_hori.c`
     - mid-kernel CSR toggle + vertical-mode vslideup. The right place
-      to see a working H/V interleave that survives the vse-stays-
-      horizontal constraint.
+      to see a working H/V compute interleave.
+  * `tests/vision_task/simple_instruction_vert_lsu/simple_instruction_vert_lsu.c`
+    - the canonical vertical-LSU example: V-load + H-store transpose,
+      H-load + V-store transpose, V-load + V-store round-trip, and a
+      CSR-flip-during-LSU-drain stress test. All four scalar-C checks
+      pass on both t1emu and t1rocketemu. Run this as the regression
+      for any change to the SharedVRF gate logic, the chaining-record
+      snapshot path, or the IssueData/T1Issue wiring.
   * `tests/vision_task/simple_instruction_asm/simple_instruction_asm.c`
     - naked vadd kernel; useful for confirming the
       stack-spill-avoidance pattern.
   * `tests/vision_task/benchmark_vadd/benchmark_vadd.c` - this is the
     document's reference implementation. Tests 1-5, 8 work end-to-end;
     tests 6, 7, 9, 10 hit the open issues in § 4 (kept on purpose as
-    documented examples of the constraints).
+    documented examples of the constraints). The "RESERVED" tests at
+    the bottom (R-TEST 7/8/10) are no longer blocked — port them to
+    runnable tests when convenient.
 
 ### 5.3 Tests that hang/trap (study to learn what NOT to do)
 
@@ -329,11 +445,22 @@ If you're about to write a new vector test, walk through this:
      vertical) and `vsetvli zero, COLS, e8, m4, ta, ma`.
 
   4. Memory ops use `vle8.v` / `vse8.v` only, with the address coming
-     from an `aN` argument register. They are always horizontal.
+     from an `aN` argument register. They honour CSR `0x7c0` — set it
+     to 0 for a normal row-major load/store, set it to 1 to get a
+     transpose-on-the-way-in (vle-vert) or transpose-on-the-way-out
+     (vse-vert). Memory addressing stays row-major in both modes;
+     only the VRF-side layout flips. The row pitch is the logical image
+     width, currently fixed at 128 e8 elements in RTL, not the current
+     instruction `vl`; `vl=1` stores therefore write one element per
+     hardware row to `grid[row][0]`.
 
-  5. Compute ops can switch mode mid-block via `csrw 0x7c0, ...`.
-     Restore to 0 before the final `vse8` so subsequent kernels see a
-     clean state.
+  5. Compute ops AND memory ops can switch mode mid-block via
+     `csrw 0x7c0, ...`. Restore to 0 at the end of the kernel so
+     subsequent kernels see a clean state. The CSR snapshot is
+     captured at issue time and stable for the entire instruction
+     drain, so a `csrw 0x7c0, zero; vse8.v` sequence does NOT
+     leak the new CSR value into the still-draining vse — the
+     vse uses whatever value was set when it was issued.
 
   6. Counter-tagged perf measurement: encode `place_counter(tag)` as
      `sw <tag>, 0(<perf_reg>)` in the asm so it does not become a
