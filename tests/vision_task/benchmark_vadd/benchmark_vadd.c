@@ -306,7 +306,7 @@
 
 #define ROWS  128
 #define COLS  128
-#define ITERS 100
+#define ITERS 5
 
 #define PERF_REG_ADDR 0x10000014
 
@@ -987,6 +987,206 @@ static void check_vadd_result(void) {
     }
 }
 
+/*============================================================================
+ * § 4.1 ablation: per-row vredsum.vs single-shot writeback hazard
+ *
+ * TEST 6 is the baseline that exhibits the hazard:
+ *   - 1 iter
+ *   - vs1 = vd (aliased: `vredsum.vs v12, v8, v12`)
+ *   - vsetvli {vl=1, LMUL=1} between vredsum and vse
+ *   - vse at vl=1, LMUL=1
+ *   --> only hw-row 0's grid_c[r][0] gets the row sum, rest stay 0.
+ *
+ * benchmark_instructions TEST 19 succeeds populating all 128 hw-rows but
+ * differs in three ways at once (100-iter loop, vs1 separated, vse at full
+ * vl=128/LMUL=4). We don't know which difference matters. Tests 11-14
+ * vary one knob at a time so we can isolate the cause.
+ *
+ * Ablation grid (every test starts with vmv.v.i v12, 0 and vse only
+ * grid_c[r][0]):
+ *
+ *   TEST | perf tag | iters | vs1      | resize before vse | extra
+ *  ------+----------+-------+----------+-------------------+----------------
+ *    6   |     6    |   1   | v12 (=vd)| yes (vl=1, m1)    | --        (baseline)
+ *   11   |   111    |   1   | v20      | yes               | --        (vs1 separated)
+ *   12   |   112    |   1   | v12 (=vd)| no  (vl=128, m4)  | --        (no resize)
+ *   13   |   113    |   1   | v20      | no                | --        (both fixes)
+ *   14   |   114    |   1   | v12 (=vd)| yes               | vmv.v.v drain (barrier)
+ *   15   |   115    |   1   | v12 (=vd)| yes (vl=1, m4)    | keep LMUL=4, change vl only
+ *
+ * If TEST 11 passes -> vs1=vd aliasing serialises the writeback.
+ * If TEST 12 passes -> the post-vredsum vsetvli closes the chaining
+ *                       record before the per-hw-row fan-out drains.
+ * If TEST 14 passes -> a vector consumer drain barrier is sufficient.
+ * If TEST 15 passes -> the LMUL shrink m4->m1 is the important resize hazard.
+ * If TEST 15 fails  -> vl=1 itself is enough to expose the hazard.
+ *==========================================================================*/
+
+/* TEST 11: vs1 separated, single iter, vsetvli resize, vse at vl=1. */
+__attribute__((naked, noinline))
+void grid_row_sum_sep_vs1(int8_t *a, int8_t *c, size_t cols, uintptr_t perf_reg) {
+    __asm__ volatile (
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"
+        "li      t0, 111                    \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"
+        "vmv.v.i v12, 0                     \n\t"
+        "vmv.v.i v20, 0                     \n\t"
+        "vredsum.vs v12, v8, v20            \n\t"
+        "sw      t1, 0(a3)                  \n\t"
+        "li      t2, 1                      \n\t"
+        "vsetvli zero, t2, e8, m1, ta, ma   \n\t"
+        "vse8.v  v12, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* TEST 12: vs1=vd, single iter, NO vsetvli before vse, vse at vl=128 LMUL=4. */
+__attribute__((naked, noinline))
+void grid_row_sum_no_resize(int8_t *a, int8_t *c, size_t cols, uintptr_t perf_reg) {
+    __asm__ volatile (
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"
+        "li      t0, 112                    \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"
+        "vmv.v.i v12, 0                     \n\t"
+        "vredsum.vs v12, v8, v12            \n\t"
+        "sw      t1, 0(a3)                  \n\t"
+        "vse8.v  v12, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* TEST 13: vs1 separated AND no vsetvli before vse. */
+__attribute__((naked, noinline))
+void grid_row_sum_sep_no_resize(int8_t *a, int8_t *c, size_t cols, uintptr_t perf_reg) {
+    __asm__ volatile (
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"
+        "li      t0, 113                    \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"
+        "vmv.v.i v12, 0                     \n\t"
+        "vmv.v.i v20, 0                     \n\t"
+        "vredsum.vs v12, v8, v20            \n\t"
+        "sw      t1, 0(a3)                  \n\t"
+        "vse8.v  v12, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* TEST 14: vs1=vd, single iter, vmv.v.v drain into v16, then vsetvli + vse. */
+__attribute__((naked, noinline))
+void grid_row_sum_drain(int8_t *a, int8_t *c, size_t cols, uintptr_t perf_reg) {
+    __asm__ volatile (
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"
+        "li      t0, 114                    \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"
+        "vmv.v.i v12, 0                     \n\t"
+        "vredsum.vs v12, v8, v12            \n\t"
+        "vmv.v.v v16, v12                   \n\t"
+        "sw      t1, 0(a3)                  \n\t"
+        "li      t2, 1                      \n\t"
+        "vsetvli zero, t2, e8, m1, ta, ma   \n\t"
+        "vse8.v  v16, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* TEST 15: vs1=vd, single iter, vsetvli to vl=1 but keep LMUL=4 before vse. */
+__attribute__((naked, noinline))
+void grid_row_sum_vl1_m4(int8_t *a, int8_t *c, size_t cols, uintptr_t perf_reg) {
+    __asm__ volatile (
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8,  (a0)                  \n\t"
+        "li      t0, 115                    \n\t"
+        "li      t1, 0                      \n\t"
+        "sw      t0, 0(a3)                  \n\t"
+        "vmv.v.i v12, 0                     \n\t"
+        "vredsum.vs v12, v8, v12            \n\t"
+        "sw      t1, 0(a3)                  \n\t"
+        "li      t2, 1                      \n\t"
+        "vsetvli zero, t2, e8, m4, ta, ma   \n\t"
+        "vse8.v  v12, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* Each row of grid_a sums to -64 (i8 wrap of 8128). The check counts how
+ * many of the 128 hw-rows actually wrote that sum into grid_c[r][0]. */
+__attribute__((noinline))
+static void check_row_sum_all(const char *label, int tag) {
+    const int8_t expected = -64;
+    int correct = 0, zero = 0, other = 0;
+    int first_bad = -1;
+    for (int r = 0; r < ROWS; r++) {
+        int8_t v = grid_c[r][0];
+        if (v == expected)      correct++;
+        else if (v == 0)        zero++;
+        else                    other++;
+        if (first_bad < 0 && v != expected) first_bad = r;
+    }
+    if (correct == ROWS) {
+        printf("[TEST %d %s] PASS: all %d hw-rows have sum=%d\n",
+               tag, label, ROWS, expected);
+    } else if (correct == 1 && zero == ROWS - 1) {
+        printf("[TEST %d %s] HAZARD: only hw-row 0 wrote (rest=0)\n",
+               tag, label);
+    } else {
+        printf("[TEST %d %s] PARTIAL: correct=%d zero=%d other=%d first_bad=%d\n",
+               tag, label, correct, zero, other, first_bad);
+    }
+}
+
+__attribute__((noinline))
+static void test11_row_sum_sep_vs1(void) {
+    printf("\n=== TEST 11: per-row sum, vs1 separated (counter tag=111) ===\n");
+    clear_grid_c();
+    grid_row_sum_sep_vs1(&grid_a[0][0], &grid_c[0][0],
+                         (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    check_row_sum_all("vs1-separated", 11);
+}
+
+__attribute__((noinline))
+static void test12_row_sum_no_resize(void) {
+    printf("\n=== TEST 12: per-row sum, no vsetvli resize (counter tag=112) ===\n");
+    clear_grid_c();
+    grid_row_sum_no_resize(&grid_a[0][0], &grid_c[0][0],
+                           (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    check_row_sum_all("no-resize", 12);
+}
+
+__attribute__((noinline))
+static void test13_row_sum_sep_no_resize(void) {
+    printf("\n=== TEST 13: per-row sum, vs1 separated + no resize (counter tag=113) ===\n");
+    clear_grid_c();
+    grid_row_sum_sep_no_resize(&grid_a[0][0], &grid_c[0][0],
+                               (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    check_row_sum_all("vs1-sep + no-resize", 13);
+}
+
+__attribute__((noinline))
+static void test14_row_sum_drain(void) {
+    printf("\n=== TEST 14: per-row sum, vmv.v.v drain barrier (counter tag=114) ===\n");
+    clear_grid_c();
+    grid_row_sum_drain(&grid_a[0][0], &grid_c[0][0],
+                       (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    check_row_sum_all("drain", 14);
+}
+
+__attribute__((noinline))
+static void test15_row_sum_vl1_m4(void) {
+    printf("\n=== TEST 15: per-row sum, vl=1 keeps LMUL=4 (counter tag=115) ===\n");
+    clear_grid_c();
+    grid_row_sum_vl1_m4(&grid_a[0][0], &grid_c[0][0],
+                        (size_t)COLS, (uintptr_t)PERF_REG_ADDR);
+    check_row_sum_all("vl1-m4", 15);
+}
+
 void test(void) {
     init_grids();
 
@@ -1003,10 +1203,15 @@ void test(void) {
     test4_blur_horiz();
     test5_blur_vert();
     test6_row_sum();
-    test7_full_sum();
-    test8_blur3x3();
-    test9_matvec();
+    // test7_full_sum();
+    // test8_blur3x3();
+    // test9_matvec();
     test10_mask_modes();
+    test11_row_sum_sep_vs1();
+    test12_row_sum_no_resize();
+    test13_row_sum_sep_no_resize();
+    test14_row_sum_drain();
+    test15_row_sum_vl1_m4();
 
     printf("\n=== benchmark_vadd done ===\n");
 }

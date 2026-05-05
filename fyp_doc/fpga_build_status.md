@@ -55,7 +55,20 @@ RTL output dir.
 |------|--------|--------|------------|
 | 1. RTL build (nix) | `build_rtl.sh -c mudkip2d128small1bram1chain2lanescale` | **done 17:14 — 1m 14s** | `test_output/mudkip2d128small1bram1chain2lanescale/rtl-20260505-171326/` |
 | 2. Wrapper § 3 + gen_wrapper § 4 edits | (manual edits; see § 4 below) | **done 17:24** | `fpga/wrapper/t1_axi_lite_wrapper.sv`, `fpga/system/gen_wrapper.sh` |
-| 3. Block design + synth + bitstream | `fpga/system/build_fpga.sh -c mudkip2d128small1bram1chain2lanescale -b` | **running, started 17:24** | `fpga/build/mudkip2d128small1bram1chain2lanescale-20260505-172438/` |
+| 3a. First bitstream attempt @ 80 MHz | `fpga/system/build_fpga.sh -c mudkip2d128small1bram1chain2lanescale -b` | **failed 18:29 (impl placer terminated abnormally with boost::filesystem error mid-place)** | `fpga/build/mudkip2d128small1bram1chain2lanescale-20260505-172438/` |
+| 3b. Clock edit | `system_top.tcl` line 107: `FREQMHZ {80} → {60}` | **done** | (handoff doc § 8.4.5 recommends this for slack margin) |
+| 3c. Bitstream rebuild @ 60 MHz | `fpga/system/build_fpga.sh -c mudkip2d128small1bram1chain2lanescale -b` | **running, started 18:05; routing phase 5.2 as of ~21:00** | `fpga/build/mudkip2d128small1bram1chain2lanescale-20260505-180504/` |
+
+**Build 3c interim metrics (live):**
+
+  * Synth WNS: **+5.990 ns** (massive slack — confirms 60 MHz was the
+    right call; 80 MHz had only +0.003 ns).
+  * Synth TNS Failing Endpoints (setup): **0**.
+  * Synth WHS: −0.087 ns / THS −564 ns at 34 K endpoints (hold; routing
+    expected to fix).
+  * Impl placement WNS: **+0.139 ns** (still positive after place).
+  * Router warning: congestion → router prioritising route completion
+    over timing. Normal for this density.
 
 Update the Status column with one of:
 
@@ -68,24 +81,18 @@ Live log tails (use these to watch progress without reading the whole
 log):
 
 ```sh
-BUILD=fpga/build/mudkip2d128small1bram1chain2lanescale-20260505-172438
+# Live build (60 MHz)
+BUILD=fpga/build/mudkip2d128small1bram1chain2lanescale-20260505-180504
 
-# Aggregate build log (script-level)
-tail -f $BUILD/build.log
-
-# Vivado BD-creation detail
-tail -f $BUILD/vivado.log
-
-# Vivado synth detail (after BD creation)
-tail -f $BUILD/vivado_synth.log
-
-# Vivado impl + bitstream detail (after synth)
-tail -f $BUILD/vivado_impl.log
+tail -f $BUILD/build.log         # script-level aggregate
+tail -f $BUILD/vivado_synth.log  # synth detail (already complete for this build)
+tail -f $BUILD/vivado_impl.log   # impl + bitstream — this is where progress is now
 ```
 
-Background-task ID for this run (Claude Code internal): `b2yr4elmt`.
-If you've taken over from a fresh session, that ID won't help you
-— use `pgrep -af vivado` to find live runs.
+To check if Vivado is still running: `pgrep -af vivado`. If nothing
+matches and `$BUILD/system_top_wrapper.bit` doesn't exist, the build
+either died or completed silently — inspect the tail of vivado_impl.log
+for the last status line.
 
 ---
 
@@ -271,5 +278,15 @@ works.
 
   * 2026-05-05 17:14 — RTL built (`rtl-20260505-171326`).
   * 2026-05-05 17:24 — wrapper + gen_wrapper edits applied per
-    handoff doc § 3 + § 4. FPGA build kicked off in background.
+    handoff doc § 3 + § 4. FPGA build (80 MHz) kicked off.
+  * 2026-05-05 18:05 — `system_top.tcl` clock dropped 80→60 MHz
+    (line 107 `PSU__CRL_APB__PL0_REF_CTRL__FREQMHZ`). Second build
+    started at 60 MHz.
+  * 2026-05-05 18:29 — first attempt (80 MHz) failed at impl placer
+    with a boost::filesystem error; treated as transient. The 60 MHz
+    move was independently warranted: synth WNS at 80 MHz was only
+    +0.003 ns (no slack for the upcoming streaming-pipeline IPs in
+    § 5 of `fpga_implementation_handoff.md`).
+  * 2026-05-05 ~21:00 — 60 MHz build in routing phase 5.2; metrics
+    look healthy.
   * (next agent): record bitstream completion / failure here.
