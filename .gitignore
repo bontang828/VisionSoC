@@ -35,3 +35,4 @@ vivado*.log
 mmio-event.jsonl
 wave_debug.json
 *.lock
+/kria_ref/
