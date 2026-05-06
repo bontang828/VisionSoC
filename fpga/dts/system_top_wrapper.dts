@@ -1,0 +1,317 @@
+/*
+ * Device-tree overlay for the VisionSoC bitstream on AMD Kria KV260.
+ * Loaded with `fpgautil -b system_top_wrapper.bit -o system_top_wrapper.dtbo`.
+ *
+ * Tree mirrors the BD created by `fpga/system/system_top.tcl`:
+ *
+ *   PL slaves (kernel-driven):
+ *     - mipi_csi2_rx_subsystem  @ 0x80000000  -> xilinx-csi2rxss V4L2 subdev
+ *     - axi_iic (sensor IIC)    @ 0xA0050000  -> xiic-i2c, with AP1302+AR1335 children
+ *     - v_frmbuf_wr             @ 0xA0020000  -> xilinx-frmbuf V4L2 capture DMA
+ *
+ *   PL slaves (UIO):
+ *     - t1_axi_lite_wrapper    @ 0xA0000000  -> generic-uio (libt1)
+ *     - axi_dma                @ 0xA0010000  -> generic-uio (libt1's DMA path)
+ *     - axi_bram_ctrl scratch  @ 0xB0000000  -> generic-uio (libt1 prefetch)
+ *
+ *   PS-side display (DisplayPort) is not declared here -- the Zynq DP
+ *   controller is in the SoC and uses its standard kernel driver
+ *   (xlnx-zynqmp-dpsub) bound from the base device tree.
+ *
+ * Build:
+ *   dtc -@ -I dts -O dtb -o system_top_wrapper.dtbo \
+ *       fpga/dts/system_top_wrapper.dts
+ *
+ * Reference: ported from the kv260-smartcam DTSI shipped in
+ * kria-apps-firmware/boards/kv260/smartcam/kv260-smartcam.dtsi --
+ * with addresses updated for VisionSoC's BD address map and the
+ * VCU/audio subtrees omitted.
+ */
+
+/dts-v1/;
+/plugin/;
+
+&fpga_full {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	firmware-name = "system_top_wrapper.bit.bin";
+	resets = <&zynqmp_reset 116>, <&zynqmp_reset 117>,
+	         <&zynqmp_reset 118>, <&zynqmp_reset 119>;
+};
+
+&amba {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	/*
+	 * Fabric clock declarations.
+	 *
+	 * pl_clk0 = 60 MHz (T1 + control plane).
+	 * clk_wiz_0 outputs 100/200/300 MHz used by the camera path.
+	 * We declare these as fixed-clocks so the V4L2 / IIC drivers can
+	 * reference them via &misc_clk_*. The exact rates match the
+	 * clk_wiz_0 settings in fpga/system/system_top.tcl (rounded by
+	 * the MMCM divider, e.g. 100 MHz -> 99.999 MHz).
+	 */
+	misc_clk_60: misc_clk_60 {
+		#clock-cells = <0>;
+		clock-frequency = <59999401>;     /* PL pl_clk0 */
+		compatible = "fixed-clock";
+	};
+
+	misc_clk_100: misc_clk_100 {
+		#clock-cells = <0>;
+		clock-frequency = <99999000>;
+		compatible = "fixed-clock";
+	};
+
+	misc_clk_200: misc_clk_200 {
+		#clock-cells = <0>;
+		clock-frequency = <199998000>;
+		compatible = "fixed-clock";
+	};
+
+	misc_clk_300: misc_clk_300 {
+		#clock-cells = <0>;
+		clock-frequency = <299997000>;
+		compatible = "fixed-clock";
+	};
+
+	/* AP1302 sensor clock (fixed 24 MHz crystal on the IAS daughtercard). */
+	ap1302_clk: sensor_clk {
+		#clock-cells = <0>;
+		compatible = "fixed-clock";
+		clock-frequency = <0x48000000>;   /* 1.207 GHz nominal -- AP1302 internal PLL ref */
+	};
+
+	ap1302_vdd: fixedregulator-vdd {
+		compatible = "regulator-fixed";
+		regulator-name = "ap1302_vdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		enable-active-high;
+	};
+
+	ap1302_vaa: fixedregulator-vaa {
+		compatible = "regulator-fixed";
+		regulator-name = "ap1302_vaa";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+
+	ap1302_vddio: fixedregulator-vddio {
+		compatible = "regulator-fixed";
+		regulator-name = "ap1302_vddio";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+	};
+
+	/*
+	 * AXI IIC for AP1302 sensor.
+	 * IRQ: pl_ps_irq0[3] -> SPI 92 (89 + 3).
+	 */
+	axi_iic_sensor: i2c@a0050000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-names = "s_axi_aclk";
+		clocks = <&misc_clk_60>;
+		compatible = "xlnx,axi-iic-2.1", "xlnx,xps-iic-2.00.a";
+		interrupt-names = "iic2intc_irpt";
+		interrupt-parent = <&gic>;
+		interrupts = <0 92 4>;
+		reg = <0x0 0xa0050000 0x0 0x10000>;
+
+		i2c_mux: i2c-mux@74 {
+			compatible = "nxp,pca9546";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x74>;
+
+			i2c@0 {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				reg = <0>;
+
+				ap1302: isp@3c {
+					compatible = "onnn,ap1302";
+					reg = <0x3c>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+					/*
+					 * NOTE: smartcam DTSI uses
+					 *   reset-gpios = <&gpio 79 1>;
+					 * which references a PS EMIO GPIO. Our BD currently
+					 * drives ap1302_rst_b directly from peripheral_aresetn
+					 * (no EMIO GPIO route). The AP1302 driver may refuse
+					 * to probe without a reset GPIO. If it does, see § 5
+					 * "Open question" in fpga_build_status.md -- the fix
+					 * is to add EMIO GPIO to the BD and put the
+					 * reset-gpios property back here.
+					 */
+					clocks = <&ap1302_clk>;
+					sensors {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						onnn,model = "onnn,ar1335";
+						sensor@0 {
+							reg = <0>;
+							vdd-supply = <&ap1302_vdd>;
+							vaa-supply = <&ap1302_vaa>;
+							vddio-supply = <&ap1302_vddio>;
+						};
+					};
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <2>;
+							isp_out: endpoint {
+								remote-endpoint = <&isp_csiss_in>;
+								data-lanes = <1 2 3 4>;
+							};
+						};
+					};
+				};
+			};
+		};
+	};
+
+	/*
+	 * MIPI CSI-2 RX subsystem.
+	 * Reachable from PS via M_AXI_HPM0_LPD (LPD GP master) at 0x80000000.
+	 * IRQ: pl_ps_irq0[4] -> SPI 93.
+	 *
+	 * The compatible string tracks the IP major version (v6.0 ships in
+	 * Vivado 2025.2). The xilinx-csi2rxss driver matches both v5.0 and
+	 * later. Keep "xlnx,mipi-csi2-rx-subsystem-5.0" as a fallback.
+	 */
+	isp_csiss: csiss@80000000 {
+		compatible = "xlnx,mipi-csi2-rx-subsystem-6.0",
+			     "xlnx,mipi-csi2-rx-subsystem-5.0";
+		reg = <0x0 0x80000000 0x0 0x10000>;
+		clock-names = "lite_aclk", "dphy_clk_200M", "video_aclk";
+		clocks = <&misc_clk_100>, <&misc_clk_200>, <&misc_clk_300>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 93 4>;
+		xlnx,csi-pxl-format = <0x18>;     /* UYVY8 1X16 */
+		xlnx,axis-tdata-width = <32>;
+		xlnx,max-lanes = <4>;
+		xlnx,en-active-lanes;
+		xlnx,vc = <4>;
+		xlnx,ppc = <2>;
+		xlnx,vfb;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@1 {
+				reg = <0x1>;
+				xlnx,video-format = <0x3>; /* UYVY */
+				xlnx,video-width = <0x8>;
+
+				isp_csiss_out: endpoint {
+					remote-endpoint = <&isp_vcap_csi_in>;
+				};
+			};
+
+			port@0 {
+				reg = <0x0>;
+				xlnx,video-format = <0x3>;
+				xlnx,video-width = <0x8>;
+
+				isp_csiss_in: endpoint {
+					data-lanes = <1 2 3 4>;
+					remote-endpoint = <&isp_out>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * v_frmbuf_wr -- captures CSI stream into DDR.
+	 * IRQ: pl_ps_irq0[5] -> SPI 94.
+	 *
+	 * NOTE on dimensions: BD has MAX_COLS=1920 / MAX_ROWS=1080 for
+	 * headroom, even though AP1302 is configured at runtime to output
+	 * 128x128. Driver uses these as hard upper bounds.
+	 *
+	 * NOTE on reset: smartcam DTSI uses reset-gpios = <&gpio 78 1>.
+	 * Our BD drives v_frmbuf_wr/ap_rst_n directly from
+	 * proc_sys_reset_300M/peripheral_aresetn. If xilinx-frmbuf refuses
+	 * to probe without a reset GPIO, add EMIO GPIO routing in the BD.
+	 */
+	isp_fb_wr_csi: fb_wr@a0020000 {
+		compatible = "xlnx,axi-frmbuf-wr-v2.1";
+		reg = <0x0 0xa0020000 0x0 0x10000>;
+		#dma-cells = <1>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 94 4>;
+		xlnx,vid-formats = "uyvy", "rgb888", "y8", "nv12";
+		xlnx,dma-addr-width = <32>;
+		xlnx,pixels-per-clock = <2>;
+		xlnx,max-width = <1920>;
+		xlnx,max-height = <1080>;
+		clocks = <&misc_clk_300>;
+		clock-names = "ap_clk";
+	};
+
+	/*
+	 * Capture device tying the V4L2 graph together (CSI-2 -> frmbuf).
+	 * Generates /dev/video0.
+	 */
+	isp_vcap_csi {
+		compatible = "xlnx,video";
+		dmas = <&isp_fb_wr_csi 0>;
+		dma-names = "port0";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				direction = "input";
+
+				isp_vcap_csi_in: endpoint {
+					remote-endpoint = <&isp_csiss_out>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * T1 AXI-Lite wrapper -- UIO for libt1.
+	 * IRQ: pl_ps_irq0[0] -> SPI 89.
+	 *
+	 * pl_ps_irq0 maps to GIC SPIs 89-96 (offsets 32-39 above private
+	 * IRQ base). Wrapper -> In0 -> SPI 89.
+	 */
+	t1_wrapper: t1@a0000000 {
+		compatible = "generic-uio";
+		reg = <0x0 0xa0000000 0x0 0x10000>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 89 4>;
+	};
+
+	/*
+	 * AXI DMA -- UIO for libt1's data-supply path.
+	 * IRQs: mm2s -> pl_ps_irq0[1] -> SPI 90.
+	 *       s2mm -> pl_ps_irq0[2] -> SPI 91.
+	 */
+	axi_dma_0: dma@a0010000 {
+		compatible = "generic-uio";
+		reg = <0x0 0xa0010000 0x0 0x10000>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 90 4>, <0 91 4>;
+	};
+
+	/*
+	 * BRAM scratchpad -- UIO so libt1 can mmap the 32 KB region
+	 * directly. Visible to T1 idx master at the same address.
+	 */
+	bram_scratch: bram@b0000000 {
+		compatible = "generic-uio";
+		reg = <0x0 0xb0000000 0x0 0x8000>;
+	};
+};
