@@ -16,10 +16,10 @@ The PNG is saved next to the run.log by default
 (run.log/../bench_cycles.png).
 
 Counter-tag layout produced by tests/vision_task/benchmark_instructions:
-    1..24   H-mode compute
-   25..30   H-mode LSU
-   31..54   V-mode compute
-   55..60   V-mode LSU
+    1..29   H-mode compute
+   30..35   H-mode LSU
+   36..64   V-mode compute
+   65..70   V-mode LSU
 Tags outside this range are still parsed and shown as "tag <N>" with
 mode "?", so older benchmarks (e.g. benchmark_vadd) still produce a chart.
 """
@@ -60,6 +60,7 @@ INSTRUCTION_ORDER = [
     "vrgather.vx (diag mask)",
     "vrgather.vv",
     "vmv.s.x",
+    "vmv.x.s",
     "vmv.v.v",
     "vredsum.vs",
     "vredmax.vs",
@@ -67,6 +68,10 @@ INSTRUCTION_ORDER = [
     "vslideup.vx 100",
     "vslidedown.vx 1",
     "vslidedown.vx 100",
+    "vslideup.vi 1",
+    "vslidedown.vi 1",
+    "vslideup.vi 31",
+    "vslidedown.vi 31",
     "vle8.v full",
     "vle8.v masked",
     "vse8.v full",
@@ -87,7 +92,7 @@ for i, name in enumerate(INSTRUCTION_ORDER):
 # (counter START, ..., counter STOP) span. Reported cycles are divided by this
 # to get per-instruction cost. Override at the CLI with --iters.
 # DEFAULT_ITERS = 100
-DEFAULT_ITERS = 5
+DEFAULT_ITERS = 2
 
 # Tag used as the 1x baseline for the relative-multiplier annotation. Tag 1
 # corresponds to "vadd.vv" in horizontal mode by the layout above.

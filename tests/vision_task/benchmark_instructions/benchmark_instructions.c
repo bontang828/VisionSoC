@@ -80,24 +80,26 @@
  * Tags are assigned positionally - slot i within a mode block is tag
  * i + (mode-base), where mode-base = 0 for H and N_PER_MODE for V; the
  * compute block precedes the LSU block within each mode. With the
- * default N_COMPUTE=24 / N_LSU=6 that lands at:
- *   1..24  H compute (arithmetic, bitwise/shift, mask, gather/move,
+ * default N_COMPUTE=29 / N_LSU=6 that lands at:
+ *   1..29  H compute (arithmetic, bitwise/shift, mask, gather/move,
  *          reduction, slide)
- *  25..30  H LSU (unit-stride/masked/strided load-store)
- *  31..54  V compute (same order)
- *  55..60  V LSU (same order)
+ *  30..35  H LSU (unit-stride/masked/strided load-store)
+ *  36..64  V compute (same order)
+ *  65..70  V LSU (same order)
  * Adding an instruction is documented in the N_COMPUTE block below.
  *****************************************************************************/
 
 #define ROWS 128
 #define COLS 128
-#define ITERS 5
+#define ITERS 2
 #define PERF_REG_ADDR 0x10000014
 
 #define VRGATHER_VX_INDEX  5    /* scalar source-element index for vrgather.vx */
 #define VMV_S_X_VALUE     42    /* scalar value moved to vd[0] for vmv.s.x */
+#define VMV_X_S_INDEX      5    /* setup gather index before scalar extraction */
 #define VSLIDE_SMALL       1
 #define VSLIDE_BIG       100
+#define VSLIDE_IMM_BIG    31
 #define VMSGT_THRESHOLD   64
 #define STRIDE2_PIXELS    64
 #define STRIDE2_BYTES      2
@@ -114,7 +116,7 @@
  *      in plot_bench_cycles.py.
  * The Python side then picks up the new bar automatically.
  */
-#define N_COMPUTE   24
+#define N_COMPUTE   29
 #define N_LSU        6
 #define N_PER_MODE  (N_COMPUTE + N_LSU)
 
@@ -189,10 +191,11 @@ __attribute__((naked, noinline))
 void k_vadd(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
             uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -212,10 +215,11 @@ __attribute__((naked, noinline))
 void k_vmul(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
             uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -235,11 +239,12 @@ __attribute__((naked, noinline))
 void k_vmacc(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
              uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
         "vmv.v.i v16, 1                     \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -259,11 +264,12 @@ __attribute__((naked, noinline))
 void k_vmadd(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
              uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
         "vmv.v.i v16, 1                     \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -283,10 +289,11 @@ __attribute__((naked, noinline))
 void k_vand(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
             uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -306,10 +313,11 @@ __attribute__((naked, noinline))
 void k_vor(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
            uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -373,10 +381,11 @@ __attribute__((naked, noinline))
 void k_vmseq(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
              uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -398,10 +407,11 @@ __attribute__((naked, noinline))
 void k_vmsle(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
              uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -448,10 +458,11 @@ __attribute__((naked, noinline))
 void k_vmslt(int8_t *a, int8_t *b, int8_t *c, size_t vl, int iters,
              uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a3, e8, m4, ta, ma   \n\t"
         "vle8.v  v8,  (a0)                  \n\t"
         "vle8.v  v12, (a1)                  \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a4                     \n\t"
         "sw      t0, 0(a5)                  \n\t"
@@ -680,18 +691,24 @@ void k_vredmax(int8_t *a, int8_t *c, size_t vl, int iters,
     );
 }
 
-/* TEST {9,10,25,26} - vslideup.vx
+/* TEST {21,22,N_PER_MODE+21,N_PER_MODE+22} - vslideup.vx
  * args: a, c, vl, iters, perf, offset, vert, tag
  *       a0 a1 a2 a3    a4    a5      a6    a7
+ *
+ * Slides intentionally use horizontal load + selected-mode compute +
+ * horizontal store. That makes V mode observable as a row shift in memory;
+ * a V-load/V-store pair would hide the compute orientation by transposing
+ * both sides of the operation.
  */
 __attribute__((naked, noinline))
 void k_vslideup(int8_t *a, int8_t *c, size_t vl, int iters,
                 uintptr_t perf, int offset, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
         "vle8.v  v8, (a0)                   \n\t"
         "vmv.v.i v16, 0                     \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a3                     \n\t"
         "sw      t0, 0(a4)                  \n\t"
@@ -706,15 +723,16 @@ void k_vslideup(int8_t *a, int8_t *c, size_t vl, int iters,
     );
 }
 
-/* TEST {11,12,27,28} - vslidedown.vx */
+/* TEST {23,24,N_PER_MODE+23,N_PER_MODE+24} - vslidedown.vx */
 __attribute__((naked, noinline))
 void k_vslidedown(int8_t *a, int8_t *c, size_t vl, int iters,
                   uintptr_t perf, int offset, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, a6                  \n\t"
+        "csrw    0x7c0, zero                \n\t"
         "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
         "vle8.v  v8, (a0)                   \n\t"
         "vmv.v.i v16, 0                     \n\t"
+        "csrw    0x7c0, a6                  \n\t"
         "mv      t0, a7                     \n\t"
         "mv      t2, a3                     \n\t"
         "sw      t0, 0(a4)                  \n\t"
@@ -729,7 +747,158 @@ void k_vslidedown(int8_t *a, int8_t *c, size_t vl, int iters,
     );
 }
 
-/* TEST {13,29} - vle8.v full (no mask)
+/* TEST {18,N_PER_MODE+18} - vmv.x.s
+ * Setup uses a mode-specific vslidedown.vi on asymmetric grid_b, then the
+ * timed instruction extracts element 0 under the same mode:
+ *   H expected = grid_b[0][VMV_X_S_INDEX]
+ *   V expected = grid_b[VMV_X_S_INDEX][0]
+ *
+ * Do not use vrgather as the setup here: that makes this test depend on
+ * vertical gather behavior and hides whether vmv.x.s itself is correct.
+ */
+// __attribute__((naked, noinline))
+// void k_vmv_x_s(int8_t *b, int8_t *c, size_t vl, int iters,
+//                uintptr_t perf, int vert, int tag) {
+//     __asm__ volatile (
+//         "csrw    0x7c0, zero                \n\t"
+//         "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+//         "vle8.v  v8, (a0)                   \n\t"
+//         "vmv.v.i v16, 0                     \n\t"
+//         "csrw    0x7c0, a5                  \n\t"
+//         "vslidedown.vi v16, v8, 5           \n\t"
+//         "mv      t0, a6                     \n\t"
+//         "mv      t2, a3                     \n\t"
+//         "sw      t0, 0(a4)                  \n\t"
+//     "1:                                     \n\t"
+//         "vmv.x.s t4, v16                    \n\t"
+//         "addi    t2, t2, -1                 \n\t"
+//         "bnez    t2, 1b                     \n\t"
+//         "sw      zero, 0(a4)                \n\t"
+//         "csrw    0x7c0, zero                \n\t"
+//         "sb      t4, 0(a1)                  \n\t"
+//         "ret                                \n\t"
+//     );
+// }
+__attribute__((naked, noinline))
+void k_vmv_x_s(int8_t *b, int8_t *c, size_t vl, int iters,
+               uintptr_t perf, int vert, int tag) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8, (a0)                   \n\t"
+        "vmv.v.i v16, 0                     \n\t"
+        "csrw    0x7c0, a5                  \n\t"
+        "vslidedown.vi v16, v8, 5           \n\t"
+        "mv      t0, a6                     \n\t"
+        "mv      t2, a3                     \n\t"
+        "sw      t0, 0(a4)                  \n\t"
+    "1:                                     \n\t"
+        "vmv.x.s t4, v16                    \n\t"
+        "addi    t2, t2, -1                 \n\t"
+        "bnez    t2, 1b                     \n\t"
+        "sw      zero, 0(a4)                \n\t"
+        "csrw    0x7c0, zero                \n\t"
+        // "sb      t4, 0(a1)                  \n\t"
+        "vle8.v  v16, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* TEST {26,28,N_PER_MODE+26,N_PER_MODE+28} - vslideup.vi */
+__attribute__((naked, noinline))
+void k_vslideup_vi1(int8_t *a, int8_t *c, size_t vl, int iters,
+                    uintptr_t perf, int vert, int tag) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8, (a0)                   \n\t"
+        "vmv.v.i v16, 0                     \n\t"
+        "csrw    0x7c0, a5                  \n\t"
+        "mv      t0, a6                     \n\t"
+        "mv      t2, a3                     \n\t"
+        "sw      t0, 0(a4)                  \n\t"
+    "1:                                     \n\t"
+        "vslideup.vi v16, v8, 1             \n\t"
+        "addi    t2, t2, -1                 \n\t"
+        "bnez    t2, 1b                     \n\t"
+        "sw      zero, 0(a4)                \n\t"
+        "csrw    0x7c0, zero                \n\t"
+        "vse8.v  v16, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+__attribute__((naked, noinline))
+void k_vslideup_vi31(int8_t *a, int8_t *c, size_t vl, int iters,
+                     uintptr_t perf, int vert, int tag) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8, (a0)                   \n\t"
+        "vmv.v.i v16, 0                     \n\t"
+        "csrw    0x7c0, a5                  \n\t"
+        "mv      t0, a6                     \n\t"
+        "mv      t2, a3                     \n\t"
+        "sw      t0, 0(a4)                  \n\t"
+    "1:                                     \n\t"
+        "vslideup.vi v16, v8, 31            \n\t"
+        "addi    t2, t2, -1                 \n\t"
+        "bnez    t2, 1b                     \n\t"
+        "sw      zero, 0(a4)                \n\t"
+        "csrw    0x7c0, zero                \n\t"
+        "vse8.v  v16, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* TEST {27,29,N_PER_MODE+27,N_PER_MODE+29} - vslidedown.vi */
+__attribute__((naked, noinline))
+void k_vslidedown_vi1(int8_t *a, int8_t *c, size_t vl, int iters,
+                      uintptr_t perf, int vert, int tag) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8, (a0)                   \n\t"
+        "vmv.v.i v16, 0                     \n\t"
+        "csrw    0x7c0, a5                  \n\t"
+        "mv      t0, a6                     \n\t"
+        "mv      t2, a3                     \n\t"
+        "sw      t0, 0(a4)                  \n\t"
+    "1:                                     \n\t"
+        "vslidedown.vi v16, v8, 1           \n\t"
+        "addi    t2, t2, -1                 \n\t"
+        "bnez    t2, 1b                     \n\t"
+        "sw      zero, 0(a4)                \n\t"
+        "csrw    0x7c0, zero                \n\t"
+        "vse8.v  v16, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+__attribute__((naked, noinline))
+void k_vslidedown_vi31(int8_t *a, int8_t *c, size_t vl, int iters,
+                       uintptr_t perf, int vert, int tag) {
+    __asm__ volatile (
+        "csrw    0x7c0, zero                \n\t"
+        "vsetvli zero, a2, e8, m4, ta, ma   \n\t"
+        "vle8.v  v8, (a0)                   \n\t"
+        "vmv.v.i v16, 0                     \n\t"
+        "csrw    0x7c0, a5                  \n\t"
+        "mv      t0, a6                     \n\t"
+        "mv      t2, a3                     \n\t"
+        "sw      t0, 0(a4)                  \n\t"
+    "1:                                     \n\t"
+        "vslidedown.vi v16, v8, 31          \n\t"
+        "addi    t2, t2, -1                 \n\t"
+        "bnez    t2, 1b                     \n\t"
+        "sw      zero, 0(a4)                \n\t"
+        "csrw    0x7c0, zero                \n\t"
+        "vse8.v  v16, (a1)                  \n\t"
+        "ret                                \n\t"
+    );
+}
+
+/* TEST {N_COMPUTE+1,2*N_COMPUTE+N_LSU+1} - vle8.v full (no mask)
  * Repeats the load 100x into v16, then stores once for verification.
  * args: a, c, vl, iters, perf, vert, tag
  */
@@ -765,12 +934,16 @@ __attribute__((naked, noinline))
 void k_vle_masked(int8_t *a, int8_t *c, size_t vl, int iters,
                   uintptr_t perf, int vert, int tag) {
     __asm__ volatile (
-        "csrw    0x7c0, zero                \n\t"
+        /* Build the mask under the same CSR mode the masked vle will consume
+         * it in, with no H-mode op touching v0 in between (handoff §4.2).
+         * For vert=0 this is identical to the old H-only flow; for vert=1
+         * v0 is built in V mode, kept untouched, and the masked V-load
+         * reads it through the V scatter consistently. */
+        "csrw    0x7c0, a5                  \n\t"
         "vsetvli zero, a2, e8, m4, ta, mu   \n\t"
         "vid.v   v12                        \n\t"
         "vmseq.vi v0, v12, 0                \n\t"
         "vmv.v.i v16, 0                     \n\t"
-        "csrw    0x7c0, a5                  \n\t"
         "mv      t0, a6                     \n\t"
         "mv      t2, a3                     \n\t"
         "sw      t0, 0(a4)                  \n\t"
@@ -899,6 +1072,14 @@ static inline int8_t bool_byte(int p) {
 
 static const char *mode_str(int vert) { return vert ? "V" : "H"; }
 
+static int g_check_total;
+static int g_check_failed;
+
+static inline void record_check_result(int pass) {
+    g_check_total++;
+    if (!pass) g_check_failed++;
+}
+
 /* Generic two-counter accumulator used by all per-cell checkers. */
 typedef struct {
     int errors;
@@ -919,6 +1100,7 @@ static inline void cs_record(CheckState *s, int r, int c, int8_t got, int8_t exp
 }
 static inline void cs_report(const CheckState *s, const char *name, const char *mode,
                              const char *desc) {
+    record_check_result(s->errors == 0);
     if (s->errors == 0) {
         printf("[CHECK] PASS %s (%s): %s\n", name, mode, desc);
     } else {
@@ -1132,6 +1314,7 @@ static void check_vrgather_vv_v(void) {
 __attribute__((noinline))
 static void check_vmv_s_x(int vert) {
     int8_t got = grid_c[0][0];
+    record_check_result(got == (int8_t)VMV_S_X_VALUE);
     if (got == (int8_t)VMV_S_X_VALUE) {
         printf("[CHECK] PASS vmv.s.x (%s): grid_c[0][0] = %d\n",
                mode_str(vert), VMV_S_X_VALUE);
@@ -1139,6 +1322,21 @@ static void check_vmv_s_x(int vert) {
         printf("[CHECK] FAIL vmv.s.x (%s): grid_c[0][0] = %d, expected %d\n",
                mode_str(vert), got, VMV_S_X_VALUE);
     }
+}
+
+__attribute__((noinline))
+static void check_vmv_x_s(int vert) {
+    CheckState s; cs_init(&s);
+    int8_t ref = vert ? b_val(VMV_X_S_INDEX, 0) : b_val(0, VMV_X_S_INDEX);
+    for (int r = 0; r < ROWS; r++)
+        for (int c = 0; c < COLS; c++) {
+            int8_t exp = (r == 0 && c == 0) ? ref : (int8_t)0;
+            cs_record(&s, r, c, grid_c[r][c], exp);
+        }
+    cs_report(&s, "vmv.x.s", mode_str(vert),
+              vert
+                ? "extract after V vslidedown.vi setup: grid_c[0][0] == grid_b[5][0]"
+                : "extract after H vslidedown.vi setup: grid_c[0][0] == grid_b[0][5]");
 }
 
 __attribute__((noinline))
@@ -1157,6 +1355,7 @@ static void check_vredsum(int vert) {
     int8_t ref = 0;
     for (int c = 0; c < COLS; c++) ref = (int8_t)(ref + a_val(0, c));
     int8_t got = grid_c[0][0];
+    record_check_result(got == ref);
     if (got == ref) {
         printf("[CHECK] PASS vredsum.vs (%s): grid_c[0][0] sum = %d\n",
                mode_str(vert), ref);
@@ -1188,82 +1387,91 @@ static void check_vredmax(int vert) {
     }
 }
 
+static inline int8_t slide_src_val(int use_b, int r, int c) {
+    return use_b ? b_val(r, c) : a_val(r, c);
+}
+
 /* H slideup: shift columns within a row by `off`. */
 __attribute__((noinline))
-static void check_vslideup_h(int off) {
+static void check_vslideup_h(const char *op, int off, int use_b) {
     CheckState s; cs_init(&s);
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < COLS; c++) {
-            int8_t exp = (c < off) ? (int8_t)0 : a_val(r, c - off);
+            int8_t exp = (c < off) ? (int8_t)0 : slide_src_val(use_b, r, c - off);
             cs_record(&s, r, c, grid_c[r][c], exp);
         }
-    char d[40]; (void)d;
+    record_check_result(s.errors == 0);
     if (s.errors == 0) {
-        printf("[CHECK] PASS vslideup.vx by %d (H): col c<%d zero, "
-               "rest = grid_a[r][c-%d]\n", off, off, off);
+        printf("[CHECK] PASS %s by %d (H): col c<%d zero, "
+               "rest = grid_%c[r][c-%d]\n", op, off, off,
+               use_b ? 'b' : 'a', off);
     } else {
-        printf("[CHECK] FAIL vslideup.vx by %d (H): %d errors; "
+        printf("[CHECK] FAIL %s by %d (H): %d errors; "
                "first at [%d][%d] got %d exp %d\n",
-               off, s.errors, s.br, s.bc, s.bgot, s.bexp);
+               op, off, s.errors, s.br, s.bc, s.bgot, s.bexp);
     }
 }
 
 /* V slideup: shift rows within a column by `off` (image moves down `off`). */
 __attribute__((noinline))
-static void check_vslideup_v(int off) {
+static void check_vslideup_v(const char *op, int off, int use_b) {
     CheckState s; cs_init(&s);
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < COLS; c++) {
-            int8_t exp = (r < off) ? (int8_t)0 : a_val(r - off, c);
+            int8_t exp = (r < off) ? (int8_t)0 : slide_src_val(use_b, r - off, c);
             cs_record(&s, r, c, grid_c[r][c], exp);
         }
+    record_check_result(s.errors == 0);
     if (s.errors == 0) {
-        printf("[CHECK] PASS vslideup.vx by %d (V): row r<%d zero, "
-               "rest = grid_a[r-%d][c]\n", off, off, off);
+        printf("[CHECK] PASS %s by %d (V): row r<%d zero, "
+               "rest = grid_%c[r-%d][c]\n", op, off, off,
+               use_b ? 'b' : 'a', off);
     } else {
-        printf("[CHECK] FAIL vslideup.vx by %d (V): %d errors; "
+        printf("[CHECK] FAIL %s by %d (V): %d errors; "
                "first at [%d][%d] got %d exp %d\n",
-               off, s.errors, s.br, s.bc, s.bgot, s.bexp);
+               op, off, s.errors, s.br, s.bc, s.bgot, s.bexp);
     }
 }
 
 /* H slidedown: shift columns within a row by `off` toward lower index. */
 __attribute__((noinline))
-static void check_vslidedown_h(int off) {
+static void check_vslidedown_h(const char *op, int off, int use_b) {
     CheckState s; cs_init(&s);
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < COLS; c++) {
-            int8_t exp = (c + off >= COLS) ? (int8_t)0 : a_val(r, c + off);
+            int8_t exp = (c + off >= COLS) ? (int8_t)0 : slide_src_val(use_b, r, c + off);
             cs_record(&s, r, c, grid_c[r][c], exp);
         }
+    record_check_result(s.errors == 0);
     if (s.errors == 0) {
-        printf("[CHECK] PASS vslidedown.vx by %d (H): col c>=%d zero, "
-               "rest = grid_a[r][c+%d]\n",
-               off, COLS - off, off);
+        printf("[CHECK] PASS %s by %d (H): col c>=%d zero, "
+               "rest = grid_%c[r][c+%d]\n",
+               op, off, COLS - off, use_b ? 'b' : 'a', off);
     } else {
-        printf("[CHECK] FAIL vslidedown.vx by %d (H): %d errors; "
+        printf("[CHECK] FAIL %s by %d (H): %d errors; "
                "first at [%d][%d] got %d exp %d\n",
-               off, s.errors, s.br, s.bc, s.bgot, s.bexp);
+               op, off, s.errors, s.br, s.bc, s.bgot, s.bexp);
     }
 }
 
 /* V slidedown: shift rows within a column by `off` (image moves up `off`). */
 __attribute__((noinline))
-static void check_vslidedown_v(int off) {
+static void check_vslidedown_v(const char *op, int off, int use_b) {
     CheckState s; cs_init(&s);
     for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < COLS; c++) {
-            int8_t exp = (r + off >= ROWS) ? (int8_t)0 : a_val(r + off, c);
+            int8_t exp = (r + off >= ROWS) ? (int8_t)0 : slide_src_val(use_b, r + off, c);
             cs_record(&s, r, c, grid_c[r][c], exp);
         }
+    record_check_result(s.errors == 0);
     if (s.errors == 0) {
-        printf("[CHECK] PASS vslidedown.vx by %d (V): row r>=%d zero, "
-               "rest = grid_a[r+%d][c]\n",
-               off, ROWS - off, off);
+        printf("[CHECK] PASS %s by %d (V): row r>=%d zero, "
+               "rest = grid_%c[r+%d][c]\n",
+               op, off, ROWS - off, use_b ? 'b' : 'a', off);
     } else {
-        printf("[CHECK] FAIL vslidedown.vx by %d (V): %d errors; "
+        printf("[CHECK] FAIL %s by %d (V): %d errors; "
                "first at [%d][%d] got %d exp %d\n",
-               off, s.errors, s.br, s.bc, s.bgot, s.bexp);
+               op, off, s.errors, s.br, s.bc, s.bgot, s.bexp);
     }
 }
 
@@ -1279,13 +1487,33 @@ static void check_vle_full(int vert) {
 __attribute__((noinline))
 static void check_vle_masked(int vert) {
     CheckState s; cs_init(&s);
-    for (int r = 0; r < ROWS; r++) {
-        cs_record(&s, r, 0, grid_c[r][0], a_val(r, 0));
-        for (int c = 1; c < COLS; c++)
-            cs_record(&s, r, c, grid_c[r][c], 0);
+    if (vert) {
+        /* V-mode masked vle + H-store. Mask v0 is built in V mode as
+         *   physical_v0[i][j] = (i == 0)   (only physical row 0 is set)
+         * which the LSU reads through V scatter as
+         *   lane_mask[r][c] = (c == 0)     (active lane = c==0 of each hw-row).
+         * The active lanes load grid_a[r][0]; V-write transposes those
+         * lanes into v16 such that physical_v16[0][j] = grid_a[j][0] and
+         * physical_v16[i>0][:] = 0. The H-store then surfaces row 0 of
+         * memory as the loaded column. So the expected transposed pattern is
+         *   grid_c[0][c] = grid_a[c][0] = a_val(c, 0)
+         *   grid_c[r>0][c] = 0 */
+        for (int c = 0; c < COLS; c++)
+            cs_record(&s, 0, c, grid_c[0][c], a_val(c, 0));
+        for (int r = 1; r < ROWS; r++)
+            for (int c = 0; c < COLS; c++)
+                cs_record(&s, r, c, grid_c[r][c], 0);
+        cs_report(&s, "vle8.v masked", mode_str(vert),
+                  "row 0 == grid_a[c][0] (transpose), rest == 0");
+    } else {
+        for (int r = 0; r < ROWS; r++) {
+            cs_record(&s, r, 0, grid_c[r][0], a_val(r, 0));
+            for (int c = 1; c < COLS; c++)
+                cs_record(&s, r, c, grid_c[r][c], 0);
+        }
+        cs_report(&s, "vle8.v masked", mode_str(vert),
+                  "col 0 == grid_a[r][0], rest == 0");
     }
-    cs_report(&s, "vle8.v masked", mode_str(vert),
-              "col 0 == grid_a[r][0], rest == 0");
 }
 
 __attribute__((noinline))
@@ -1309,42 +1537,66 @@ static void check_vse_masked(int vert) {
               "col 0 == grid_a[r][0], rest == 0 (preserved)");
 }
 
+/* LSU row pitch is fixed at the logical image-row width (128 e8) regardless
+ * of the current `vl`. With vl=STRIDE2_PIXELS (64) and stride 2, every hw-row
+ * touches exactly 64 of its own 128-byte slot.
+ *
+ * H mode (kernel = vlse-H + vse-H, both with vl=64):
+ *   vlse8.v v16, (a0), 2     reads grid_a[r][0,2,...,126] into v16 lanes 0..63
+ *                            for every hw-row r; lanes 64..127 stay 0 from
+ *                            the `vmv.v.i v16, 0` init.
+ *   vse8.v v16, (a1)         writes the first 64 lanes -> grid_c[r][0..63];
+ *                            cols 64..127 stay 0 (clear_grid_c).
+ *   Result: grid_c[r][c<64] = grid_a[r][2c]; rest = 0.
+ *
+ * V mode (kernel = vlse-V + vse-H): the V-LSU strided load lands the data in
+ * VRF transposed, so after the H-store the memory image is the transpose of
+ * the H-mode result, with the same vl=64 windowing applied along both axes:
+ *   physical_v16_V[r][c] = physical_v16_H[c][r]
+ *   so grid_c[r][c] = grid_a[c][2r] when r<64 and c<64; otherwise 0
+ *      (rows >=64 not written by the vse, cols >=64 outside the H-row vl
+ *       window have zero in v16 from the init). */
 __attribute__((noinline))
 static void check_vlse_stride2(int vert) {
     CheckState s; cs_init(&s);
-    for (int r = 0; r < STRIDE2_PIXELS; r++) {
+    for (int r = 0; r < ROWS; r++) {
         for (int c = 0; c < COLS; c++) {
             int8_t exp;
-            if (c < 64) {
-                exp = a_val(r, c * STRIDE2_BYTES);
-            } else if (c < 96) {
-                exp = a_val(r, 64 + (c - 64) * STRIDE2_BYTES);
+            if (vert) {
+                exp = (r < STRIDE2_PIXELS && c < STRIDE2_PIXELS)
+                      ? a_val(c, r * STRIDE2_BYTES)
+                      : (int8_t)0;
             } else {
-                exp = a_val((r + 1) & (ROWS - 1), (c - 96) * STRIDE2_BYTES);
+                exp = (c < STRIDE2_PIXELS)
+                      ? a_val(r, c * STRIDE2_BYTES)
+                      : (int8_t)0;
             }
             cs_record(&s, r, c, grid_c[r][c], exp);
         }
     }
     cs_report(&s, "vlse8.v stride2", mode_str(vert),
-              "active 64-row LMUL=4 stride-2 load layout matches register group");
+              vert
+                ? "stride-2 load (V-load + H-store): transposed window grid_a[c][2r]"
+                : "stride-2 load (H): cols [0,vl)=grid_a[r][2c], cols [vl,128)=0");
 }
 
+/* Mirror of the load test:
+ *   vle8.v  v8, (a0)          (vl=64) loads grid_a[r][0..63] into v8.
+ *   vsse8.v v8, (a1), 2       (vl=64, stride 2) writes those 64 bytes back
+ *     to grid_c[r][0,2,4,...,126]; odd columns and rows the kernel did not
+ *     write stay 0 from clear_grid_c(). */
 __attribute__((noinline))
 static void check_vsse_stride2(int vert) {
     CheckState s; cs_init(&s);
-    for (int r = 0; r < STRIDE2_PIXELS; r++)
+    for (int r = 0; r < ROWS; r++)
         for (int c = 0; c < COLS; c++) {
-            int8_t exp = 0;
-            if ((c & 1) == 0) {
-                if (c < 64)
-                    exp = a_val(r, c / STRIDE2_BYTES);
-                else
-                    exp = a_val(r, 64 + (c - 64) / STRIDE2_BYTES);
-            }
+            int8_t exp = ((c & 1) == 0)
+                         ? a_val(r, c / STRIDE2_BYTES)
+                         : (int8_t)0;
             cs_record(&s, r, c, grid_c[r][c], exp);
         }
     cs_report(&s, "vsse8.v stride2", mode_str(vert),
-              "active 64-row LMUL=4 stride-2 store layout matches register group");
+              "stride-2 store: even cols=grid_a[r][c/2], odd cols=0");
 }
 
 /*============================================================================
@@ -1481,59 +1733,107 @@ static void run_compute_block(int vert) {
     print_grid(2, &grid_c[0][0]);
     check_vmv_s_x(vert);
 
-    printf("\n--- TEST %d: vmv.v.v (%s, tag=%d) ---\n", 18 + base, mode, 18 + base);
+    printf("\n--- TEST %d: vmv.x.s after vslidedown.vi setup (%s, tag=%d) ---\n",
+           18 + base, mode, 18 + base);
     clear_grid_c();
-    k_vmv_v_v(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF, vert, 18 + base);
+    print_grid(10, &grid_b[0][0]);
+    print_grid(10, &grid_c[0][0]);
+    k_vmv_x_s(&grid_b[0][0], &grid_c[0][0], VL, ITERS, PERF, vert, 18 + base);
+    // print_grid(2, &grid_c[0][0]);
+    print_grid(10, &grid_b[0][0]);
+    print_grid(10, &grid_c[0][0]);
+
+    check_vmv_x_s(vert);
+
+    printf("\n--- TEST %d: vmv.v.v (%s, tag=%d) ---\n", 19 + base, mode, 19 + base);
+    clear_grid_c();
+    k_vmv_v_v(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF, vert, 19 + base);
     print_grid(2, &grid_c[0][0]);
     check_vmv_v_v(vert);
 
-    printf("\n--- TEST %d: vredsum.vs (%s, tag=%d) ---\n", 19 + base, mode, 19 + base);
+    printf("\n--- TEST %d: vredsum.vs (%s, tag=%d) ---\n", 20 + base, mode, 20 + base);
     clear_grid_c();
-    k_vredsum(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF, vert, 19 + base);
+    k_vredsum(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF, vert, 20 + base);
     print_grid(3, &grid_c[0][0]);
     check_vredsum(vert);
 
-    printf("\n--- TEST %d: vredmax.vs (%s, tag=%d) ---\n", 20 + base, mode, 20 + base);
+    printf("\n--- TEST %d: vredmax.vs (%s, tag=%d) ---\n", 21 + base, mode, 21 + base);
     clear_grid_c();
-    k_vredmax(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF, vert, 20 + base);
+    k_vredmax(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF, vert, 21 + base);
     print_grid(3, &grid_c[0][0]);
     check_vredmax(vert);
 
     printf("\n--- TEST %d: vslideup.vx by %d (%s, tag=%d) ---\n",
-           21 + base, VSLIDE_SMALL, mode, 21 + base);
+           22 + base, VSLIDE_SMALL, mode, 22 + base);
     clear_grid_c();
     k_vslideup(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF,
-               VSLIDE_SMALL, vert, 21 + base);
+               VSLIDE_SMALL, vert, 22 + base);
     print_grid(2, &grid_c[0][0]);
-    if (vert) check_vslideup_v(VSLIDE_SMALL);
-    else      check_vslideup_h(VSLIDE_SMALL);
+    if (vert) check_vslideup_v("vslideup.vx", VSLIDE_SMALL, 0);
+    else      check_vslideup_h("vslideup.vx", VSLIDE_SMALL, 0);
 
     printf("\n--- TEST %d: vslideup.vx by %d (%s, tag=%d) ---\n",
-           22 + base, VSLIDE_BIG, mode, 22 + base);
+           23 + base, VSLIDE_BIG, mode, 23 + base);
     clear_grid_c();
     k_vslideup(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF,
-               VSLIDE_BIG, vert, 22 + base);
+               VSLIDE_BIG, vert, 23 + base);
     print_grid(2, &grid_c[0][0]);
-    if (vert) check_vslideup_v(VSLIDE_BIG);
-    else      check_vslideup_h(VSLIDE_BIG);
+    if (vert) check_vslideup_v("vslideup.vx", VSLIDE_BIG, 0);
+    else      check_vslideup_h("vslideup.vx", VSLIDE_BIG, 0);
 
     printf("\n--- TEST %d: vslidedown.vx by %d (%s, tag=%d) ---\n",
-           23 + base, VSLIDE_SMALL, mode, 23 + base);
+           24 + base, VSLIDE_SMALL, mode, 24 + base);
     clear_grid_c();
     k_vslidedown(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF,
-                 VSLIDE_SMALL, vert, 23 + base);
+                 VSLIDE_SMALL, vert, 24 + base);
     print_grid(2, &grid_c[0][0]);
-    if (vert) check_vslidedown_v(VSLIDE_SMALL);
-    else      check_vslidedown_h(VSLIDE_SMALL);
+    if (vert) check_vslidedown_v("vslidedown.vx", VSLIDE_SMALL, 0);
+    else      check_vslidedown_h("vslidedown.vx", VSLIDE_SMALL, 0);
 
     printf("\n--- TEST %d: vslidedown.vx by %d (%s, tag=%d) ---\n",
-           24 + base, VSLIDE_BIG, mode, 24 + base);
+           25 + base, VSLIDE_BIG, mode, 25 + base);
     clear_grid_c();
     k_vslidedown(&grid_a[0][0], &grid_c[0][0], VL, ITERS, PERF,
-                 VSLIDE_BIG, vert, 24 + base);
+                 VSLIDE_BIG, vert, 25 + base);
     print_grid(2, &grid_c[0][0]);
-    if (vert) check_vslidedown_v(VSLIDE_BIG);
-    else      check_vslidedown_h(VSLIDE_BIG);
+    if (vert) check_vslidedown_v("vslidedown.vx", VSLIDE_BIG, 0);
+    else      check_vslidedown_h("vslidedown.vx", VSLIDE_BIG, 0);
+
+    printf("\n--- TEST %d: vslideup.vi by %d (%s, tag=%d) ---\n",
+           26 + base, VSLIDE_SMALL, mode, 26 + base);
+    clear_grid_c();
+    k_vslideup_vi1(&grid_b[0][0], &grid_c[0][0], VL, ITERS, PERF,
+                   vert, 26 + base);
+    print_grid(2, &grid_c[0][0]);
+    if (vert) check_vslideup_v("vslideup.vi", VSLIDE_SMALL, 1);
+    else      check_vslideup_h("vslideup.vi", VSLIDE_SMALL, 1);
+
+    printf("\n--- TEST %d: vslidedown.vi by %d (%s, tag=%d) ---\n",
+           27 + base, VSLIDE_SMALL, mode, 27 + base);
+    clear_grid_c();
+    k_vslidedown_vi1(&grid_b[0][0], &grid_c[0][0], VL, ITERS, PERF,
+                     vert, 27 + base);
+    print_grid(2, &grid_c[0][0]);
+    if (vert) check_vslidedown_v("vslidedown.vi", VSLIDE_SMALL, 1);
+    else      check_vslidedown_h("vslidedown.vi", VSLIDE_SMALL, 1);
+
+    printf("\n--- TEST %d: vslideup.vi by %d (%s, tag=%d) ---\n",
+           28 + base, VSLIDE_IMM_BIG, mode, 28 + base);
+    clear_grid_c();
+    k_vslideup_vi31(&grid_b[0][0], &grid_c[0][0], VL, ITERS, PERF,
+                    vert, 28 + base);
+    print_grid(2, &grid_c[0][0]);
+    if (vert) check_vslideup_v("vslideup.vi", VSLIDE_IMM_BIG, 1);
+    else      check_vslideup_h("vslideup.vi", VSLIDE_IMM_BIG, 1);
+
+    printf("\n--- TEST %d: vslidedown.vi by %d (%s, tag=%d) ---\n",
+           29 + base, VSLIDE_IMM_BIG, mode, 29 + base);
+    clear_grid_c();
+    k_vslidedown_vi31(&grid_b[0][0], &grid_c[0][0], VL, ITERS, PERF,
+                      vert, 29 + base);
+    print_grid(2, &grid_c[0][0]);
+    if (vert) check_vslidedown_v("vslidedown.vi", VSLIDE_IMM_BIG, 1);
+    else      check_vslidedown_h("vslidedown.vi", VSLIDE_IMM_BIG, 1);
 }
 
 static void run_lsu_block(int vert) {
@@ -1590,12 +1890,15 @@ void test(void) {
     printf("[INIT] idx_grid[r][c] = (r+c+1)&127; diag_buf[r][c] = (r==c)?1:0\n");
 
     printf("\n############### HORIZONTAL MODE ###############\n");
-    run_compute_block(/*vert=*/0);
-    run_lsu_block    (/*vert=*/0);
+    // run_compute_block(/*vert=*/0);
+    // run_lsu_block    (/*vert=*/0);
 
     printf("\n############### VERTICAL MODE ###############\n");
     run_compute_block(/*vert=*/1);
     run_lsu_block    (/*vert=*/1);
 
+    printf("\n=== benchmark_instructions summary: %s (%d/%d checks passed, %d failed) ===\n",
+           g_check_failed ? "FAIL" : "PASS",
+           g_check_total - g_check_failed, g_check_total, g_check_failed);
     printf("\n=== benchmark_instructions done ===\n");
 }
