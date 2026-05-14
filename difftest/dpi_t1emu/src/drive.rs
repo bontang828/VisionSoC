@@ -339,6 +339,12 @@ impl Driver {
 
   pub(crate) fn issue_instruction(&mut self) -> IssueData {
     loop {
+      if self.mirror_rtl_writes
+        && self.spike_runner.commit_queue.iter().any(|se| se.is_v())
+      {
+        return IssueData { meta: ISSUE_NOT_VALID, ..Default::default() };
+      }
+
       let se = self.step();
 
       return if se.is_vfence() {
@@ -410,11 +416,19 @@ impl Driver {
     }
   }
 
-  pub(crate) fn retire_instruction(&mut self, _: &Retire) {
+  pub(crate) fn retire_instruction(&mut self, retire: &Retire) {
     let se = self.spike_runner.commit_queue.back().unwrap();
 
     // todo: filter all vector instruction.
     self.shadow_mem.apply_writes(&se.mem_access_record, get_t());
+
+    let write_rd = retire.write_rd;
+    let rd = retire.rd;
+    let data = retire.data;
+    if self.mirror_rtl_writes && write_rd != 0 && rd != 0 {
+      trace!("[{}] mirror RTL rd write x{} = {:#x}", get_t(), rd, data);
+      self.spike_runner.mirror_rd_write(rd, data, false);
+    }
 
     self.spike_runner.commit_queue.pop_back();
     self.last_commit_cycle = get_t();

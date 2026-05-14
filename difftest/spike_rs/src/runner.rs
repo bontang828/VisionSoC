@@ -134,6 +134,12 @@ impl SpikeRunner {
     }
   }
 
+  pub fn mirror_rd_write(&mut self, rd: u32, data: u32, is_fp: bool) {
+    let proc = self.spike.get_proc();
+    let state = proc.get_state();
+    state.set_reg(rd, data, is_fp);
+  }
+
   // just execute one instruction for non-difftest
   pub fn exec(&self) -> anyhow::Result<()> {
     let spike = &self.spike;

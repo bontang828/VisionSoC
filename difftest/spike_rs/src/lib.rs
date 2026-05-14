@@ -202,6 +202,10 @@ impl State {
     unsafe { state_get_reg(self.state, idx, is_fp) }
   }
 
+  pub fn set_reg(&self, idx: u32, value: u32, is_fp: bool) {
+    unsafe { state_set_reg(self.state, idx, value, is_fp) }
+  }
+
   pub fn get_reg_write_size(&self) -> u32 {
     unsafe { state_get_reg_write_size(self.state) }
   }
@@ -284,6 +288,7 @@ unsafe extern "C" {
   fn state_set_pc(state: *mut (), pc: u64);
   fn state_get_pc(state: *mut ()) -> u64;
   fn state_get_reg(state: *mut (), index: u32, is_fp: bool) -> u32;
+  fn state_set_reg(state: *mut (), index: u32, value: u32, is_fp: bool);
   fn state_get_reg_write_size(state: *mut ()) -> u32;
   fn state_get_reg_write_index(state: *mut (), index: u32) -> u32;
   fn state_get_mem_write_size(state: *mut ()) -> u32;

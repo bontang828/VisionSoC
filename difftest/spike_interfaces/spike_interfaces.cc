@@ -201,6 +201,17 @@ uint32_t state_get_reg(spike_state_t *state, uint32_t index, bool is_fp) {
   return (uint32_t)xr[index];
 }
 
+void state_set_reg(spike_state_t *state, uint32_t index, uint32_t value,
+                   bool is_fp) {
+  if (is_fp) {
+    freg_t f = {};
+    f.v[0] = value;
+    state->s->FPR.write(index, f);
+    return;
+  }
+  state->s->XPR.write(index, (reg_t)(int32_t)value);
+}
+
 uint32_t state_get_reg_write_size(spike_state_t *state) {
   reg_write_index_vec.clear();
   for (auto [idx, data] : state->s->log_reg_write) {
