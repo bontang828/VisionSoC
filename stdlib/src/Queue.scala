@@ -3,6 +3,7 @@ package org.chipsalliance.dwbb.stdlib.queue
 import chisel3._
 
 import chisel3.util._
+import chisel3.util.addAttribute
 
 class QueueIO[T <: Data](private val gen: T, entries: Int) extends Bundle {
   val enq = Flipped(EnqIO(gen))
@@ -83,6 +84,14 @@ object Queue {
       } else {
         Reg(Vec(entries, gen))
       }
+      // Hint Vivado to map the queue storage into LUTRAM (distributed RAM)
+      // instead of dedicated flip-flops. The Reg(Vec(...)) shape with
+      // head/tail-pointer access is exactly what RAM32M / RAM64M expect.
+      // For tiny queues (≤4 deep * narrow data) Vivado may legitimately
+      // ignore the hint; that is fine - no semantic change either way.
+      // Emitted as SystemVerilog `(* ram_style = "distributed" *)` via
+      // chisel3.util.addAttribute -> firrtl AttributeAnnotation -> firtool.
+      addAttribute(ram, "ram_style = \"distributed\"")
 
       //write and read pointers
       val enqPtr = RegInit(0.U(ptrWidth.W))

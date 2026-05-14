@@ -381,8 +381,13 @@ case class T1Parameter(
     // TODO: configurable for each LSU [[p.supportMask]]
     maskWidth = dLen / 32,
     lsuMSHRSize = lsuMSHRSize,
-    // TODO: make it configurable for each lane
-    toVRFWriteQueueSize = 96,
+    // Original value: toVRFWriteQueueSize = 96 (historic over-provisioning,
+    // cost ~14 k FFs on FPGA: laneNumber * 96 * ~93 b register-based queue).
+    // 32 is conservative for laneScale=2: lsuMSHRSize=3 outstanding TL.D *
+    // ceil(lsuTransposeSize / datapathByte) = 3 + sourceQueueSize headroom = 22
+    // worst-case writes/lane. Restore to 96 if a benchmark stalls on
+    // back-pressure from the LSU write queue.
+    toVRFWriteQueueSize = 32,
     transferSize = lsuTransposeSize,
     vrfReadLatency = vrfReadLatency,
     axi4BundleParameter = axi4BundleParameter,

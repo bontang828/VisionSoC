@@ -99,6 +99,12 @@ object VFUInstantiateParameter {
           case (false, true)  => VFUInstantiateParameter.zvbb(vLen, dLen, requestSourceSize, laneScale)
           case (true, true)   => VFUInstantiateParameter.zvbbFP(vLen, dLen, requestSourceSize, laneScale)
         }
+      case "minimalFpga" =>
+        (fp, zvbb) match {
+          case (false, false) => VFUInstantiateParameter.minimalIntFpga(vLen, dLen, requestSourceSize, laneScale)
+          case _              =>
+            throw new IllegalArgumentException("minimalFpga supports only integer VFU builds without FP or Zvbb")
+        }
       case "small"   =>
         (fp, zvbb) match {
           case (false, false) => VFUInstantiateParameter.smallInt(vLen, dLen, requestSourceSize, laneScale)
@@ -439,6 +445,20 @@ object VFUInstantiateParameter {
     zvbbModuleParameters = Seq() // TODO
   )
 
+  def minimalIntFpga(vLen: Int, dLen: Int, requestSourceSize: Int, laneScale: Int) = {
+    val slotVec = Seq.tabulate(requestSourceSize) { i => i }
+    minimalInt(vLen, dLen, requestSourceSize, laneScale).copy(
+      mulModuleParameters = Seq(),
+      divModuleParameters = Seq(),
+      mulDspModuleParameters = Seq(
+        (SerializableModuleGenerator(classOf[LaneMulDSP], LaneMulParam(32, 2, laneScale)), slotVec)
+      ),
+      divStubModuleParameters = Seq(
+        (SerializableModuleGenerator(classOf[LaneDivStub], LaneDivStubParam(32, 1)), slotVec)
+      )
+    )
+  }
+
   def smallInt(vLen: Int, dLen: Int, requestSourceSize: Int, laneScale: Int) = VFUInstantiateParameter(
     slotCount = requestSourceSize,
     logicModuleParameters = Seq(
@@ -604,13 +624,17 @@ case class VFUInstantiateParameter(
   divfpModuleParameters:   Seq[(SerializableModuleGenerator[LaneDivFP, LaneDivFPParam], Seq[Int])],
   otherModuleParameters:   Seq[(SerializableModuleGenerator[OtherUnit, OtherUnitParam], Seq[Int])],
   floatModuleParameters:   Seq[(SerializableModuleGenerator[LaneFloat, LaneFloatParam], Seq[Int])],
-  zvbbModuleParameters: Seq[(SerializableModuleGenerator[LaneZvbb, LaneZvbbParam], Seq[Int])]) {
+  zvbbModuleParameters:    Seq[(SerializableModuleGenerator[LaneZvbb, LaneZvbbParam], Seq[Int])],
+  mulDspModuleParameters:  Seq[(SerializableModuleGenerator[LaneMulDSP, LaneMulParam], Seq[Int])] = Seq(),
+  divStubModuleParameters: Seq[(SerializableModuleGenerator[LaneDivStub, LaneDivStubParam], Seq[Int])] = Seq()) {
   val genVec =
     logicModuleParameters ++
       aluModuleParameters ++
       shifterModuleParameters ++
       mulModuleParameters ++
+      mulDspModuleParameters ++
       divModuleParameters ++
+      divStubModuleParameters ++
       divfpModuleParameters ++
       otherModuleParameters ++
       floatModuleParameters ++
