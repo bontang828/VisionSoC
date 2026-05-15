@@ -171,6 +171,7 @@ set_property -dict [list \
     CONFIG.c_m_axi_s2mm_data_width {128} \
     CONFIG.c_mm2s_burst_size    {16} \
     CONFIG.c_s2mm_burst_size    {16} \
+    CONFIG.c_sg_length_width    {23} \
 ] [get_bd_cells axi_dma]
 
 

@@ -75,7 +75,7 @@ can resume without rereading the whole conversation.
     old CRC-mismatch panic is gone. Old firmware preserved at
     `/lib/firmware/ap1302_ar1335_single_fw.bin.old`.
 
-### 0.3 Two non-obvious rules you MUST follow
+### 0.3 Non-obvious rules you MUST follow
 
   1. **Build with `-c mudkip2d128small1bram1chain2lanescale_fpga`**
      (note the `_fpga` suffix). The non-`_fpga` config is +12-18k
@@ -89,6 +89,30 @@ can resume without rereading the whole conversation.
      inside configfs, hanging the Kria. For firmware reloads or
      re-probe, do a full `fpgautil` overlay-reload cycle (or reboot).
      Memory entry: `project_ap1302_firmware_path.md`.
+  3. **AXI DMA `c_sg_length_width` MUST be set explicitly.** In
+     direct-register mode (`c_include_sg=0`), Vivado defaults this
+     parameter to **14 bits**, capping any single DMA transfer at
+     `2^14 - 1 = 16383 bytes`. ANY transfer `len ≥ 16384` will hang
+     forever (S2MM never sees TLAST because the LENGTH register
+     physically can't hold the value). This silently breaks the
+     natural visionsoc workload sizes: Y-plane 16384 B, NV12 frame
+     24576 B, 256×256 grey 65536 B. The fix is one line in
+     `system_top.tcl` axi_dma `set_property` dict:
+     ```
+     CONFIG.c_sg_length_width {23} \
+     ```
+     With 23 bits, the LENGTH register holds values 0 … `2^23 - 1`,
+     so **max single transfer = 8,388,607 bytes (just under 8 MiB)**.
+     PG081 range is 8-26 (i.e. up to `2^26 - 1` = ~64 MiB at the
+     ceiling, at slightly higher LUT cost). For reference, our
+     current workload maxima: 128×128 NV12 frame = 24,576 B;
+     256×256 NV12 = 98,304 B — both comfortably under 8 MiB.
+     Hardware cost of going 14→23 bits: ~50-100 LUTs.
+     **Keep this line.** If anyone removes it, the
+     bug returns at the exact 16384 B threshold. Resolved in 5q-r3
+     (`mudkip2d128small1bram1chain2lanescale_fpga-20260515-024828`).
+     Full diagnostic trail and dma_loopback sweep evidence in § 0.10.
+     Memory entry: `project_dma_loopback_16384_bug.md`.
 
 ### 0.4 Camera next-session checklist
 
@@ -407,7 +431,20 @@ it was never noticed.
 Test confirmation: with the workaround in libt1 (pad small
 transfers to non-pathological size), DMA loopback should pass.
 
-### 0.9 5q-final-r2 in flight — DMA burst_size 16 → 32 fix (2026-05-14 ~14:00 BST)
+### 0.9 5q-final-r2 — DMA burst_size 16 → 32 (FAILED + diagnosis WAS WRONG, 2026-05-14 ~14:00 BST)
+
+**Update 2026-05-15:** the "multiples-of-16384 / TLAST off-by-one"
+theory described in this section was WRONG. A sweep on 2026-05-15
+showed every size ≥ 16384 fails (16385, 24576, 32768, 49152, …),
+not just multiples. The real root cause is the AXI DMA's
+`c_sg_length_width` defaulting to 14 bits. See §0.10 for the
+corrected diagnosis and the actual fix.
+
+The 5q-r2 attempt and its routing failure are still informative
+(showed how brittle 88% util is to topology changes), so the
+section is preserved below — just disregard its diagnostic claims.
+
+---
 
 Applying Option 2 fix to permanently move the 16384 B pathological
 size out of the way. Single line change in
@@ -476,6 +513,114 @@ For libt1 / vision_program: build the API to always pad
 **Acceptance: ship FYP demo on 5q-final.** Camera capture + T1
 both proven working. DMA loopback works at non-pathological
 sizes. Vision pipeline naturally uses 24576-byte NV12 frames.
+
+### 0.10 5q-final-r3 — c_sg_length_width 14→23 fix BUILT + DEPLOYED + VERIFIED (2026-05-15 / 2026-05-16)
+
+A board-side size sweep on 2026-05-15 disproved the "multiples of
+16384 / TLAST off-by-one" theory:
+
+| Size | Result |
+|---|---|
+| 4096, 8192, 12288, 16383 | PASS |
+| 16384, 16385, 24576, 32767, 32768, 32769, 49152, 65536 | TIMEOUT |
+
+Threshold is exactly `2^14 - 1 = 16383 B`. That's the maximum value
+representable in the AXI DMA's LENGTH register at the default
+`c_sg_length_width = 14`. Direct-mode (`c_include_sg=0`) makes
+Vivado pick 14 bits by default unless we override it; our
+`axi_dma` set_property dict in `system_top.tcl` never set this
+parameter.
+
+DMA recovery between processes works fine (4096 PASS → 16384 FAIL
+→ 4096 PASS), so it's not a stuck-state issue — the LENGTH
+register simply can't hold the value.
+
+**Fix applied — one line, `fpga/system/system_top.tcl` lines 165-174:**
+
+```diff
+     CONFIG.c_mm2s_burst_size    {16} \
+     CONFIG.c_s2mm_burst_size    {16} \
++    CONFIG.c_sg_length_width    {23} \
+ ] [get_bd_cells axi_dma]
+```
+
+23 bits = max 8 MiB transfer (PG081 range is 8-26 bits).
+Future-proofs against any imaginable visionsoc transfer:
+
+| Workload | Bytes | Bits needed |
+|---|---|---|
+| 128×128 grey i8 | 16,384 | 15 |
+| 128×128 NV12 frame | 24,576 | 15 |
+| 256×256 grey | 65,536 | 17 |
+| 256×256 NV12 | 98,304 | 17 |
+| 23-bit max | 8,388,608 | — |
+
+**Hardware cost (estimated):** ~9 flops in LENGTH register
+(14→23 wider), comparator and down-counter widened by 9 bits;
+~50-100 LUTs total. Strictly smaller than the burst_size=32 change
+in 5q-r2 (which shifted FIFO topology). Here the LENGTH register
+just gets wider — no FIFO depth changes, no AXI behaviour changes,
+no internal pipelining changes.
+
+**Software cost:** ZERO. libt1 + visionsoc_main unchanged. APIs
+identical; the register interface is unchanged. Future kernels can
+just request bigger transfers and they'll work.
+
+**Risk:** at 88.38% LUT util in 5q-final, even a tiny change can
+disturb routing (5q-r2 was +30 LUTs and still failed). Best case:
++50 LUTs, +0 placement disturbance. Worst case: mirrors 5q-r2 and
+we fall back to libt1-side chunking (split ≥16384 into pieces).
+
+**Revert path if route fails:**
+```sh
+git checkout fpga/system/system_top.tcl   # restores 5q-final source
+```
+The 5q-final bitstream at
+`fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260514-041933/`
+remains the deployed production build regardless.
+
+---
+
+**BUILD RESULT (2026-05-15 07:32 BST, 4h 44m wall):** SUCCESS.
+
+| Metric | 5q-final | 5q-r3 | Delta |
+|---|---|---|---|
+| CLB LUTs (impl) | 99,074 (84.59%) | 99,053 (84.57%) | **-21 LUTs** |
+| CLB FFs (impl)  | 126,795 (54.13%) | 126,945 (54.19%) | +150 FFs |
+| Worst setup slack | +0.254 ns | +1.566 ns (worst clock) | all positive |
+| Build wall time | 5h 30m | 4h 44m | -46 min |
+
+LUT count actually came down by 21 (placer noise — within measurement
+error). FFs went up by 150 as expected (9 extra LENGTH-register bits ×
+fan-out across mm2s/s2mm descriptor + counter logic). All clocks meet
+timing. No congestion warnings.
+
+**DEPLOYED (2026-05-16 00:13 BST):**
+  * `system_top_wrapper.bit.bin.5q-r3` scp'd to Kria
+  * Backed up previous active as `system_top_wrapper.bit.bin.5q-final-backup`
+  * Same dtbo (`system_top_wrapper.dtbo`) — no DT-visible change
+  * `rmdir /sys/kernel/config/device-tree/overlays/full && sleep 6 && fpgautil -b ... -o ...`
+  * UIOs re-enumerate cleanly: uio4=t1, uio5=dma, uio6=bram
+
+**VERIFIED (dma_loopback sweep, every size PASSES):**
+
+```
+size=4096  PASS    size=24576  PASS    size=65536  PASS
+size=8192  PASS    size=32767  PASS    size=131072 PASS
+size=12288 PASS    size=32768  PASS    size=262144 PASS
+size=16383 PASS    size=32769  PASS
+size=16384 PASS    size=49152  PASS
+size=16385 PASS
+```
+
+The DMA now handles any transfer up to 8 MiB. The visionsoc full
+pipeline (camera NV12 24576 B frames, BRAM scratchpad halves at
+16384 B, 256×256 future scaling at 98304 B) is unblocked.
+
+**5q-r3 is the new production bitstream.** 5q-final is preserved as
+`.5q-final-backup` on the Kria and remains at
+`fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260514-041933/`
+on the workstation for revert capability.
 
 ### 0.7 5q-final build in flight (2026-05-14 ~04:20 BST)
 

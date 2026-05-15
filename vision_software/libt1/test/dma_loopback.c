@@ -2,10 +2,11 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 
-#define DMA_BYTES (16u * 1024u)
+#define DEFAULT_DMA_BYTES (16u * 1024u)
 
 static void init_pattern(uint8_t *p, size_t n)
 {
@@ -14,21 +15,32 @@ static void init_pattern(uint8_t *p, size_t n)
     }
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     struct t1_buf src = {0};
     struct t1_buf dst = {0};
     int rc = 1;
+    size_t dma_bytes = DEFAULT_DMA_BYTES;
+    if (argc >= 2) {
+        char *end = NULL;
+        unsigned long v = strtoul(argv[1], &end, 0);
+        if (end == argv[1] || v == 0u) {
+            fprintf(stderr, "usage: %s [bytes]\n", argv[0]);
+            return 1;
+        }
+        dma_bytes = (size_t)v;
+    }
+    printf("dma_loopback: bytes=%zu\n", dma_bytes);
 
     if (t1_init() < 0) {
         perror("t1_init");
         return 1;
     }
-    if (t1_buf_alloc(&src, DMA_BYTES) < 0) {
+    if (t1_buf_alloc(&src, dma_bytes) < 0) {
         perror("t1_buf_alloc(src)");
         goto out_close;
     }
-    if (t1_buf_alloc(&dst, DMA_BYTES) < 0) {
+    if (t1_buf_alloc(&dst, dma_bytes) < 0) {
         perror("t1_buf_alloc(dst)");
         goto out_free_src;
     }
@@ -43,11 +55,11 @@ int main(void)
      * This assumes the FPGA block design wires MM2S stream to S2MM stream
      * for loopback or through a compatible stream path.
      */
-    if (t1_dma_s2mm_async(0, dst.pa, DMA_BYTES) < 0) {
+    if (t1_dma_s2mm_async(0, dst.pa, dma_bytes) < 0) {
         perror("t1_dma_s2mm_async");
         goto out_free_dst;
     }
-    if (t1_dma_mm2s_async(src.pa, 0, DMA_BYTES) < 0) {
+    if (t1_dma_mm2s_async(src.pa, 0, dma_bytes) < 0) {
         perror("t1_dma_mm2s_async");
         goto out_free_dst;
     }
@@ -57,7 +69,7 @@ int main(void)
     }
 
     if (t1_buf_sync_for_cpu(&dst) < 0) perror("sync_for_cpu(dst)");
-    if (memcmp(src.va, dst.va, DMA_BYTES) != 0) {
+    if (memcmp(src.va, dst.va, dma_bytes) != 0) {
         fprintf(stderr, "FAIL: DMA loopback mismatch\n");
         goto out_free_dst;
     }
