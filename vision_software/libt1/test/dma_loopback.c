@@ -35,8 +35,8 @@ int main(void)
 
     init_pattern((uint8_t *)src.va, src.size);
     memset(dst.va, 0, dst.size);
-    (void)msync(src.va, src.size, MS_SYNC);
-    (void)msync(dst.va, dst.size, MS_SYNC);
+    if (t1_buf_sync_for_device(&src) < 0) perror("sync_for_device(src)");
+    if (t1_buf_sync_for_device(&dst) < 0) perror("sync_for_device(dst)");
 
     /*
      * Start S2MM first so the stream sink is ready before MM2S produces.
@@ -56,7 +56,7 @@ int main(void)
         goto out_free_dst;
     }
 
-    (void)msync(dst.va, dst.size, MS_INVALIDATE);
+    if (t1_buf_sync_for_cpu(&dst) < 0) perror("sync_for_cpu(dst)");
     if (memcmp(src.va, dst.va, DMA_BYTES) != 0) {
         fprintf(stderr, "FAIL: DMA loopback mismatch\n");
         goto out_free_dst;

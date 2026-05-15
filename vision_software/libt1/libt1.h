@@ -29,6 +29,7 @@ struct t1_buf {
     uint32_t pa;
     size_t size;
     int _udmabuf_fd;
+    int _udmabuf_idx;  /* used by t1_buf_sync_for_{cpu,device} */
 };
 
 int t1_init(void);
@@ -40,6 +41,8 @@ int t1_issue_kernel(const uint32_t *kernel, size_t n_words,
 
 int t1_drain_rd(uint32_t *data, uint8_t *rd_addr, bool *is_fp);
 int t1_drain_csr(uint32_t *vxsat, uint32_t *fflag);
+int t1_wait_rd(uint32_t *data, uint8_t *rd_addr, bool *is_fp, int timeout_ms);
+int t1_wait_csr(uint32_t *vxsat, uint32_t *fflag, int timeout_ms);
 int t1_wait_mem(unsigned n_events);
 
 uint32_t t1_perf_start(uint8_t tag);
@@ -52,10 +55,110 @@ int t1_dma_mm2s_sync(uint32_t src_pa, uint32_t dst_pa, uint32_t len);
 int t1_dma_s2mm_sync(uint32_t src_pa, uint32_t dst_pa, uint32_t len);
 int t1_dma_wait(void);
 
+/*
+ * Allocate a udmabuf-backed buffer.
+ *
+ * Returns 0 on success, -1 with errno set on failure.
+ *
+ * IMPORTANT: udmabuf is mmap'd CACHED. If you share this buffer with
+ * T1's m_axi_hb master (i.e. you intend to issue any vle*.v / vse*.v
+ * with rs1 = buf->pa), you MUST bracket the LSU sequence with the
+ * sync helpers below - otherwise CPU writes stay in cache (T1 reads
+ * stale DRAM) and CPU reads after T1 writes return cached values
+ * (you see memset zeros). Linux's msync() is NOT a substitute on
+ * udmabuf. See `fyp_doc/driver_implementation_status.md` § "Fix D".
+ *
+ * Required usage:
+ *
+ *   t1_buf_alloc(&in,  N);
+ *   t1_buf_alloc(&out, N);
+ *   write_input(in.va);
+ *   t1_buf_sync_for_device(&in);    // must, before T1 reads
+ *   t1_buf_sync_for_device(&out);   // must, if T1 will read out too
+ *   t1_issue(...);                  // your vle/vse / kernel
+ *   t1_buf_sync_for_cpu(&out);      // must, before CPU reads
+ *   read_output(out.va);
+ */
 int t1_buf_alloc(struct t1_buf *buf, size_t size);
 void t1_buf_free(struct t1_buf *buf);
 
+/*
+ * Cache management for udmabuf-backed t1_buf regions.
+ *
+ * udmabuf maps cached by default. CPU writes land in L1/L2 cache and
+ * don't reach DRAM until explicitly flushed; CPU reads return cached
+ * data even after T1 has written fresh values to DRAM via m_axi_hb.
+ * Linux's msync() on udmabuf does NOT reliably perform the cache
+ * operation we need; udmabuf provides a sysfs interface for this:
+ *
+ *   /sys/class/u-dma-buf/udmabufN/sync_for_device  <- write before T1 reads
+ *   /sys/class/u-dma-buf/udmabufN/sync_for_cpu     <- write after T1 writes
+ *
+ * The expected pattern around an LSU roundtrip is:
+ *   t1_buf_sync_for_device(&in);   // flush CPU writes to DRAM
+ *   t1_issue(vle8 from in.pa);
+ *   t1_issue(vse8 to out.pa);
+ *   t1_buf_sync_for_cpu(&out);     // invalidate CPU cache for out
+ *   memcmp(in.va, out.va, ...);
+ *
+ * Returns 0 on success, -1 with errno set on sysfs write failure.
+ */
+int t1_buf_sync_for_cpu(struct t1_buf *buf);
+int t1_buf_sync_for_device(struct t1_buf *buf);
+
+/*
+ * BRAM scratchpad on the F4 / 5l bitstream: 32 KB at PA 0xB0000000,
+ * reachable from T1 m_axi_hb (via smartconnect_hb/M01) and from both
+ * axi_dma masters. UIO-exposed as /dev/uio6 ("bram").
+ *
+ * t1_scratchpad_alloc returns a t1_buf whose .va points into the
+ * libt1-owned BRAM mmap and whose .pa is exactly 0xB0000000 + offset.
+ * Use this PA as the rs1 to vle/vse instructions when you want T1 to
+ * read or write scratchpad instead of DDR. The DMA kernel APIs accept
+ * the same PA - descriptor src/dst can mix DDR and scratchpad freely.
+ *
+ * Caller responsibilities:
+ *   * `offset` and `size` must satisfy offset + size <= 32 KB
+ *     (T1_SCRATCHPAD_SIZE). Failure returns -1 with errno=ERANGE.
+ *   * Caller must pick non-overlapping [offset, offset+size) ranges
+ *     for concurrent allocations. There is no internal allocator.
+ *
+ * Cache coherency: scratchpad is BRAM, non-coherent at the bram_ctrl
+ * level but PS-side access goes through UIO mmio (uncached by the UIO
+ * kernel driver), so t1_buf_sync_for_{cpu,device} are no-ops on
+ * scratchpad bufs (they return 0 without touching any sysfs file).
+ *
+ * t1_buf_free on a scratchpad buf is also a no-op (zero-cost): the
+ * underlying mmap is owned by libt1 and freed in t1_close().
+ */
+/*
+ * 5m: scratchpad relocated 0xB0000000 -> 0xA0080000 because the B aperture
+ * is HPM1_FPD which is disabled (PSU__USE__M_AXI_GP1=0); A aperture is
+ * HPM0_FPD which is enabled and routes through smartconnect_ctrl. F6
+ * additionally added a PS-side path via dual-port bram_ctrl S_AXI_CTRL,
+ * so PS direct mmap of /dev/uio6 now works.
+ */
+#define T1_SCRATCHPAD_PA   0xA0080000u
+#define T1_SCRATCHPAD_SIZE 0x8000u  /* 32 KB */
+
+int t1_scratchpad_alloc(struct t1_buf *buf, size_t offset, size_t size);
+
 uint32_t t1_va_to_pa(const void *va);
+
+/*
+ * Like t1_va_to_pa, but verifies that the entire [va, va+size) range is
+ * physically contiguous. Returns the starting PA on success, or 0 with
+ * errno set (EXDEV if non-contiguous, EFAULT if any page is not present,
+ * EOVERFLOW if the PA exceeds 32 bits, EINVAL on bad input).
+ *
+ * Use this instead of t1_va_to_pa() for any buffer larger than one page
+ * (i.e. anything that DMA will read or write in bulk). V4L2 MMAP buffers
+ * and DRM dumb buffers are NOT guaranteed contiguous on systems without
+ * CMA-backed allocators, and feeding a non-contiguous buffer to AXI DMA
+ * silently corrupts pages 2..N. This helper turns that into a loud error
+ * at open() time.
+ */
+uint32_t t1_va_to_pa_range(const void *va, size_t size);
 
 void t1_set_vertical_mode_raw(int v);
 int t1_get_vertical_mode_raw(void);

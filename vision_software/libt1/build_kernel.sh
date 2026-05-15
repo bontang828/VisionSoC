@@ -21,7 +21,7 @@ esac
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-riscv64-linux-gnu-as -march=rv32imafc_zvl256b "$src" -o "$tmp/kernel.o"
+riscv64-linux-gnu-as -march=rv32imafc_zve32x_zvl256b "$src" -o "$tmp/kernel.o"
 riscv64-linux-gnu-objcopy -O binary -j .text "$tmp/kernel.o" "$tmp/kernel.bin"
 
 mkdir -p "$(dirname "$dst")"

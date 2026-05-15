@@ -65,8 +65,8 @@ int main(void)
 
     init_input((uint8_t *)in.va);
     memset(out.va, 0, out.size);
-    (void)msync(in.va, in.size, MS_SYNC);
-    (void)msync(out.va, out.size, MS_SYNC);
+    if (t1_buf_sync_for_device(&in) < 0)  perror("sync_for_device(in)");
+    if (t1_buf_sync_for_device(&out) < 0) perror("sync_for_device(out)");
 
     struct t1_op op = {
         .vtype = T1_VTYPE_E8_M4_TA_MA,
@@ -89,7 +89,7 @@ int main(void)
         goto out_free_out;
     }
 
-    (void)msync(out.va, out.size, MS_INVALIDATE);
+    if (t1_buf_sync_for_cpu(&out) < 0) perror("sync_for_cpu(out)");
     if (check_transpose((const uint8_t *)out.va) < 0) {
         goto out_free_out;
     }

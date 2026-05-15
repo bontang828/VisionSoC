@@ -5,7 +5,7 @@ LDFLAGS ?=
 
 LIBT1_SRCS := libt1.c
 LIBT1_OBJS := $(LIBT1_SRCS:.c=.o)
-TESTS := test/smoke test/ddr_roundtrip test/port_grid_vadd test/dma_loopback test/vert_lsu
+TESTS := test/smoke test/ddr_roundtrip test/port_grid_vadd test/port_grid_vadd_scratchpad test/dma_loopback test/vert_lsu test/triage_t1 test/axi_lite_read_probe test/sp_alloc_probe test/sp_load_probe test/sp_store_probe test/sp_ddr_to_sp_probe test/sp_3issue_probe test/sp_4issue_probe test/sp_4issue_with_verify_probe test/sp_v12_compute_probe test/dma_to_scratchpad test/dma_t1_scratchpad test/cnn2d_decoder_probe test/vslide_vx_probe
 
 all: libt1.a libt1.so $(TESTS)
 
@@ -14,6 +14,12 @@ libt1.a: $(LIBT1_OBJS)
 
 libt1.so: $(LIBT1_OBJS)
 	$(CC) -shared -o $@ $^ $(LDFLAGS)
+
+test/cnn2d_decoder_probe: test/cnn2d_decoder_probe.c ../visionsoc_main/cnn2d_decoder.c ../visionsoc_main/cnn2d_decoder.h ../visionsoc_main/kernels/cnn2d_decoder_primitives.h libt1.a
+	$(CC) $(CFLAGS) -I. -I../visionsoc_main -o $@ test/cnn2d_decoder_probe.c ../visionsoc_main/cnn2d_decoder.c libt1.a
+
+test/vslide_vx_probe: test/vslide_vx_probe.c ../visionsoc_main/cnn2d_decoder.c ../visionsoc_main/cnn2d_decoder.h ../visionsoc_main/kernels/cnn2d_decoder_primitives.h libt1.a
+	$(CC) $(CFLAGS) -I. -I../visionsoc_main -o $@ test/vslide_vx_probe.c ../visionsoc_main/cnn2d_decoder.c libt1.a
 
 test/%: test/%.c libt1.a
 	$(CC) $(CFLAGS) -I. -I../visionsoc_main -o $@ $< libt1.a
