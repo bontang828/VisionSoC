@@ -109,6 +109,7 @@ let
       emurt-test = casesSelf.callPackage ./emurt/tests { };
       eval = casesSelf.callPackage ./eval { };
       vision_task = casesSelf.callPackage ./vision_task { };
+      vision_program = casesSelf.callPackage ./vision_program { };
     })
   );
 
@@ -132,6 +133,7 @@ let
       emurt-test
       eval
       vision_task
+      vision_program
       ;
   };
 
