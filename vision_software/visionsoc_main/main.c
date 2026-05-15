@@ -1,6 +1,6 @@
 #include "camera.h"
 #include "display.h"
-#include "kernels/frame_passthrough.h"
+#include "kernels/active_kernel.h"
 #include "libt1.h"
 #include "libt1_regs.h"
 
@@ -85,39 +85,6 @@ static struct byte_stats calc_stats(const void *data, size_t length)
 }
 
 /*
- * T1 load-and-store passthrough: vle8.v v8,(src) then vse8.v v8,(dst).
- * One vle8.v/vse8.v pair fans across all 128 hardware rows at the fixed
- * 128-element row pitch, so this copies the whole 128x128 Y plane with no
- * compute. The host supplies the addresses per issue via op.rs1.
- */
-static int issue_passthrough(uint32_t src_pa, uint32_t dst_pa)
-{
-    if (frame_passthrough_count != 2) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    struct t1_op op = {
-        .vtype = T1_VTYPE_E8_M4_TA_MA,
-        .vl = 128,
-    };
-
-    op.instruction = frame_passthrough[0]; /* vle8.v v8, (a0) -- load Y plane from src */
-    op.rs1 = src_pa;
-    if (t1_issue(&op) < 0) {
-        return -1;
-    }
-
-    op.instruction = frame_passthrough[1]; /* vse8.v v8, (a0) -- store Y plane to dst */
-    op.rs1 = dst_pa;
-    if (t1_issue(&op) < 0) {
-        return -1;
-    }
-
-    return 0;
-}
-
-/*
  * PS-side edit hook. `out` holds a complete, CPU-coherent NV12 frame when
  * this is called. No-op for now -- this is where future PS-side processing
  * (annotation, format tweaks, etc.) belongs before the frame is displayed.
@@ -127,34 +94,88 @@ static void ps_edit(struct t1_buf *out)
     (void)out;
 }
 
+/*
+ * Convert and scale the 128x128 NV12 frame in `src` into the active DRM
+ * mode-sized RGB565 buffer at `dst`. The 128-pixel image is letterboxed
+ * into the largest centered square that fits, with black bars filling
+ * the rest of the row.
+ *
+ * Colour: AP1302 emits JFIF full-range BT.601 on this carrier (see
+ * fpga_build_status.md s 0.6.6), so we use the JFIF (not limited-range)
+ * coefficients. Math is in 8.8 fixed point; the inner loop replaces the
+ * scaling division with a precomputed 16.16 inverse + multiply + shift.
+ */
 static void copy_nv12_to_display(void *dst, uint32_t dst_pitch,
                                  uint32_t dst_width, uint32_t dst_height,
                                  const void *src)
 {
-    const uint8_t *src_y = src;
+    const uint8_t *src_y_plane  = (const uint8_t *)src;
+    const uint8_t *src_uv_plane = (const uint8_t *)src + FRAME_BYTES;
     uint8_t *dst_base = dst;
+
     uint32_t square = dst_width < dst_height ? dst_width : dst_height;
-    uint32_t x0 = (dst_width - square) / 2u;
+    if (square == 0) {
+        return;
+    }
+    uint32_t x0 = (dst_width  - square) / 2u;
     uint32_t y0 = (dst_height - square) / 2u;
+
+    /* 16.16 inverse of `square` so the inner loop replaces a divide with
+     * one multiply + shift: src_idx = ((dst_idx - origin) * inv) >> 16. */
+    uint32_t inv = (128u << 16) / square;
 
     for (uint32_t y = 0; y < dst_height; y++) {
         uint16_t *dst_line = (uint16_t *)(void *)(dst_base + (size_t)y * dst_pitch);
         memset(dst_line, 0, (size_t)dst_width * sizeof(*dst_line));
+
         if (y < y0 || y >= y0 + square) {
             continue;
         }
 
-        uint32_t src_y_idx = ((y - y0) * 128u) / square;
-        const uint8_t *src_line = src_y + (size_t)src_y_idx * 128u;
-        for (uint32_t x = 0; x < dst_width; x++) {
-            if (x < x0 || x >= x0 + square) {
-                continue;
+        uint32_t src_yi = ((y - y0) * inv) >> 16;
+        if (src_yi > 127u) {
+            src_yi = 127u;
+        }
+        const uint8_t *y_line  = src_y_plane  + (size_t)src_yi * 128u;
+        /* NV12 chroma: half-resolution interleaved Cb/Cr, row stride 128. */
+        const uint8_t *uv_line = src_uv_plane + (size_t)(src_yi >> 1) * 128u;
+
+        for (uint32_t x = x0; x < x0 + square; x++) {
+            uint32_t src_xi = ((x - x0) * inv) >> 16;
+            if (src_xi > 127u) {
+                src_xi = 127u;
             }
 
-            uint8_t v = src_line[((x - x0) * 128u) / square];
-            dst_line[x] = (uint16_t)(((v >> 3) << 11) |
-                                     ((v >> 2) << 5) |
-                                     (v >> 3));
+            int Y = y_line[src_xi];
+            /* One CbCr pair covers two luma columns. */
+            uint32_t uv_off = src_xi & ~1u;
+            int u = (int)uv_line[uv_off]     - 128;
+            int v = (int)uv_line[uv_off + 1] - 128;
+
+            /* JFIF full-range BT.601, 8.8 fixed point (coef * 256). */
+            int r = Y + ((359 * v) >> 8);
+            int g = Y - ((88  * u + 183 * v) >> 8);
+            int b = Y + ((454 * u) >> 8);
+
+            if (r < 0) {
+                r = 0;
+            } else if (r > 255) {
+                r = 255;
+            }
+            if (g < 0) {
+                g = 0;
+            } else if (g > 255) {
+                g = 255;
+            }
+            if (b < 0) {
+                b = 0;
+            } else if (b > 255) {
+                b = 255;
+            }
+
+            dst_line[x] = (uint16_t)(((r >> 3) << 11) |
+                                     ((g >> 2) << 5)  |
+                                      (b >> 3));
         }
     }
 }
@@ -286,8 +307,8 @@ int main(int argc, char **argv)
             }
 
             (void)t1_perf_start(1);
-            if (issue_passthrough(in.pa, out.pa) < 0) {
-                die("issue_passthrough");
+            if (issue_active_kernel(in.pa, out.pa) < 0) {
+                die("issue_active_kernel");
             }
             last_kernel_cycles = t1_perf_stop();
 
@@ -302,15 +323,19 @@ int main(int argc, char **argv)
         struct byte_stats out_y_stats = calc_stats(out.va, FRAME_BYTES);
 
         /*
-         * T1's passthrough moved only the Y plane. Copy the NV12 UV plane
-         * across on the PS side so `out` is a complete NV12 frame. V4L2
-         * already made cb.va coherent, so this is a plain CPU copy.
+         * The T1 kernel only writes the Y plane. Fill the NV12 UV plane on
+         * the PS side so `out` is a complete NV12 frame for the display.
+         * The active kernel decides whether to keep the camera's chroma
+         * (full-colour passthrough) or use neutral 0x80 (grayscale).
          */
-        const uint8_t *uv = cb.uv_va ?
-                            (const uint8_t *)cb.uv_va :
-                            (const uint8_t *)cb.va + FRAME_BYTES;
-        memcpy((uint8_t *)out.va + FRAME_BYTES, uv,
-               FRAME_BYTES / 2u);
+        if (ACTIVE_KERNEL_NEUTRAL_UV) {
+            memset((uint8_t *)out.va + FRAME_BYTES, 0x80, FRAME_BYTES / 2u);
+        } else {
+            const uint8_t *uv = cb.uv_va ?
+                                (const uint8_t *)cb.uv_va :
+                                (const uint8_t *)cb.va + FRAME_BYTES;
+            memcpy((uint8_t *)out.va + FRAME_BYTES, uv, FRAME_BYTES / 2u);
+        }
 
         /* PS-side edit hook -- no-op for now. */
         ps_edit(&out);

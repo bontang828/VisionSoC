@@ -27,13 +27,21 @@ kernels/grid_vadd.h: kernels/grid_vadd.S
 kernels/frame_passthrough.h: kernels/frame_passthrough.S
 	../libt1/build_kernel.sh $< $@ frame_passthrough
 
+kernels/sobel.h: kernels/sobel.S
+	../libt1/build_kernel.sh $< $@ sobel
+
 kernels/cnn2d_decoder_primitives.h: kernels/cnn2d_decoder_primitives.S
 	../libt1/build_kernel.sh $< $@ cnn2d_decoder_primitives
 
 cnn2d_decoder.o: kernels/cnn2d_decoder_primitives.h
-main.o: kernels/frame_passthrough.h
+# main.o transitively includes whichever <name>_select.h the active_kernel.h
+# points at, plus the shared dispatcher. List every potential kernel + select
+# header so a change to any of them triggers a rebuild.
+main.o: kernels/active_kernel.h kernels/active_kernel_dispatcher.h \
+        kernels/frame_passthrough_select.h kernels/frame_passthrough.h \
+        kernels/sobel_select.h            kernels/sobel.h
 
-kernels: kernels/grid_vadd.h kernels/frame_passthrough.h kernels/cnn2d_decoder_primitives.h
+kernels: kernels/grid_vadd.h kernels/frame_passthrough.h kernels/sobel.h kernels/cnn2d_decoder_primitives.h
 
 clean:
 	$(RM) $(OBJS) display_smoke.o visionsoc_main display_smoke
