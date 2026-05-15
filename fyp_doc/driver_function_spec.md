@@ -161,8 +161,23 @@ sketch in `driver_implementation_handoff.md` § 3.
         `/sys/class/u-dma-buf/udmabufN/phys_addr`. Caller must have
         loaded `u-dma-buf` module with the right pre-sized instances
         (see `driver_implementation_handoff.md` § 4.6 note).
+        **udmabuf is mmap'd CACHED.** Callers that share the buffer
+        with T1's `m_axi_hb` master *must* bracket the LSU sequence
+        with `t1_buf_sync_for_device(&buf)` (before T1 reads) and
+        `t1_buf_sync_for_cpu(&buf)` (after T1 writes); see
+        `driver_implementation_status.md` § Fix D for the required
+        pattern and the explanation. `msync()` is *not* a substitute.
   * [ ] `void t1_buf_free(struct t1_buf *buf);`
         Munmap, close fd, zero out the struct.
+  * [ ] `int  t1_buf_sync_for_device(struct t1_buf *buf);`
+        Flush CPU cache for the buffer to DRAM. Call **before** any
+        T1 LSU instruction reads the buffer. Internally writes `"1"`
+        to `/sys/class/u-dma-buf/udmabufN/sync_for_device`.
+  * [ ] `int  t1_buf_sync_for_cpu(struct t1_buf *buf);`
+        Invalidate CPU cache for the buffer. Call **after** any
+        T1 LSU instruction has written into it, before the CPU
+        reads the result. Internally writes `"1"` to
+        `/sys/class/u-dma-buf/udmabufN/sync_for_cpu`.
 
 ### Helpers
 

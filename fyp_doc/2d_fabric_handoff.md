@@ -253,39 +253,75 @@ Still worth testing before relying on the full family: `vredmax.vs`,
 store coverage as `vredsum.vs`. The current evidence is from
 `benchmark_vadd.c` TEST 6 and TEST 11-15.
 
-### 4.2 Mask v0 in vertical mode is mode-dependent
+### 4.2 Mask v0 across modes — what's actually shared
 
-We warn about this in `benchmark_vadd.c` R7, but the exact behaviour is not
-fully characterised yet. In TEST 10 we built v0 with the same `vid.v +
-vand.vi + vmseq.vi` recipe in horizontal vs vertical mode and applied it
-to a `vadd.vx` under each mode. The horizontal pass produced the expected
-column-stripe; the vertical pass produced the input image unchanged - the
-mask seemingly evaluated to "no element selected" or "all elements
-selected with inverted polarity, then nothing changed because we used .t".
+Earlier drafts of this section claimed the mask read path is V-scattered
+like a data register. That was a misdiagnosis; verified against
+`benchmark_instructions` TEST 14/26/56 the actual behaviour is:
 
-The hardware does treat v0 as a 2D entity (the same diagonal-scatter logic
-applies), so a mask written in one mode and read in the other goes through
-a transpose-like permutation. Until we dump v0 bytes at each step under
-each mode, the safe rule is: **build the mask under the mode you intend to
-use it in**, and don't expect a "horizontal even-columns" mask and a
-"vertical even-rows" mask to come from the same source code.
+**v0 is a packed bit map at the start of the register, indexed by element
+index, and that indexing is mode-agnostic.** Per hw-row r, the v0 bits
+form a 128-bit predicate covering lanes 0..127; stacked across all 128
+hw-rows that gives a 128 × 128 2D bitmap where bit `(col=c, row=r)` gates
+*lane c of hw-row r*. The mask consumer reads bit k as "lane k active"
+in both H and V mode — there is no transpose-permutation on the predicate
+read.
 
-**No auto-transpose on mode flip.** Switching CSR `0x7c0` does *not*
-rewrite v0. The bytes that landed in v0 under one mode stay in the same
-physical bank slots after the `csrw`, but the read path now applies the
-other mode's scatter to them — which is a transpose, not a noop. So
-when you switch from H to V (or V to H), **rebuild the mask under the
-target mode** with a fresh `vid.v + vand.vi + vmseq.vi` (or whichever
-recipe applies) before applying it. Same in reverse. There is no shadow
-register or cache that gives you a "matched H/V pair" of v0 for free —
-the H-mask and V-mask coexist in v0 only in the sense that the same
-bit-pattern can be re-interpreted, and that re-interpretation almost
-never gives you the mask you wanted. Programmer-side discipline is the
-only contract until § 4.2 gets a hardware investigation.
+What the V-scatter still applies to is the data registers' byte content
+(operands, result writes, byte-image masks loaded via `vle8.v`). A v0
+*built* via a recipe that depends on a data register's lane view (e.g.
+`vmsne.vv v0, v8, v9` where v8/v9 were loaded under a particular CSR
+mode) inherits that mode-sensitivity in its content; a v0 built from
+mode-invariant sources (`vid.v + vmseq.vi #imm`, or
+`vle8.v v20,(mask_buf); vmsne.vi v0, v20, 0` with both ops in the same
+mode) is identical bits in either mode.
 
-To investigate: emit `vse8.v v0, (buf)` after each mask-construction step
-and printf the bytes from C. Also re-read `t1/src/mask/MaskUnit.scala`
-near every `verticalMode` reference for the mask read path.
+**Practical rules**
+
+1. **The bit map gating is mode-agnostic.** Bit `(col c, row r)` of v0 →
+   gates lane `(r, c)` in both H and V mode. No transpose-symmetry
+   requirement on the bit pattern, no rebuild on mode flip just for
+   masks.
+2. **What "lane (r, c)" means in image space is set by the data path.**
+   When data loads and the masked consumer use the same CSR mode,
+   lane `(r, c)` ≡ image pixel `(r, c)`, so a fixed v0 bit map targets
+   the same image pixels in either mode.
+3. **Mismatching modes between data load and data consumer is the
+   real footgun.** vle-H followed by a V-mode consumer makes the
+   consumer see lane `(r, c) = grid[c][r]`. The same v0 bit then gates a
+   *different* image pixel from what was visible in H. The mask
+   itself is fine; the data is what got transposed. If that transposed
+   view is what you wanted (e.g. you are intentionally operating on the
+   transpose of a feature mask), reuse the bitmap. If it is not, build a
+   fresh v0 in the data path's current orientation.
+4. **Build-mode for the mask matters only when its source is
+   mode-sensitive data.** `vid.v + vmseq.vi #imm` and image-derived
+   masks (`vle8.v + vmsne.vi` both in the same mode) give the same v0
+   bits regardless of which mode you run the recipe under. Recipes
+   like `vmsne.vv v0, v8, v9` where v8/v9 came from a mode-specific
+   load do not — the *content* of the bit map encodes whichever mode
+   the operand registers were in.
+
+**Sharing summary.** A v0 bit map can be reused across mode flips. The
+question to ask before doing so is "is the 2D orientation that the new
+mode will surface (after the data-path V-scatter) the orientation I
+want?" If yes, share. If no — for example, you have a face-shaped mask
+built when the data was in H orientation and you are about to consume
+the data in V orientation, where it would gate the rotated/transposed
+silhouette — rebuild a fresh mask in the new mode's data orientation.
+
+The transposed-looking results that appear when V-mode masked LSU is
+paired with an H-mode store (or vice versa) come from the data-side
+V-scatter, not from the mask. The mask is correctly gating the elements
+you specified; the *memory layout* of the result is what gets
+transposed by the data-path mode mismatch on the load/store path.
+
+Cross-references: `t1/src/mask/MaskUnit.scala` for the mask read path
+(no V-scatter on predicate bits), `t1/src/vrf/SharedVRF.scala` for the
+data-side V-scatter sites (`Mux(isLSUInst(idx), instVerticalMode(idx),
+verticalMode)` × 5), and `benchmark_instructions.c::k_vle_masked` /
+`check_vle_masked` for the worked example of "mask gates lane 0 in both
+modes; the result is transposed because of V-load + H-store".
 
 ### 4.3 ~~LSU is horizontal-only~~ — RESOLVED 2026-05-04
 
