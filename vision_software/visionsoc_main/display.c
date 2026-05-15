@@ -1,10 +1,7 @@
 #include "display.h"
 
-#include "libt1.h"
-
 #include <errno.h>
 #include <fcntl.h>
-#include <poll.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -13,17 +10,6 @@
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
 #include <drm_mode.h>
-
-static void page_flip_handler(int fd, unsigned int frame, unsigned int sec,
-                              unsigned int usec, void *data)
-{
-    (void)fd;
-    (void)frame;
-    (void)sec;
-    (void)usec;
-    int *waiting = (int *)data;
-    *waiting = 0;
-}
 
 static drmModeConnector *find_connector(int fd, drmModeRes *res)
 {
@@ -76,16 +62,21 @@ static drmModeModeInfo pick_mode(const drmModeConnector *conn)
     return conn->modes[0];
 }
 
-static int create_fb(struct display *disp, struct display_fb *fb,
-                     uint32_t width, uint32_t height)
+/* Mode-sized RGB565 scanout buffer. We use this as the CRTC framebuffer
+ * directly, avoiding the zynqmp overlay ordering/visibility ambiguity that
+ * made the full-screen black primary hide the NV12 video plane. */
+static int create_video_fb(struct display *disp, struct display_fb *fb,
+                           uint32_t width, uint32_t height)
 {
     struct drm_mode_create_dumb create;
     memset(&create, 0, sizeof(create));
     create.width = width;
     create.height = height;
-    create.bpp = 32;
+    create.bpp = 16;
 
     if (drmIoctl(disp->drm_fd, DRM_IOCTL_MODE_CREATE_DUMB, &create) < 0) {
+        fprintf(stderr, "display: CREATE_DUMB RGB565 %ux%u failed: %s\n",
+                width, height, strerror(errno));
         return -1;
     }
 
@@ -96,8 +87,10 @@ static int create_fb(struct display *disp, struct display_fb *fb,
     uint32_t handles[4] = {fb->handle, 0, 0, 0};
     uint32_t pitches[4] = {fb->pitch, 0, 0, 0};
     uint32_t offsets[4] = {0, 0, 0, 0};
-    if (drmModeAddFB2(disp->drm_fd, width, height, DRM_FORMAT_XRGB8888,
+    if (drmModeAddFB2(disp->drm_fd, width, height, DRM_FORMAT_RGB565,
                       handles, pitches, offsets, &fb->fb_id, 0) < 0) {
+        fprintf(stderr, "display: AddFB2 RGB565 %ux%u pitch %u failed: %s\n",
+                width, height, fb->pitch, strerror(errno));
         return -1;
     }
 
@@ -105,6 +98,7 @@ static int create_fb(struct display *disp, struct display_fb *fb,
     memset(&map, 0, sizeof(map));
     map.handle = fb->handle;
     if (drmIoctl(disp->drm_fd, DRM_IOCTL_MODE_MAP_DUMB, &map) < 0) {
+        fprintf(stderr, "display: MAP_DUMB RGB565 failed: %s\n", strerror(errno));
         return -1;
     }
 
@@ -114,13 +108,9 @@ static int create_fb(struct display *disp, struct display_fb *fb,
         fb->va = NULL;
         return -1;
     }
+
     memset(fb->va, 0, fb->size);
-
-    fb->pa = t1_va_to_pa(fb->va);
-    if (fb->pa == 0) {
-        return -1;
-    }
-
+    fb->pa = 0;
     return 0;
 }
 
@@ -157,6 +147,9 @@ int display_open(struct display *disp)
         return -1;
     }
 
+    /* Expose every plane (primary + overlay) to drmModeGetPlaneResources. */
+    drmSetClientCap(disp->drm_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+
     drmModeRes *res = drmModeGetResources(disp->drm_fd);
     if (!res) {
         goto fail;
@@ -184,16 +177,18 @@ int display_open(struct display *disp)
     drmModeFreeConnector(conn);
     drmModeFreeResources(res);
 
-    uint32_t width = (uint32_t)disp->mode.hdisplay;
-    uint32_t height = (uint32_t)disp->mode.vdisplay;
     for (int i = 0; i < DISPLAY_NUM_BUFS; i++) {
-        if (create_fb(disp, &disp->fbs[i], width, height) < 0) {
+        if (create_video_fb(disp, &disp->fbs[i],
+                            disp->mode.hdisplay, disp->mode.vdisplay) < 0) {
             goto fail;
         }
     }
 
     if (drmModeSetCrtc(disp->drm_fd, disp->crtc_id, disp->fbs[0].fb_id,
                        0, 0, &disp->connector_id, 1, &disp->mode) < 0) {
+        fprintf(stderr, "display: SetCrtc crtc=%u conn=%u fb=%u mode=%ux%u failed: %s\n",
+                disp->crtc_id, disp->connector_id, disp->fbs[0].fb_id,
+                disp->mode.hdisplay, disp->mode.vdisplay, strerror(errno));
         goto fail;
     }
 
@@ -235,8 +230,8 @@ int display_dq_for_filling(struct display *disp, struct display_buf *db)
     db->va = fb->va;
     db->pa = fb->pa;
     db->pitch = fb->pitch;
-    db->width = (uint32_t)disp->mode.hdisplay;
-    db->height = (uint32_t)disp->mode.vdisplay;
+    db->width = disp->mode.hdisplay;
+    db->height = disp->mode.vdisplay;
     return 0;
 }
 
@@ -248,38 +243,23 @@ int display_qbuf(struct display *disp, const struct display_buf *db)
         return -1;
     }
 
-    int waiting = 1;
-    if (drmModePageFlip(disp->drm_fd, disp->crtc_id,
-                        disp->fbs[db->index].fb_id,
-                        DRM_MODE_PAGE_FLIP_EVENT, &waiting) < 0) {
+    if (drmModeSetCrtc(disp->drm_fd, disp->crtc_id,
+                       disp->fbs[db->index].fb_id, 0, 0,
+                       &disp->connector_id, 1, &disp->mode) < 0) {
         return -1;
     }
 
-    drmEventContext ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.version = DRM_EVENT_CONTEXT_VERSION;
-    ev.page_flip_handler = page_flip_handler;
-
-    while (waiting) {
-        struct pollfd pfd = {
-            .fd = disp->drm_fd,
-            .events = POLLIN,
-        };
-        int rc = poll(&pfd, 1, 1000);
-        if (rc < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return -1;
-        }
-        if (rc == 0) {
-            errno = ETIMEDOUT;
-            return -1;
-        }
-        if (drmHandleEvent(disp->drm_fd, &ev) < 0) {
-            return -1;
-        }
-    }
+    /*
+     * Pace to the next vblank. drmModeSetPlane has no completion event;
+     * waiting one vblank bounds tearing and guarantees the previous buffer
+     * is no longer being scanned out before the caller reuses it. Best
+     * effort -- a driver without vblank support just returns an error.
+     */
+    drmVBlank vbl;
+    memset(&vbl, 0, sizeof(vbl));
+    vbl.request.type = DRM_VBLANK_RELATIVE;
+    vbl.request.sequence = 1;
+    (void)drmWaitVBlank(disp->drm_fd, &vbl);
 
     disp->front_index = db->index;
     return 0;
