@@ -34,7 +34,7 @@
 &fpga_full {
 	#address-cells = <2>;
 	#size-cells = <2>;
-	firmware-name = "system_top_wrapper.bit.bin";
+	firmware-name = "xilinx/visionsoc/system_top_wrapper.bit.bin";
 	resets = <&zynqmp_reset 116>, <&zynqmp_reset 117>,
 	         <&zynqmp_reset 118>, <&zynqmp_reset 119>;
 };
@@ -46,8 +46,11 @@
 	/*
 	 * Fabric clock declarations.
 	 *
-	 * pl_clk0 = 60 MHz (T1 + control plane).
-	 * clk_wiz_0 outputs 100/200/300 MHz used by the camera path.
+	 * 2026-05-14 (5q final):
+	 *   pl_clk0   = 100 MHz (DPHY FVCO constraint - was 60 MHz).
+	 *   clk_wiz_0 outputs 60/100/200/300 MHz from pl_clk0.
+	 *   clk_60M is the T1 + DMA + control-plane clock (was directly on
+	 *   pl_clk0; now derived via clk_wiz since pl_clk0 became 100).
 	 * We declare these as fixed-clocks so the V4L2 / IIC drivers can
 	 * reference them via &misc_clk_*. The exact rates match the
 	 * clk_wiz_0 settings in fpga/system/system_top.tcl (rounded by
@@ -55,7 +58,7 @@
 	 */
 	misc_clk_60: misc_clk_60 {
 		#clock-cells = <0>;
-		clock-frequency = <59999401>;     /* PL pl_clk0 */
+		clock-frequency = <60000000>;     /* clk_wiz_0/clk_60M */
 		compatible = "fixed-clock";
 	};
 
@@ -111,6 +114,14 @@
 	 * IRQ: pl_ps_irq0[3] -> SPI 92 (89 + 3).
 	 */
 	axi_iic_sensor: i2c@a0050000 {
+		/*
+		 * 2026-05-11: enabled. The xiic_reinit panic that blocked
+		 * this on 5h/5k/5l is gone on 5m - F4 / F7's BD topology
+		 * changes incidentally fixed the smartconnect_ctrl-side
+		 * timing/reset that was producing the SError. AP1302 driver
+		 * probes cleanly and reads revision 0.2.6 over IIC. See
+		 * camera_bringup_status.md § 6.3 for the resolution trail.
+		 */
 		#address-cells = <1>;
 		#size-cells = <0>;
 		clock-names = "s_axi_aclk";
@@ -138,16 +149,25 @@
 					#address-cells = <1>;
 					#size-cells = <0>;
 					/*
-					 * NOTE: smartcam DTSI uses
-					 *   reset-gpios = <&gpio 79 1>;
-					 * which references a PS EMIO GPIO. Our BD currently
-					 * drives ap1302_rst_b directly from peripheral_aresetn
-					 * (no EMIO GPIO route). The AP1302 driver may refuse
-					 * to probe without a reset GPIO. If it does, see § 5
-					 * "Open question" in fpga_build_status.md -- the fix
-					 * is to add EMIO GPIO to the BD and put the
-					 * reset-gpios property back here.
+					 * F2 follow-up (2026-05-11): the AP1302 Linux driver
+					 * requires a reset-gpios property to probe (it returns
+					 * -ENOENT otherwise). Our BD wires ap1302_rst_b directly
+					 * from peripheral_aresetn - the chip is already out of
+					 * reset by the time the kernel runs - so a real GPIO is
+					 * not electrically necessary. We point reset-gpios at an
+					 * unrouted EMIO bit of the PS GPIO controller (bit 79,
+					 * matching the kv260-smartcam reference); gpiolib accepts
+					 * the handle, the driver toggles a dead pin during probe,
+					 * and the chip (already de-reset) responds correctly.
+					 * AP1302 revision 0.2.6 confirmed over IIC on 5m.
+					 *
+					 * If a future bitstream needs the driver to actually
+					 * cycle reset, add EMIO GPIO width to the PS config
+					 * (PSU__GPIO_EMIO_WIDTH >= 2) and route gpio_o[1] to
+					 * ap1302_rst_b in the BD, then this property already
+					 * resolves correctly.
 					 */
+					reset-gpios = <&gpio 79 1>;
 					clocks = <&ap1302_clk>;
 					sensors {
 						#address-cells = <1>;
@@ -186,6 +206,7 @@
 	 * later. Keep "xlnx,mipi-csi2-rx-subsystem-5.0" as a fallback.
 	 */
 	isp_csiss: csiss@80000000 {
+		/* 2026-05-11: enabled. IIC bus + AP1302 working on 5m. */
 		compatible = "xlnx,mipi-csi2-rx-subsystem-6.0",
 			     "xlnx,mipi-csi2-rx-subsystem-5.0";
 		reg = <0x0 0x80000000 0x0 0x10000>;
@@ -193,12 +214,21 @@
 		clocks = <&misc_clk_100>, <&misc_clk_200>, <&misc_clk_300>;
 		interrupt-parent = <&gic>;
 		interrupts = <0 93 4>;
-		xlnx,csi-pxl-format = <0x18>;     /* UYVY8 1X16 */
-		xlnx,axis-tdata-width = <32>;
+		/* MIPI CSI-2 data type = 0x18 (YUV420_8B -> VYYUYY8_1X24, NV12
+		 * family). Matches 5p BD setting HAS_Y_UV8_420=1 + the
+		 * kv260-smartcam reference. Lets the V4L2 graph negotiate NV12
+		 * end-to-end so /dev/video0 advertises NV12 and frmbuf writes
+		 * planar Y + interleaved UV to memory (Y plane = first 16384
+		 * bytes for 128*128, T1 reads Y with vle8.v v8, (cb.pa)). */
+		xlnx,csi-pxl-format = <0x18>;     /* MIPI_CSI2_DT_YUV420_8B -> VYYUYY8_1X24 (NV12) */
+		xlnx,axis-tdata-width = <16>;   /* 5q final: ppc=1 -> 16-bit AXIS */
 		xlnx,max-lanes = <4>;
 		xlnx,en-active-lanes;
-		xlnx,vc = <4>;
-		xlnx,ppc = <2>;
+		/* BD has CMN_VC=0 (single VC) and CMN_NUM_PIXELS=1.
+		 * Aligning dts metadata to BD to avoid driver advertising
+		 * caps the IP can't deliver. */
+		xlnx,vc = <0>;
+		xlnx,ppc = <1>;
 		xlnx,vfb;
 
 		ports {
@@ -241,17 +271,33 @@
 	 * proc_sys_reset_300M/peripheral_aresetn. If xilinx-frmbuf refuses
 	 * to probe without a reset GPIO, add EMIO GPIO routing in the BD.
 	 */
-	isp_fb_wr_csi: fb_wr@a0020000 {
+	isp_fb_wr_csi: fb_wr@80010000 {
+		/* 2026-05-11: enabled. xilinx-frmbuf driver requires a reset
+		 * property; our BD wires v_frmbuf_wr/ap_rst_n directly from
+		 * proc_sys_reset_300M/peripheral_aresetn (chip already de-reset
+		 * at kernel boot). Same stub-gpio trick as ap1302 - point at an
+		 * unrouted EMIO bit; gpiolib accepts the handle, driver toggles
+		 * a dead pin during probe, the actual IP is already healthy.
+		 *
+		 * Address moved 0xa0020000 -> 0x80010000 in 5o because frmbuf CSR
+		 * is now reached via PS LPD GP master (HPM0_LPD), which only
+		 * addresses the 0x8000_0000-0x9FFF_FFFF aperture (UG1085). The
+		 * FPD aperture (0xa*) is unreachable from LPD. */
+		reset-gpios = <&gpio 78 1>;
 		compatible = "xlnx,axi-frmbuf-wr-v2.1";
-		reg = <0x0 0xa0020000 0x0 0x10000>;
+		reg = <0x0 0x80010000 0x0 0x10000>;
 		#dma-cells = <1>;
 		interrupt-parent = <&gic>;
 		interrupts = <0 94 4>;
-		xlnx,vid-formats = "uyvy", "rgb888", "y8", "nv12";
+		/* BD (5p) has HAS_UYVY8=1 + HAS_Y_UV8_420=1, SAMPLES_PER_CLOCK=1,
+		 * MAX_COLS=256, MAX_ROWS=256. Driver advertises NV12 at
+		 * /dev/video0 (the multi-plane fourcc); frmbuf accepts UYVY
+		 * on AXIS and demuxes into Y plane + UV plane in memory. */
+		xlnx,vid-formats = "nv12";
 		xlnx,dma-addr-width = <32>;
-		xlnx,pixels-per-clock = <2>;
-		xlnx,max-width = <1920>;
-		xlnx,max-height = <1080>;
+		xlnx,pixels-per-clock = <1>;
+		xlnx,max-width = <256>;
+		xlnx,max-height = <256>;
 		clocks = <&misc_clk_300>;
 		clock-names = "ap_clk";
 	};
@@ -261,6 +307,7 @@
 	 * Generates /dev/video0.
 	 */
 	isp_vcap_csi {
+		/* 2026-05-11: enabled. Creates /dev/video0. */
 		compatible = "xlnx,video";
 		dmas = <&isp_fb_wr_csi 0>;
 		dma-names = "port0";
@@ -310,8 +357,8 @@
 	 * BRAM scratchpad -- UIO so libt1 can mmap the 32 KB region
 	 * directly. Visible to T1 idx master at the same address.
 	 */
-	bram_scratch: bram@b0000000 {
+	bram_scratch: bram@a0080000 {
 		compatible = "generic-uio";
-		reg = <0x0 0xb0000000 0x0 0x8000>;
+		reg = <0x0 0xa0080000 0x0 0x8000>;
 	};
 };

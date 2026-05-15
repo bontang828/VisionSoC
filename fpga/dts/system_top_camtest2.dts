@@ -1,0 +1,245 @@
+/*
+ * Device-tree overlay for the CAMTEST bitstream on AMD Kria KV260.
+ * Tests the AP1302 reset-via-PS-EMIO-GPIO fix from 2026-05-12.
+ *
+ * Mirrors fpga/system/system_top_camtest.tcl - camera-only:
+ *   PL slaves (kernel-driven):
+ *     - mipi_csi2_rx_subsystem  @ 0x80000000  -> xilinx-csi2rxss V4L2 subdev
+ *     - v_frmbuf_wr             @ 0x80010000  -> xilinx-frmbuf V4L2 capture DMA
+ *     - axi_iic (sensor IIC)    @ 0xA0050000  -> xiic-i2c, with AP1302+AR1335 children
+ *
+ *   NO T1, DMA, or BRAM nodes - those addresses aren't backed in the
+ *   camtest BD, so probing them would DECERR / kernel-panic.
+ *
+ *   ap1302_rst_b is now driven by PS emio_gpio_o[bit 1] in the BD,
+ *   so reset-gpios = <&gpio 79 1> actually controls the chip
+ *   (driver power_on() will toggle a real pin instead of a stub).
+ *
+ *   Frmbuf is in 5o config (UYVY only, single-plane) - no NV12 in camtest
+ *   to keep the BD identical to 5o for hypothesis isolation.
+ *
+ * Build:
+ *   dtc -@ -I dts -O dtb -o system_top_camtest.dtbo \
+ *       fpga/dts/system_top_camtest.dts
+ */
+
+/dts-v1/;
+/plugin/;
+
+&fpga_full {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	firmware-name = "xilinx/visionsoc/system_top_camtest2.bit.bin";
+	resets = <&zynqmp_reset 116>, <&zynqmp_reset 117>,
+	         <&zynqmp_reset 118>, <&zynqmp_reset 119>;
+};
+
+&amba {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	/* Fabric clock declarations (match clk_wiz_0 outputs in BD). */
+	misc_clk_60: misc_clk_60 {
+		#clock-cells = <0>;
+		clock-frequency = <59999401>;     /* PL pl_clk0 */
+		compatible = "fixed-clock";
+	};
+	misc_clk_100: misc_clk_100 {
+		#clock-cells = <0>;
+		clock-frequency = <99999000>;
+		compatible = "fixed-clock";
+	};
+	misc_clk_200: misc_clk_200 {
+		#clock-cells = <0>;
+		clock-frequency = <199998000>;
+		compatible = "fixed-clock";
+	};
+	misc_clk_300: misc_clk_300 {
+		#clock-cells = <0>;
+		clock-frequency = <299997000>;
+		compatible = "fixed-clock";
+	};
+
+	/* AP1302 sensor clock (24 MHz crystal on IAS daughtercard).
+	 * Value is bookkeeping-only for the kernel clock framework - the
+	 * AP1302 driver just calls clk_prepare_enable, never reads the rate.
+	 * (Note: <0x48000000> = 1.2 GHz which is wrong; fixed here to a
+	 * sensible value.) */
+	ap1302_clk: sensor_clk {
+		#clock-cells = <0>;
+		compatible = "fixed-clock";
+		clock-frequency = <24000000>;     /* 24 MHz IAS crystal */
+	};
+
+	ap1302_vdd: fixedregulator-vdd {
+		compatible = "regulator-fixed";
+		regulator-name = "ap1302_vdd";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		enable-active-high;
+	};
+	ap1302_vaa: fixedregulator-vaa {
+		compatible = "regulator-fixed";
+		regulator-name = "ap1302_vaa";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+	};
+	ap1302_vddio: fixedregulator-vddio {
+		compatible = "regulator-fixed";
+		regulator-name = "ap1302_vddio";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+	};
+
+	/* AXI IIC for AP1302 sensor.
+	 * IRQ: pl_ps_irq0[3] -> SPI 92 (89 + 3). */
+	axi_iic_sensor: i2c@a0050000 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		clock-names = "s_axi_aclk";
+		clocks = <&misc_clk_60>;
+		compatible = "xlnx,axi-iic-2.1", "xlnx,xps-iic-2.00.a";
+		interrupt-names = "iic2intc_irpt";
+		interrupt-parent = <&gic>;
+		interrupts = <0 92 4>;
+		reg = <0x0 0xa0050000 0x0 0x10000>;
+
+		i2c_mux: i2c-mux@74 {
+			compatible = "nxp,pca9546";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x74>;
+
+			i2c@0 {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				reg = <0>;
+
+				ap1302: isp@3c {
+					compatible = "onnn,ap1302";
+					reg = <0x3c>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+					/* gpio 79 = EMIO bit 1 in standard zynqmp numbering
+					 * (MIO=0..77, EMIO=78..173). Camtest BD wires
+					 * emio_gpio_o[1] -> ap1302_rst_b via xlslice, so the
+					 * driver's power_on() now toggles a REAL reset pin. */
+					reset-gpios = <&gpio 79 1>;
+					clocks = <&ap1302_clk>;
+					sensors {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						onnn,model = "onnn,ar1335";
+						sensor@0 {
+							reg = <0>;
+							vdd-supply = <&ap1302_vdd>;
+							vaa-supply = <&ap1302_vaa>;
+							vddio-supply = <&ap1302_vddio>;
+						};
+					};
+					ports {
+						#address-cells = <1>;
+						#size-cells = <0>;
+						port@0 {
+							reg = <2>;
+							isp_out: endpoint {
+								remote-endpoint = <&isp_csiss_in>;
+								data-lanes = <1 2 3 4>;
+							};
+						};
+					};
+				};
+			};
+		};
+	};
+
+	/* MIPI CSI-2 RX subsystem.
+	 * Same config as 5o (UYVY, ppc=1) - only reset wiring differs. */
+	isp_csiss: csiss@80000000 {
+		compatible = "xlnx,mipi-csi2-rx-subsystem-6.0",
+			     "xlnx,mipi-csi2-rx-subsystem-5.0";
+		reg = <0x0 0x80000000 0x0 0x10000>;
+		clock-names = "lite_aclk", "dphy_clk_200M", "video_aclk";
+		clocks = <&misc_clk_100>, <&misc_clk_200>, <&misc_clk_300>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 93 4>;
+		/* CAMTEST: 0x1E = MIPI_CSI2_DT_YUV422_8B -> UYVY8_1X16.
+		 * Matches camtest BD HAS_UYVY8=1 (no NV12, single plane). */
+		xlnx,csi-pxl-format = <0x1E>;
+		xlnx,axis-tdata-width = <32>;
+		xlnx,max-lanes = <4>;
+		xlnx,en-active-lanes;
+		xlnx,vc = <0>;
+		xlnx,ppc = <2>;
+		xlnx,vfb;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@1 {
+				reg = <0x1>;
+				xlnx,video-format = <0x3>; /* UYVY */
+				xlnx,video-width = <0x8>;
+
+				isp_csiss_out: endpoint {
+					remote-endpoint = <&isp_vcap_csi_in>;
+				};
+			};
+			port@0 {
+				reg = <0x0>;
+				xlnx,video-format = <0x3>;
+				xlnx,video-width = <0x8>;
+
+				isp_csiss_in: endpoint {
+					data-lanes = <1 2 3 4>;
+					remote-endpoint = <&isp_out>;
+				};
+			};
+		};
+	};
+
+	/* v_frmbuf_wr - captures CSI stream into DDR.
+	 * Same 5o config (UYVY only, single plane). */
+	isp_fb_wr_csi: fb_wr@80010000 {
+		/* gpio 78 = EMIO bit 0. Not currently routed in camtest BD
+		 * (only bit 1 routed for ap1302_rst_b), so this still toggles
+		 * a stub. Driver requires reset-gpios property to probe. */
+		reset-gpios = <&gpio 78 1>;
+		compatible = "xlnx,axi-frmbuf-wr-v2.1";
+		reg = <0x0 0x80010000 0x0 0x10000>;
+		#dma-cells = <1>;
+		interrupt-parent = <&gic>;
+		interrupts = <0 94 4>;
+		/* Camtest: UYVY only. */
+		xlnx,vid-formats = "uyvy";
+		xlnx,dma-addr-width = <32>;
+		xlnx,pixels-per-clock = <2>;
+		xlnx,max-width = <256>;
+		xlnx,max-height = <256>;
+		clocks = <&misc_clk_300>;
+		clock-names = "ap_clk";
+	};
+
+	/* Capture device tying the V4L2 graph together (CSI-2 -> frmbuf).
+	 * Generates /dev/video0. */
+	isp_vcap_csi {
+		compatible = "xlnx,video";
+		dmas = <&isp_fb_wr_csi 0>;
+		dma-names = "port0";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				direction = "input";
+
+				isp_vcap_csi_in: endpoint {
+					remote-endpoint = <&isp_csiss_out>;
+				};
+			};
+		};
+	};
+};
