@@ -13,14 +13,17 @@
 #include <time.h>
 
 /*
- * BRAM scratchpad path -- commented out. T1 now reads the camera frame
- * from DDR and writes its result to DDR directly: no DMA, no scratchpad.
- * Restore these defines (and the t1_dma_* calls in the frame loop) to
- * bring the DMA/BRAM path back.
+ * 5r scratchpad path: T1 reads its input from URAM half A and writes
+ * its output to URAM half B. The PS uses DMA mm2s to stage the camera Y
+ * plane from a DDR udmabuf into half A before issuing the kernel, then
+ * DMA s2mm to drain half B back to a DDR udmabuf for ps_edit / display.
+ * Arena is 512 KB at PA 0xA0080000 (was 32 KB on 5q-r3 BRAM); each half
+ * is still 16 KB = one FRAME_BYTES Y-plane, so the upper 480 KB of the
+ * arena is available for future multi-frame staging without re-flashing.
  */
-/* #define BRAM_BASE_PA 0xB0000000u */
-/* #define BRAM_HALF_A  (BRAM_BASE_PA + 0x0000u) */
-/* #define BRAM_HALF_B  (BRAM_BASE_PA + 0x4000u) */
+#define URAM_BASE_PA 0xA0080000u
+#define URAM_HALF_A  (URAM_BASE_PA + 0x00000u)
+#define URAM_HALF_B  (URAM_BASE_PA + 0x04000u)
 
 #define FRAME_BYTES  (128u * 128u)                    /* Y plane: one 128x128 greyscale image */
 #define NV12_BYTES   (FRAME_BYTES + FRAME_BYTES / 2u) /* full NV12 frame: Y + half-res UV (24576) */
@@ -279,16 +282,6 @@ int main(int argc, char **argv)
             die("camera frame smaller than one NV12 frame");
         }
 
-        /*
-         * MM2S DMA path -- commented out. T1 reads the camera frame
-         * directly from DDR (cb.pa); no copy into BRAM scratchpad.
-         *
-         * uint32_t bram_pa = half == 0 ? BRAM_HALF_A : BRAM_HALF_B;
-         * if (t1_dma_mm2s_sync(cb.pa, bram_pa, FRAME_BYTES) < 0) {
-         *     die("t1_dma_mm2s_sync");
-         * }
-         */
-
         struct byte_stats cam_y_stats = calc_stats(cb.va, FRAME_BYTES);
 
         memcpy(in.va, cb.va, FRAME_BYTES);
@@ -297,25 +290,58 @@ int main(int argc, char **argv)
         }
 
         if (bypass_t1) {
+            /* Debug bypass: PS copies the Y plane into out and skips
+             * the URAM/T1 round trip entirely. */
             memcpy(out.va, in.va, FRAME_BYTES);
             last_kernel_cycles = 0;
         } else {
-            /* Flush `out` before T1 writes it: udmabuf is cached, and a stale
-             * dirty cache line written back later would clobber T1's store. */
-            if (t1_buf_sync_for_device(&out) < 0) {
-                die("t1_buf_sync_for_device(out)");
+            /*
+             * Stage 1 (DDR -> URAM half A): the visionsoc DMA fabric is a
+             * loopback (MM2S M_AXIS feeds back into S2MM S_AXIS via
+             * axis_reg_slice_dma), so a DDR->URAM transfer needs BOTH
+             * channels armed: s2mm with the URAM destination, mm2s with
+             * the DDR source. t1_dma_mm2s/s2mm_sync each program only one
+             * channel (the *_async helpers ignore the unused address), so
+             * we use the async-pair-plus-wait pattern from
+             * libt1/test/dma_to_scratchpad.c.
+             */
+            if (t1_dma_s2mm_async(0, URAM_HALF_A, FRAME_BYTES) < 0) {
+                die("t1_dma_s2mm_async(arm uram_a)");
+            }
+            if (t1_dma_mm2s_async(in.pa, 0, FRAME_BYTES) < 0) {
+                die("t1_dma_mm2s_async(in)");
+            }
+            if (t1_dma_wait() < 0) {
+                die("t1_dma_wait(in -> uram_a)");
             }
 
+            /*
+             * Stage 2 (URAM half A -> T1 -> URAM half B): the kernel reads
+             * (a0) from URAM_HALF_A and writes (a1) to URAM_HALF_B over
+             * T1's m_axi_hb, which is wired through smartconnect_hb/M01
+             * directly to the URAM-backed bram_ctrl - no DDR round trip.
+             */
             (void)t1_perf_start(1);
-            if (issue_active_kernel(in.pa, out.pa) < 0) {
-                die("issue_active_kernel");
+            if (issue_active_kernel(URAM_HALF_A, URAM_HALF_B) < 0) {
+                die("issue_active_kernel(uram_a -> uram_b)");
             }
             last_kernel_cycles = t1_perf_stop();
 
             /*
-             * Invalidate `out` so the CPU reads T1's freshly-stored Y plane
-             * from DRAM, not the stale cache.
+             * Stage 3 (URAM half B -> DDR): same async-pair pattern, this
+             * time s2mm writes the DDR out buffer and mm2s reads the URAM
+             * source. Invalidate the udmabuf before the CPU reads so it
+             * sees DMA's writes, not stale cache.
              */
+            if (t1_dma_s2mm_async(0, out.pa, FRAME_BYTES) < 0) {
+                die("t1_dma_s2mm_async(arm out)");
+            }
+            if (t1_dma_mm2s_async(URAM_HALF_B, 0, FRAME_BYTES) < 0) {
+                die("t1_dma_mm2s_async(uram_b)");
+            }
+            if (t1_dma_wait() < 0) {
+                die("t1_dma_wait(uram_b -> out)");
+            }
             if (t1_buf_sync_for_cpu(&out) < 0) {
                 die("t1_buf_sync_for_cpu(out)");
             }
@@ -349,13 +375,13 @@ int main(int argc, char **argv)
             die("display buffer pitch smaller than display width");
         }
         /*
-         * S2MM DMA path -- commented out. The PS copies the assembled NV12
-         * frame from `out` into the display buffer instead.
-         *
-         * if (t1_dma_s2mm_sync(bram_pa, db.pa, FRAME_BYTES) < 0) {
-         *     die("t1_dma_s2mm_sync");
-         * }
-        */
+         * Display path stays on the PS - copy_nv12_to_display scales and
+         * colour-converts the NV12 frame in `out` (now containing T1's
+         * URAM-staged Y plane + the PS-filled UV plane after ps_edit)
+         * into the DRM RGB565 buffer. We do not DMA URAM -> DRM directly
+         * because the display buffer requires letterboxing + RGB565
+         * conversion the DMA can't do.
+         */
         copy_nv12_to_display(db.va, db.pitch, db.width, db.height, out.va);
         if (marker) {
             draw_debug_marker(db.va, db.pitch, db.width, db.height);

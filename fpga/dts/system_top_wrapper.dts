@@ -354,11 +354,17 @@
 	};
 
 	/*
-	 * BRAM scratchpad -- UIO so libt1 can mmap the 32 KB region
-	 * directly. Visible to T1 idx master at the same address.
+	 * URAM scratchpad -- UIO so libt1 can mmap the 512 KB region
+	 * directly. Visible to T1 hb master + DMA mm2s/s2mm at the same
+	 * address. 5r: backing store moved from BRAM (32 KB,
+	 * blk_mem_gen 8.4) to UltraRAM (512 KB, emb_mem_gen 1.0 with
+	 * CONFIG.MEMORY_PRIMITIVE = URAM); base address unchanged, size
+	 * grown 32 KB -> 512 KB. The node name "bram@..." is retained so
+	 * libt1 / userspace path lookups don't have to change; only the
+	 * size grew.
 	 */
 	bram_scratch: bram@a0080000 {
 		compatible = "generic-uio";
-		reg = <0x0 0xa0080000 0x0 0x8000>;
+		reg = <0x0 0xa0080000 0x0 0x80000>;
 	};
 };

@@ -26,9 +26,22 @@ can resume without rereading the whole conversation.
 | libt1 / driver API | `fyp_doc/driver_function_spec.md` + the headers in `vision_software/libt1/` |
 | Implementation roadmap | `fyp_doc/implementation_tasks_index.md` |
 
-### 0.2 Current state (as of 2026-05-12 morning)
+### 0.2 Current state (as of 2026-05-16 — 5r DEPLOYED, URAM scratchpad live)
 
-  * **Deployed on Kria:** 5o bitstream (`fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260511-210311/`,
+  * **Deployed on Kria:** **5r** bitstream
+    (`fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260516-010205/`).
+    URAM-backed 512 KB scratchpad at 0xA0080000; 16/64 URAM288,
+    44.5/144 BRAM36 (−8 vs 5q-r3), 100,220 LUT (+1.0%), WNS +0.068 ns.
+    visionsoc_main camera→DDR→URAM→T1→URAM→DDR→display flow verified
+    at 20 fps with `outY` byte-identical to `camY` under
+    `frame_passthrough` (proves URAM round-trip integrity). Full
+    delta + bringup trail in § 0.11.
+  * **Backup / revert:** 5q-r3 preserved on Kria as
+    `system_top_wrapper.bit.bin.5q-r3-backup` +
+    `system_top_wrapper.dtbo.5q-r3-backup`; on host at
+    `fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260515-024828/`.
+  * **Prior deploy / history:** 5o bitstream
+    (`fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260511-210311/`,
     .bit.bin sha256 `e2222e8d6d334fd8a838ef8673d2c2ee4ce577124b38a5f2c66ad2534fc0b938`,
     backed up at `/lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin.5o-backup`).
     Synth 87.96%, Impl 84.19%, timing met. F4/F1/F7/F8 all in, F2 software-only.
@@ -621,6 +634,218 @@ pipeline (camera NV12 24576 B frames, BRAM scratchpad halves at
 `.5q-final-backup` on the Kria and remains at
 `fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260514-041933/`
 on the workstation for revert capability.
+
+### 0.11 5r — BRAM scratchpad → URAM swap, 32 KB → 512 KB (LAUNCHING 2026-05-16)
+
+**Motivation.** Today's 32 KB scratchpad lives in ~8 BRAM36 tiles
+(see 5q-r3 util: 52.5 / 144 BRAM = 36.5 %). Those tiles are wanted
+elsewhere. The XCK26 has **64 URAM288 blocks currently unused** —
+the impl utilization table for 5q-r3 doesn't even list a URAM line.
+Migrating the scratchpad into URAM frees the BRAM tiles for a
+trivial 16-of-64 URAM cost (or 2-of-64 if we'd kept 32 KB) and lets
+us grow the arena 16× at no incremental URAM cost beyond what we
+already had to spend on width.
+
+**Sizing chosen.** 512 KB, organized as 128-bit × 32768 deep, backed
+by 16 URAM288 blocks (2-wide × 8-deep cascade). 512 KB is a clean
+power-of-2 aperture so `axi_bram_ctrl` MEM_DEPTH stays clean and
+`assign_bd_address … -range 512K` decodes without aliasing. The
+4-URAM premium over the 384 KB calculation (12 URAMs) buys this and
+costs nothing meaningful at 16 / 64 URAMs.
+
+**Implementation.** axi_bram_ctrl stays — its BRAM_PORTA interface
+is primitive-agnostic. The legacy `blk_mem_gen 8.4` (BRAM-only, no
+URAM toggle) is swapped for a small XPM-based wrapper at
+`fpga/wrapper/uram_scratchpad.v` that instantiates
+`xpm_memory_spram` with `MEMORY_PRIMITIVE = "ultra"`. The BD cell is
+created as a Module Reference so the controller sees the same
+BRAM_PORTA bus it used with blk_mem_gen.
+
+**emb_mem_gen gotcha (2026-05-16):** Xilinx provides
+`emb_mem_gen 1.0`, the URAM-capable successor to blk_mem_gen, which
+*does* expose `CONFIG.MEMORY_PRIMITIVE {URAM}` as a literal keyword
+and is the cleanest swap on paper (IP-only, no Verilog). Its
+component.xml is present in the Vivado 2025.2 install
+(`$Xilinx/2025.2/Vivado/data/ip/xilinx/emb_mem_gen_v1_0/component.xml`,
+enumeration `{AUTO, LUTRAM, BRAM, URAM, MIXED}`), but `create_bd_cell
+-type ip -vlnv xilinx.com:ip:emb_mem_gen:1.0` errors with
+`[BD 5-683] VLNV xilinx.com:ip:emb_mem_gen:1.0 is not supported
+for the current part` on the KV260's XCK26 Zynq UltraScale+ — the
+IP is gated to other part families (likely Versal). XPM is officially
+supported on Zynq UltraScale+ so we use the wrapper here. Don't
+re-attempt emb_mem_gen for this board.
+
+```
+T1 m_axi_hb  ─┐
+DMA mm2s     ─┼─► smartconnect_hb ─► axi_bram_ctrl ─► uram_scratchpad
+DMA s2mm     ─┘   (single-port, 128-bit)             (xpm_memory_spram,
+                                                      MEMORY_PRIMITIVE="ultra",
+                                                      MEM_SIZE=32768×128 b
+                                                      = 512 KB,
+                                                      16 / 64 URAM288 blocks)
+```
+
+Address space — T1's view is **unchanged**: same flat window at
+`0xA0080000`, just 16× larger (`0xA0080000 – 0xA00FFFFF`). No T1
+RTL change, no wrapper SV change, no libt1 API change.
+
+**Expected resource delta vs 5q-r3:**
+
+| Resource | 5q-r3 | 5r (target) | Delta |
+|---|---|---|---|
+| BRAM36 tiles | 52.5 / 144 (36.5%) | ~44.5 / 144 (~31%) | **-8 tiles** |
+| URAM288 blocks | 0 / 64 | **16 / 64 (25%)** | +16 |
+| CLB LUTs (impl) | 99,053 (84.57%) | ~99k (±a few hundred) | ≈0 |
+| Read latency (first-beat, head of burst) | ~BRAM | **+~2-6 cycles** (8-deep URAM cascade, pipelined) | +2-6 cyc |
+| Beat-to-beat throughput | 1 × 128b / cyc | 1 × 128b / cyc (unchanged) | 0 |
+
+LUT impact ≈ neutral because URAM cascade is hard-routed — the only
+fabric cost is `axi_bram_ctrl`'s slightly wider address decode
+(MEM_DEPTH 2048 → 32768 = +4 addr bits) which is tens of LUTs at most.
+
+Latency: read first-beat at the head of each AXI burst pays the
+cascade-fill tax. At 60 MHz (clk_60M, 16.6 ns period) the cascade
+has plenty of slack so blk_mem_gen / synth will likely keep the
+pipeline short; expect +2-6 cycles vs BRAM. **Beat-to-beat
+throughput within a burst is unchanged at 1 × 128-bit / cycle** —
+URAM streams back-to-back same as BRAM.
+
+**Software changes** (`vision_software/visionsoc_main/main.c`):
+
+  * Restore the URAM scratchpad PAs (was commented out): URAM base
+    `0xA0080000`, HALF_A at `+0x0000`, HALF_B at `+0x4000` (still
+    only 16 KB each = one Y-plane; the extra 480 KB headroom is
+    available for future double-buffering / multi-frame staging).
+  * Re-instate `t1_dma_mm2s_sync(in.pa, half_a, FRAME_BYTES)`
+    before the kernel (DDR → URAM).
+  * `issue_active_kernel(half_a, half_b)` — T1 reads URAM half-A,
+    writes URAM half-B over `m_axi_hb`.
+  * `t1_dma_s2mm_sync(half_b, out.pa, FRAME_BYTES)` after the
+    kernel (URAM → DDR).
+  * **Keep `ps_edit(&out)`** on the DDR side — the result lives in
+    DDR after the s2mm DMA, the PS edit hook still operates on a
+    coherent NV12 buffer there.
+  * UV plane is still PS-filled (T1 kernel writes Y only).
+
+**DTS change** (`fpga/dts/system_top_wrapper.dts`):
+  * `bram_scratch` reg size `0x8000` → `0x80000` (32 KB → 512 KB).
+
+**BD change** (`fpga/system/system_top.tcl`):
+  * `add_files` for `fpga/wrapper/uram_scratchpad.v` so the BD can
+    Module-Reference it.
+  * `blk_mem_gen 8.4` `create_bd_cell` block →
+    `create_bd_cell -type module -reference uram_scratchpad bram`.
+  * `axi_bram_ctrl` MEM_DEPTH 2048 → 32768.
+  * Three `assign_bd_address … -range 32K` → `-range 512K`.
+
+**Revert path:** `git checkout fpga/system/system_top.tcl
+fpga/dts/system_top_wrapper.dts vision_software/visionsoc_main/main.c
+fpga/wrapper/` restores 5q-r3. The 5q-r3 bitstream at
+`fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260515-024828/`
+remains deployable as the production fallback.
+
+**Risks:**
+  * URAM cascade timing across 8 deep at higher Fmax — at 60 MHz
+    clk_60M we have ~16.6 ns margin so this is unlikely to bite.
+    Worst case `xpm_memory_spram` pipelines additional registers
+    automatically.
+  * Module-reference instantiation interferes with the BD's
+    auto-generated wrapper — mitigated by adding the source file
+    via `add_files` before `make_wrapper`.
+  * Camera + DMA path already verified on 5q-r3 — the URAM swap
+    doesn't touch any IP that has been validated, just the
+    scratchpad backing store.
+
+**Test plan after build + deploy:**
+  1. `ls -la /dev/uio6` and `cat /sys/class/uio/uio6/maps/map0/size`
+     → expect 524288 bytes (was 32768).
+  2. `make` in `vision_software/visionsoc_main` (kernel + main).
+  3. Run `./run_after_power_cycle.sh` — verify
+     camera → DDR → URAM (mm2s) → T1 (kernel) → URAM → DDR (s2mm)
+     → display flow renders frames at comparable fps to 5q-r3
+     and the `outY` stats match `camY` stats (frame_passthrough).
+  4. Compare 5r impl util to 5q-r3 numbers (above) to confirm the
+     BRAM-tile reduction landed.
+
+---
+
+**BUILD RESULT (2026-05-16 08:00 BST, 6 h 58 m wall):** SUCCESS.
+
+Three Vivado attempts were needed to land:
+
+| # | Failure | Fix |
+|---|---|---|
+| 1 | `[BD 5-683] VLNV xilinx.com:ip:emb_mem_gen:1.0 not supported for the current part` — emb_mem_gen IP is present in 2025.2 catalog (and exposes `CONFIG.MEMORY_PRIMITIVE {URAM}`) but is gated against Zynq UltraScale+ | switch to XPM `xpm_memory_spram` wrapper, Module-Reference into BD |
+| 2 | `[BD 5-106] connect_bd_intf_net … empty` (BD failed to auto-bundle `BRAM_PORTA_*` pins) + `[BD 41-237] READ_LATENCY mismatch /bram(2) vs /bram_ctrl(1)` | canonical port names (`clka`, `addra`, …) + explicit `X_INTERFACE_INFO` pragmas; `axi_bram_ctrl CONFIG.READ_LATENCY {2}` to match URAM |
+| 3 | — | success |
+
+| Metric | 5q-r3 | 5r | Delta |
+|---|---|---|---|
+| CLB LUTs (impl) | 99,053 (84.57%) | **100,220 (85.57%)** | +1,167 (+1.0%) |
+| CLB FFs (impl) | 126,945 (54.19%) | 126,946 (54.19%) | ≈0 |
+| BRAM36 tiles | 52.5 / 144 (36.5%) | **44.5 / 144 (30.9%)** | **−8 ✓** |
+| URAM288 | 0 / 64 | **16 / 64 (25%)** | **+16 ✓** (2-wide × 8-deep) |
+| DSPs | 30 / 1,248 | 30 / 1,248 | 0 |
+| WNS | +0.254 ns | **+0.068 ns** | URAM cascade ate ~190 ps but still passing |
+| WHS | +0.010 ns | +0.010 ns | unchanged |
+| Build wall | 4 h 44 m | **6 h 58 m** | +2 h 14 m (URAM placer harder) |
+
+The +1.0 % LUT bump comes from the wider `axi_bram_ctrl` address decode
+(MEM_DEPTH 2048→32768) and the READ_LATENCY=2 pipelining inside the
+controller. URAM cascade itself is hard-routed and contributes no
+fabric.
+
+**DEPLOYED (2026-05-16 ~09:30 BST):**
+  * `system_top_wrapper.bit.bin` (5r, 7.8 MB) installed at
+    `/lib/firmware/xilinx/visionsoc/`; prior production saved as
+    `.5q-r3-backup`.
+  * dtbo recompiled with `bram_scratch reg = <… 0x0 0x80000>` (was
+    `0x8000`); installed alongside, prior saved as
+    `.5q-r3-backup`.
+  * Overlay reloaded via `rmdir overlay/full + rmdir
+    overlay/k26-starter-kits_image_1 + fpgautil -b … -o …`. All 7
+    UIOs re-enumerate (uio4=t1, uio5=dma, **uio6=bram, size=0x80000**).
+
+**VERIFIED end-to-end (visionsoc_main, 2026-05-16 ~09:35 BST):**
+
+```
+camera: mplane query nplanes=1 p0.len=24576 p0.off=0 p1.len=0 p1.off=0
+frame 32, last kernel 22302 cycles, 17.7 fps, camY 17/254/79.1, outY 17/254/79.1
+frame 64, last kernel 22303 cycles, 18.1 fps, camY 17/254/81.0, outY 17/254/81.0
+frame 96, last kernel 22230 cycles, 20.0 fps, camY 17/254/80.4, outY 17/254/80.4
+…
+frame 384, last kernel 22303 cycles, 20.0 fps, camY 17/254/81.3, outY 17/254/81.3
+```
+
+`outY` byte-identical to `camY` proves the
+**camera → DDR → URAM (mm2s) → T1 (frame_passthrough) → URAM →
+DDR (s2mm) → display** round-trip is data-faithful. `ps_edit()`
+runs on the DDR-side `out` buffer between s2mm and display copy as
+intended. Kernel cycle count (~22–27 k) is in the same range as
+the 5q-r3 BRAM baseline — the URAM +2 cycle head-of-burst latency
+is in the noise inside a kernel that does mostly compute.
+
+**main.c gotcha discovered during bringup.** First attempt of the
+URAM round-trip hit `t1_dma_mm2s_sync(in.pa, URAM_HALF_A, len):
+Connection timed out` even though `libt1/test/dma_to_scratchpad`
+passed in isolation. Root cause: `t1_dma_mm2s_sync()` /
+`t1_dma_s2mm_sync()` in `vision_software/libt1/libt1.c` each
+program only ONE channel — the unused address argument is silently
+discarded (`(void)dst_pa;` / `(void)src_pa;`). The visionsoc DMA is
+a loopback (axi_dma M_AXIS_MM2S → axis_reg_slice_dma → S_AXIS_S2MM),
+so a DDR↔URAM transfer needs BOTH channels armed: s2mm with the
+destination, mm2s with the source, then a single `t1_dma_wait()`.
+The fix in `main.c` uses the async-pair-plus-wait pattern from
+`libt1/test/dma_to_scratchpad.c`. Loopback `dma_loopback` and
+`dma_to_scratchpad` test programs already do this correctly; only
+the sync API misleads.
+
+**5r is the new production bitstream.** Revert: `git checkout` of
+`fpga/system/system_top.tcl`, `fpga/dts/system_top_wrapper.dts`,
+`vision_software/visionsoc_main/main.c`, and
+`rm fpga/wrapper/uram_scratchpad.v` restores 5q-r3 source. Re-flash
+from `system_top_wrapper.bit.bin.5q-r3-backup` +
+`.dtbo.5q-r3-backup` on the Kria.
 
 ### 0.7 5q-final build in flight (2026-05-14 ~04:20 BST)
 

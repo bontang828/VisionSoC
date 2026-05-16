@@ -83,6 +83,15 @@ add_files -norecurse ${build_dir}/t1_fpga_top.v
 # Add AXI Lite wrapper
 add_files -norecurse ${wrapper_dir}/t1_axi_lite_wrapper.sv
 
+# 5r URAM scratchpad backing store: xpm_memory_spram with
+# MEMORY_PRIMITIVE="ultra" wrapped in BRAM_PORTA-compatible pins so the
+# axi_bram_ctrl drives it the same way it drove blk_mem_gen. We use the
+# XPM path because emb_mem_gen 1.0 (which would let us swap by IP only
+# with CONFIG.MEMORY_PRIMITIVE=URAM) is in the Vivado catalog but not
+# supported for the Zynq UltraScale+ part family. XPM is supported on
+# ZU+. See fpga_build_status.md § 0.11.
+add_files -norecurse ${wrapper_dir}/uram_scratchpad.v
+
 update_compile_order -fileset sources_1
 
 
@@ -399,21 +408,31 @@ connect_bd_net [get_bd_pins proc_sys_reset/peripheral_aresetn] [get_bd_pins sens
 # Scratchpad relocation 0xB0000000 -> 0xA0080000 kept anyway: it's
 # forward-compatible with a future F6 (when we have LUT headroom) and
 # means T1's view of the address never changes between bitstream revs.
+# 5r: scratchpad backing memory is now UltraRAM via xpm_memory_spram
+# (see fpga/wrapper/uram_scratchpad.v). The legacy blk_mem_gen 8.4 IP
+# is BRAM-only; emb_mem_gen (the URAM-capable successor with a
+# CONFIG.MEMORY_PRIMITIVE keyword) was the cleanest swap on paper but
+# its VLNV is not supported for Zynq UltraScale+ in Vivado 2025.2.
+# XPM is supported on ZU+ and `MEMORY_PRIMITIVE="ultra"` forces URAM
+# placement. For 32768 * 128 b = 512 KB that's 2-wide * 8-deep = 16
+# URAM288 (16 / 64 on XCK26). The 32 KB BRAM scratchpad previously
+# consumed ~8 BRAM36 tiles; those are freed.
+#
+# axi_bram_ctrl is unchanged in role - still a 128-bit AXI4 slave on
+# smartconnect_hb/M01, just with MEM_DEPTH 2048 -> 32768. T1's address
+# window stays at 0xA0080000; only the range grows 32K -> 512K.
 create_bd_cell -type ip -vlnv xilinx.com:ip:axi_bram_ctrl:4.1 bram_ctrl
 set_property -dict [list \
     CONFIG.SINGLE_PORT_BRAM      {1} \
     CONFIG.DATA_WIDTH            {128} \
-    CONFIG.MEM_DEPTH             {2048} \
+    CONFIG.MEM_DEPTH             {32768} \
+    CONFIG.READ_LATENCY          {2} \
 ] [get_bd_cells bram_ctrl]
-create_bd_cell -type ip -vlnv xilinx.com:ip:blk_mem_gen:8.4 bram
-set_property -dict [list \
-    CONFIG.Memory_Type           {Single_Port_RAM} \
-    CONFIG.Use_Byte_Write_Enable {true} \
-    CONFIG.Byte_Size             {8} \
-    CONFIG.Write_Width_A         {128} \
-    CONFIG.Write_Depth_A         {2048} \
-    CONFIG.Read_Width_A          {128} \
-] [get_bd_cells bram]
+# Module-reference instantiation of the URAM wrapper. The Verilog file
+# is brought in via `add_files` above; Vivado treats it like any other
+# RTL module and auto-groups matching BRAM_PORTA_* ports into the bus
+# interface for connect_bd_intf_net.
+create_bd_cell -type module -reference uram_scratchpad bram
 connect_bd_net [get_bd_pins clk_wiz_0/clk_60M]                 [get_bd_pins bram_ctrl/s_axi_aclk]
 connect_bd_net [get_bd_pins proc_sys_reset/peripheral_aresetn] [get_bd_pins bram_ctrl/s_axi_aresetn]
 connect_bd_intf_net [get_bd_intf_pins bram_ctrl/BRAM_PORTA] [get_bd_intf_pins bram/BRAM_PORTA]
@@ -733,9 +752,10 @@ assign_bd_address -target_address_space /t1_top/m_axi_idx \
     [get_bd_addr_segs zynq_ps/SAXIGP2/HP0_DDR_LOW] -range 2G -offset 0x00000000
 
 #F4 (5l/5m): 32KB scratchpad at 0xA0080000, visible to T1 hb + DMA.
+#5r: scratchpad grown to 512KB (URAM-backed). Address base unchanged.
 #F6 (PS-side direct access) deferred - see top of bram_ctrl block.
 assign_bd_address -target_address_space /t1_top/m_axi_hb \
-    [get_bd_addr_segs bram_ctrl/S_AXI/Mem0] -range 32K -offset 0xA0080000
+    [get_bd_addr_segs bram_ctrl/S_AXI/Mem0] -range 512K -offset 0xA0080000
 
 #DMA MM2S / S2MM -> full DDR range (via HPC0 too, sharing with T1 hb)
 assign_bd_address -target_address_space /axi_dma/Data_MM2S \
@@ -744,11 +764,12 @@ assign_bd_address -target_address_space /axi_dma/Data_S2MM \
     [get_bd_addr_segs zynq_ps/SAXIGP0/HPC0_DDR_LOW] -range 2G -offset 0x00000000
 
 #F4 (5l/5m): also expose the scratchpad to both DMA channels so DMA can
-#prefetch DDR -> BRAM (and write BRAM -> DDR for output).
+#prefetch DDR -> URAM (and write URAM -> DDR for output).
+#5r: range bumped 32K -> 512K (URAM-backed scratchpad).
 assign_bd_address -target_address_space /axi_dma/Data_MM2S \
-    [get_bd_addr_segs bram_ctrl/S_AXI/Mem0] -range 32K -offset 0xA0080000
+    [get_bd_addr_segs bram_ctrl/S_AXI/Mem0] -range 512K -offset 0xA0080000
 assign_bd_address -target_address_space /axi_dma/Data_S2MM \
-    [get_bd_addr_segs bram_ctrl/S_AXI/Mem0] -range 32K -offset 0xA0080000
+    [get_bd_addr_segs bram_ctrl/S_AXI/Mem0] -range 512K -offset 0xA0080000
 
 #v_frmbuf_wr m_axi_mm_video -> DDR via HP1 (full 2GB DDR-low range)
 assign_bd_address -target_address_space /v_frmbuf_wr/Data_m_axi_mm_video \
@@ -790,9 +811,9 @@ puts "  mipi_csi2_rx CSR:  0x80000000 (64KB)  via PS LPD"
 puts "  AP1302 IIC:        0xA0050000 (64KB)"
 puts "  T1 HPC0 -> DDR:    0x00000000 (2GB)"
 puts "  T1 HP0  -> DDR:    0x00000000 (2GB)"
-puts "  T1 hb  -> BRAM:    0xA0080000 (32KB) via smartconnect_hb/M01"
+puts "  T1 hb  -> URAM:    0xA0080000 (512KB) via smartconnect_hb/M01 (5r: emb_mem_gen URAM)"
 puts "  DMA -> DDR:        0x00000000 (2GB) via HPC0"
-puts "  DMA -> BRAM:       0xA0080000 (32KB) via smartconnect_hb/M01"
+puts "  DMA -> URAM:       0xA0080000 (512KB) via smartconnect_hb/M01"
 puts "  (F6 PS->BRAM deferred - validate via DMA round-trip)"
 puts "  Frmbuf -> DDR:     0x00000000 (2GB) via HP1"
 puts "========================================"
