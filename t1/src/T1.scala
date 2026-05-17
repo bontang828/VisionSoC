@@ -136,7 +136,13 @@ case class T1Parameter(
   vfuInstantiateParameter: VFUInstantiateParameter,
   matrixAluRowSize:        Option[Int],
   matrixAluColSize:        Option[Int],
-  rowNumber:               Option[Int] = Some(1))
+  rowNumber:               Option[Int] = Some(1),
+  // baseLMUL: the architectural LMUL assumption used to size the
+  // time-multiplex grid. Default 4 preserves legacy configs that
+  // expect one image-row per LMUL=4 register group at SEW=8;
+  // set to 1 in configs that want one image-row per LMUL=1 register
+  // (i.e. zvl1024b builds where vLen alone holds 128 elements).
+  baseLMUL:                Option[Int] = Some(4))
     extends SerializableModuleParameter {
   // TODO: expose it with the Property API
   override def toString: String =
@@ -314,8 +320,21 @@ case class T1Parameter(
 
   val numRows: Int = rowNumber.getOrElse(1)
 
-  /** time multiplexing**/
-  val targetElementNum: Int = vLen * 4 / 8 // 4 means LMUL=4 and 8 means 8 bit per element
+  /** time multiplexing
+    *
+    * targetElementNum = elements held by ONE register-group at SEW=8 under
+    * the architectural base-LMUL the fabric is sized for. timeMultiplexBatch
+    * is how many such groups (= hw-rows) the time-multiplex schedule
+    * sweeps before retiring an instruction.
+    *
+    * baseLMUL=4 (default, legacy): vLen=256 -> targetElementNum=128 ->
+    *   one LMUL=4 group at SEW=8 = 128 elements = one 128-pixel image row.
+    * baseLMUL=1: vLen=1024 -> targetElementNum=128 ->
+    *   one LMUL=1 register at SEW=8 = 128 elements = one 128-pixel image row
+    *   (same fabric geometry, 4x deeper VRF).
+    */
+  val effectiveBaseLMUL: Int = baseLMUL.getOrElse(4)
+  val targetElementNum: Int = vLen * effectiveBaseLMUL / 8
   val timeMultiplexBatch: Int = targetElementNum / numRows // How many batches needed for time multiplexing after instantiating how many rows
   val rowCounterBits: Int = log2Ceil(timeMultiplexBatch).max(1)
   /** paraemter for AXI4. */

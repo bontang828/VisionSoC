@@ -15,6 +15,24 @@ cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --ch
 [mudkip2d128small1bram1chain2lanescale_fpga]
 cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1"
 
+# "medium" = mid-VRF variant: vLen=512 + baseLMUL=2 -> one LMUL=2 group
+# (2 registers) holds 128 elements = one full image row. 16 LMUL=2 groups
+# visible. VRF storage is 2x small, 1/2x big.
+[mudkip2d128medium1bram1chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1 --baseLMUL 2"
+
+[mudkip2d128medium1bram1chain2lanescale_fpga]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 2"
+
+# "big" = wide-VRF variant: vLen=1024, baseLMUL=1 -> one LMUL=1 register
+# at SEW=8 = 128 elements = one full image row. timeMultiplexBatch stays
+# at 128 hw-rows; SharedVRF storage grows 4x.
+[mudkip2d128big1bram1chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1 --baseLMUL 1"
+
+[mudkip2d128big1bram1chain2lanescale_fpga]
+cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1"
+
 [mudkip2d128small1bram0chain2lanescale]
 cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --chainingSize 0 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1"
 

@@ -71,6 +71,26 @@ cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --ch
 [mudkip2d128small1bram1chain2lanescale_fpga]
 cmdopt = "--dLen 128 --extensions zvl256b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1"
 
+# "medium" = mid-VRF variant: vLen=512 (zvl512b) + baseLMUL=2 so one LMUL=2
+# group (= 2 registers) holds 128 elements = one full image row. 16 LMUL=2
+# groups visible (vs small's 8 LMUL=4 groups and big's 32 LMUL=1 groups).
+# VRF storage is 2x small, 1/2x big.
+[mudkip2d128medium1bram1chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1 --baseLMUL 2"
+
+[mudkip2d128medium1bram1chain2lanescale_fpga]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 2"
+
+# "big" = wide-VRF variant: vLen=1024 (zvl1024b) so a single LMUL=1 register
+# at SEW=8 holds 128 elements = one full image row of the 128x128 grid.
+# baseLMUL=1 keeps timeMultiplexBatch at 128 hw-rows (matching the "small"
+# sibling's fabric geometry); the VRF storage itself is 4x deeper.
+[mudkip2d128big1bram1chain2lanescale]
+cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimal --rowNumber 1 --baseLMUL 1"
+
+[mudkip2d128big1bram1chain2lanescale_fpga]
+cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1"
+
 
 
 

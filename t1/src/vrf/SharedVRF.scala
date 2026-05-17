@@ -396,13 +396,28 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     // ==========================================================================
     // Bon2D: Vertical-mode read-gather and write-scatter overlay.
     //
-    // Assumes SEW=8, LMUL=4, vl=128 (128x128 image grid). rowCounter reinterpreted
-    // as column index c in vertical mode. For a lane read request (vs,offset,L):
-    //   rc_i     = 8*(4*vs(1,0) + 2*offset(0) + L) + i  for i in 0..7
-    //   vs_s     = vs(4,2) ## cVsOff                     (absolute vs at column c)
+    // Generic across baseLMUL: works for any (vLen, baseLMUL) combo so long as
+    // the require(cVsOffBits >= 0) at line 67 holds. The 128x128 image grid
+    // is determined by rowCounterBits=7 (timeMultiplexBatch=128 hw-rows) and
+    // by the LSU's logicalRowElements=128, NOT by the LMUL choice.
+    //
+    // rowCounter reinterpreted as column index c in vertical mode. For a lane
+    // read request (vs,offset,L), the address fields decompose as
+    //   [cVsOff | cGroup | cLane | cByte]
+    // and the wide-vert path fires numBanks (=8) rcI = rcBase+i in parallel
+    // across distinct banks via the diagonal skew bank=(rc+logicalAddr)(2,0).
+    //
+    // Worked example, baseLMUL=4 / vLen=256 / SEW=8 / vl=128:
+    //   singleGroupSize=2, vrfOffsetBits=1, cVsOffBits=2
+    //   rc_i     = 8*(2*vs(1,0) + offset(0)*2 + L*2) + i  for i in 0..7
+    //   vs_s     = vs(4,2) ## cVsOff
     //   off_s    = cGroup, laneIdx_s = cLane, byte_s = cByte
-    // Diagonal skew (bank = (rc+logicalAddr)(2,0)) guarantees the 8 rc_i hit 8
-    // distinct banks, so a single lane-cycle fires all 8 bank ports in parallel.
+    //
+    // Worked example, baseLMUL=1 / vLen=1024 / SEW=8 / vl=128:
+    //   singleGroupSize=8, vrfOffsetBits=3, cVsOffBits=0
+    //   rcBase fills all 7 bits of rowCounter from (offset | L | 0)
+    //   vsStore = vs (no LMUL-group splitting; LMUL=1 has 1 reg/group)
+    //   rest unchanged. Same 8-bank diagonal fanout.
     // ==========================================================================
     // (cVsOff/cGroup/cLane/cByte and the vsLowField/offsetField helpers are
     // hoisted above the read fold so the narrow-vertical read path can reuse them.)

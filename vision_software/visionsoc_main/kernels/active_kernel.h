@@ -20,4 +20,4 @@
  */
 #pragma once
 
-#include "frame_passthrough_select.h"
+#include "sobel_select.h"
