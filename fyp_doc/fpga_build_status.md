@@ -26,16 +26,45 @@ can resume without rereading the whole conversation.
 | libt1 / driver API | `fyp_doc/driver_function_spec.md` + the headers in `vision_software/libt1/` |
 | Implementation roadmap | `fyp_doc/implementation_tasks_index.md` |
 
-### 0.2 Current state (as of 2026-05-16 — 5r DEPLOYED, URAM scratchpad live)
+### 0.2 Current state (as of 2026-05-18 — 5t-maskopt DEPLOYED, two stable options)
 
-  * **Deployed on Kria:** **5r** bitstream
-    (`fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260516-010205/`).
+There are now **two stable deployable bitstreams**. Pick by need:
+
+| Bitstream | T1 config | Best for |
+|---|:--|:--|
+| **5r** | vLen=256 (`mudkip2d128small1bram1chain2lanescale_fpga`) + URAM 512 KB scratchpad + original MaskUnit | Smaller / lower-LUT design. Kernels written for vLen=256 hardware. |
+| **5t-maskopt** (NEW) | vLen=1024 (`mudkip2d128big1bram1chain2lanescale_fpga_maskopt`) + URAM 512 KB scratchpad + MaskUnitFpga (all area-reduction opts) + axis_register_slice | 4× larger vector register file, supports bigger kernels / longer vectors. Same camera+display pipeline. |
+
+Both use the same camera+display+URAM/DMA flow; only the T1 vector
+core (vLen, MaskUnit variant) and the camera-pipeline rate-match
+buffer differ. Either can be the active production bitstream — they
+swap by changing the `system_top_wrapper.bit.bin` and `.dtbo` in
+`/lib/firmware/xilinx/visionsoc/`.
+
+  * **5r — vLen=256, URAM DMA (deployed 2026-05-16):**
+    `fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260516-010205/`.
     URAM-backed 512 KB scratchpad at 0xA0080000; 16/64 URAM288,
     44.5/144 BRAM36 (−8 vs 5q-r3), 100,220 LUT (+1.0%), WNS +0.068 ns.
     visionsoc_main camera→DDR→URAM→T1→URAM→DDR→display flow verified
     at 20 fps with `outY` byte-identical to `camY` under
     `frame_passthrough` (proves URAM round-trip integrity). Full
     delta + bringup trail in § 0.11.
+
+  * **5t-maskopt — vLen=1024, URAM DMA, MaskUnitFpga (deployed 2026-05-18):**
+    `fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430/`.
+    Bitstream:
+    `fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430/system_top_wrapper.bit`
+    (Vivado .bit; convert to .bit.bin via § 7.1 bootgen recipe before
+    `fpgautil`). URAM scratchpad preserved (same 512 KB at 0xA0080000,
+    same camera pipeline). Synth: 104,717 LUT / 143 BRAM36 + 2 BRAM18
+    (= 144 tiles exact). Impl: **WNS +0.239 ns, WHS +0.010 ns,
+    `write_bitstream completed successfully`**. **Camera+Sobel verified
+    end-to-end on KV260 at ~19 fps** after warm-up (~5% vs 5r baseline,
+    detailed in `fyp_doc/maskunit_fpga_optimisations.md § 8`). All
+    MaskUnitFpga area-reduction work (Phase 3b through Phase 3e + axis
+    swap) is consolidated in `fyp_doc/maskunit_fpga_optimisations.md`.
+    Currently the ACTIVE bitstream on the Kria (replaced 5r as of
+    2026-05-18).
   * **Backup / revert:** 5q-r3 preserved on Kria as
     `system_top_wrapper.bit.bin.5q-r3-backup` +
     `system_top_wrapper.dtbo.5q-r3-backup`; on host at
@@ -88,7 +117,338 @@ can resume without rereading the whole conversation.
     old CRC-mismatch panic is gone. Old firmware preserved at
     `/lib/firmware/ap1302_ar1335_single_fw.bin.old`.
 
-### 0.3 Non-obvious rules you MUST follow
+### 0.13 MaskUnitFpga — area-reduction variant for vLen=1024 (FUNCTIONAL + SYNTH VERIFIED 2026-05-18)
+
+**Motivation.** The 5s vLen=1024 synth pre-flight (§ 0.12) revealed that
+the big config's 155,748 LUTs / 234,453 FFs dramatically exceeds the
+KV260 117,120 LUT cap. Per-module breakdown:
+
+| Module | small (vLen=256) | medium (vLen=512) | big (vLen=1024) |
+|---|---:|---:|---:|
+| SharedVRF LUT | 9,729 | 10,029 | 10,652 (essentially flat) |
+| MaskUnit LUT | 24,087 | 39,383 | **70,066** |
+| MaskUnit FF | 41,267 | 74,868 | **142,014** |
+| Lane LUT (each) | 14,570 | 14,530 | 14,830 |
+
+MaskUnit is responsible for ~75% of T1's LUT growth and ~100% of FF
+growth. The dominant cost is `v0Vec` at `MaskUnit.scala:194-198`: a
+128-row × `vLen`-bit FF replication of the v0 mask register
+(= 131,072 flops at vLen=1024) plus the 128:1 row mux and per-row
+write merge. Beyond v0Vec, the 3-SEW unroll (regroupV0, regroupSlideV0,
+maskSplit) and the 1024-bit slide barrel shifters compound the LUT cost.
+
+**Approach (per the approved plan in
+`~/.claude/plans/please-read-home-cbt22-code-code-fyp-vis-validated-spark.md`).**
+Add a parallel `t1/src/mask/MaskUnitFpga.scala` as a drop-in
+FPGA-optimised variant of `MaskUnit.scala`. Same IO bundle (zero
+changes needed in `Lane.scala`, `MaskExchangeUnit.scala`, or any
+consumer); internally stacks four optimisations:
+
+1. **Opt 3 — BRAM-back v0Vec + active-row cache:** −15K LUT, −131K FF,
+   +4 BRAM36 (XPM `xpm_memory_sdpram` wrapper at
+   `fpga/wrapper/v0_bram.v`).
+2. **Opt 1 — On-demand per-lane mask slicer:** collapse the 3-SEW
+   regroup/maskSplit unroll into a runtime-parameterised slicer (all
+   SEW=8/16/32 preserved). −12K LUT.
+3. **Opt 2 — Pipelined slide write-mask trees:** segment-walk the
+   1024-bit `scanRightOr`/`scanLeftOr` over 8 cycles. −10K LUT.
+4. **Opt 7 — Pipelined v0 slide barrel shifters:** reuse a 128-bit
+   shifter over 8 cycles instead of two parallel 1024-bit barrels.
+   −15K LUT. Behavior-preserving (every slide instruction produces
+   identical results, just with ~8 cycles internal setup latency
+   hidden in the slide-instruction's normal multi-cycle execution
+   window).
+
+**Target:** big-config MaskUnit at ~20K LUT / ~15K FF (matching small),
+system total ~105-115K LUT (fits the 117K cap). BRAM goes 139 → 143,
+still under the 144 limit. All SEWs preserved. <5% perf hit on masked
+instructions.
+
+**Status update (2026-05-18, Codex): narrow-BRAM v3 fix landed and
+verified.** The failing revised-v2 narrow-BRAM design raced row changes:
+`gatherRowCounter` could advance while lane `v0Update` writes for the
+row being left were still arriving, and MaskUnit has no local ready/valid
+back-pressure for those writes. The fix is contained in
+`t1/src/mask/MaskUnitFpga.scala`: the v0 row cache is now split into
+`activeCacheChunks`, `prefetchCacheChunks`, and `writebackCacheChunks`.
+The next sequential row is prefetched from the 128-bit narrow BRAM while
+the current row executes; on row change the active row swaps from the
+prefetch buffer, and the row just left is written back in the background.
+
+No lane-side or T1 replay-control changes were added for this fix. The
+design relies on the current replay schedule giving enough cycles per row
+for the 8 narrow chunks to prefetch/write back; this is true for the
+target big maskopt regression. If a future config switches rows faster,
+the robust follow-up is lane-side row-transition back-pressure or a
+deeper writeback queue.
+
+Verification:
+
+| Test / build | Result |
+|---|---|
+| Pre-fix `benchmark_instructions` on `mudkip2d128big1bram1chain2lanescale_fpga_maskopt` | Reproduced `FAIL (57/70 checks passed, 13 failed)` |
+| Post-fix `benchmark_instructions` | `FAIL (68/70 checks passed, 2 failed)`; remaining failures are the known `vmv.x.s` H+V C-checks |
+| Post-fix `simple_instruction_asm` | Spike difftest `"success": true`; known 127 C-verifier mismatch lines ignored |
+| Fresh RTL for synth | `test_output/mudkip2d128big1bram1chain2lanescale_fpga_maskopt/rtl-20260518-023232/result`, verified `MaskUnitFpga.sv` instantiates `v0_bram` with `.DATA_WIDTH(128)` |
+| Synth command | `bash fpga/system/build_fpga.sh -c mudkip2d128big1bram1chain2lanescale_fpga_maskopt -r test_output/mudkip2d128big1bram1chain2lanescale_fpga_maskopt/rtl-20260518-023232/result -s -a` |
+| Synth report dir | `fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-024351/` |
+
+Synth utilization:
+
+| Hierarchy | LUT | FF | BRAM36 | BRAM18 | URAM |
+|---|---:|---:|---:|---:|---:|
+| `system_top_wrapper` | 117,104 | 106,447 | 143 | 3 | 16 |
+| `t1_top/u_t1` | 95,502 | 77,594 | 132 | 0 | 0 |
+| `maskUnit2D_0` (`MaskUnitFpga`) | 33,360 | 14,051 | 4 | 0 | 0 |
+| `maskUnit2D_0/(body)` | 24,240 | 10,674 | 0 | 0 | 0 |
+| `maskUnit2D_0/v0BramInst` (`v0_bram`) | 271 | 0 | 4 | 0 | 0 |
+
+The BRAM objective is met: `v0_bram` drops from the earlier 16 BRAM36
+wide-port result to 4 BRAM36 with the narrow port. The fix still uses
+BRAM tiles, but only through `maskUnit2D_0/v0BramInst`; the new
+`activeCacheChunks`, `prefetchCacheChunks`, and `writebackCacheChunks`
+row caches are register/LUT-backed and do not add extra BRAM instances.
+Top-level LUT is just under the KV260 117,120 LUT cap at synth
+(`117,104`, leaving only 16 LUT of nominal margin), so full
+implementation may still need additional LUT or placement/routing margin.
+
+Synth timing summary: setup is clean (`WNS=+0.307 ns`, 0 setup failing
+endpoints). The synth timing report still has hold/pulse-width violations;
+those are not implementation timing-closure signoff.
+
+**Subsequent (2026-05-18 later, Claude) — 3 further area cuts landed on
+top of codex's v3, taking LUT below the route-safe 105K target and
+packing BRAM to exactly 144 tiles:**
+
+1. **Opt 7 v2 (chunked v0 slide barrel shifter)** in `MaskUnitFpga.scala`.
+   Replaces the unified-reverse-trick 1024-bit `>>` with a single
+   128-bit-wide shifter reused over 8 cycles via slideShifterActive /
+   slideChunkCounter / slideShiftV0 FSM. Output banks
+   (slideV0RegBanks) concatenate into slideV0Reg for downstream
+   consumption. Latency: 8 cycles, hidden trivially within slide
+   instructions' 12K-66K cycle execution windows. Equivalence proof in
+   `fyp_doc/maskunit_chunked_slide_shifter_debug.md § 5`. **Δ: −4,689 LUT.**
+
+2. **`axis_data_fifo_cap` → `axis_register_slice`** in `system_top.tcl`.
+   The camera-pipeline rate-match FIFO (256-deep, 1 BRAM18) was over-
+   provisioned by ~10× given the 700-cycle inter-pixel period at
+   128×128@26fps. Replaced with a 1-deep skid buffer. **Δ: −1 BRAM18
+   tile (= the difference between 144.5 effective tiles and 144 cap),
+   −34 LUT.**
+
+3. **Per-lane writeMaskForMaskPipe push-down** in `MaskUnitFpga.scala`.
+   The wide-vLen `writeMaskForMaskPipe` register + scanRightOr/scanLeftOr
+   trees are eliminated entirely. Per-lane writeBitMaskForSlide /
+   writeBitMaskForExtend slices are computed DIRECTLY from sources
+   (v0Cache bit-select, `srcPos.U < vl` comparisons, etc.) pre-Pipe
+   instead of slicing a wide intermediate post-Pipe. The Pipe register
+   shrinks from 1024 bits (writeMaskForMaskPipe) to 2 × 128 bits per
+   lane (writeBitMaskForSlide + writeBitMaskForExtend pre-computed).
+   **Δ: −7,698 LUT** (much more than the −3-to-−5K estimate; Vivado was
+   apparently NOT efficiently sharing the wide scan-tree logic, so
+   eliminating it entirely was a much bigger win than expected).
+
+**New test added:** `tests/vision_task/sew16_32_masktest/sew16_32_masktest.c`
+exercises MaskUnitFpga's SEW=16 and SEW=32 Mux1H paths (vslideup.vi,
+vslidedown.vi, vrgather.vx, vmseq.vx + vmerge.vim at LMUL=1). The
+existing benchmark_instructions only runs SEW=8 so these paths were
+elaborated but not previously exercised at runtime. **8/8 kernels PASS.**
+
+**Synth report 2026-05-18 (after the 3 further cuts):**
+`fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-052355/`
+
+| Hierarchy | LUT | FF | BRAM36 | BRAM18 | URAM |
+|---|---:|---:|---:|---:|---:|
+| `system_top_wrapper` | **104,717** | 108,017 | 143 | 2 | 16 |
+| `maskUnit2D_0` (`MaskUnitFpga`) | 21,034 | 15,603 | 4 | 0 | 0 |
+| `maskUnit2D_0/(body)` | **11,638** | 12,220 | 0 | 0 | 0 |
+| `maskUnit2D_0/v0BramInst` | 274 | 0 | 4 | 0 | 0 |
+
+System LUT delta from codex's v3 baseline (117,104): **−12,387 LUT**.
+Under the user-stated 105K route-safe target. BRAM tiles **143 RAMB36 +
+2 RAMB18 = 144 tiles exactly** (Vivado packs the 2 BRAM18 into 1 tile
+shared with a RAMB36 OR another BRAM18).
+
+**Full FPGA impl: BITSTREAM COMPLETE 2026-05-18.**
+
+Command: `bash fpga/system/build_fpga.sh -c
+mudkip2d128big1bram1chain2lanescale_fpga_maskopt -b -a`. Wall: **1h47m**
+(much faster than 6-7h estimate).
+
+Build dir: `fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430/`
+
+| Result | Value |
+|---|:--|
+| `write_bitstream` | **completed successfully** ✅ |
+| WNS (setup) | **+0.239 ns** ✅ |
+| TNS | 0.000 ns (0 setup failing endpoints) |
+| WHS (hold) | **+0.010 ns** ✅ (hold also clean!) |
+| THS | 0.000 ns (0 hold failing endpoints) |
+| Bitstream | `system_top_wrapper.bit` (in build dir) |
+
+**Impl utilization (after P&R):**
+
+| Resource | Used | Cap | Util% |
+|---|---:|---:|---:|
+| Block RAM Tile | 144 | 144 | **100.00%** (143 RAMB36 + 2 RAMB18) |
+| CLB Registers | 103,721 | 234,240 | 44.28% |
+| URAM | 16 | 64 | 25.00% |
+| LUT (system_top_wrapper) | ~104,717 | 117,120 | ~89.4% |
+
+Design is signed-off and deployable to KV260.
+
+**Selection mechanism.** Mirror the existing `vfuInstantiateParameter
+== "minimalFpga"` pattern (DSP-based multipliers, divider stubs).
+Added `useFpgaMaskUnit: Option[Boolean]` to `T1Parameter` and
+threaded through both elaborators (`elaborator/src/t1/T1.scala` +
+`elaborator/src/t1emu/TestBench.scala`). The original `MaskUnit.scala`
+stays untouched; sim builds and non-`_fpga` configs continue to use it.
+At `t1/src/T1.scala:550` the instantiation site will conditionally pick
+between `MaskUnit` and `MaskUnitFpga` based on the flag (wiring TBD in
+Phase 4).
+
+**Config layout.** Existing `_fpga` configs kept untouched as the
+easy-revert baseline. New `_fpga_maskopt` siblings added with the same
+parameters plus `--useFpgaMaskUnit true`:
+
+| Config | vLen | baseLMUL | useFpgaMaskUnit |
+|---|---:|---:|:-:|
+| `mudkip2d128small1bram1chain2lanescale_fpga` | 256 | (default 4) | false |
+| `mudkip2d128small1bram1chain2lanescale_fpga_maskopt` | 256 | (default 4) | **true** |
+| `mudkip2d128medium1bram1chain2lanescale_fpga` | 512 | 2 | false |
+| `mudkip2d128medium1bram1chain2lanescale_fpga_maskopt` | 512 | 2 | **true** |
+| `mudkip2d128big1bram1chain2lanescale_fpga` | 1024 | 1 | false |
+| `mudkip2d128big1bram1chain2lanescale_fpga_maskopt` | 1024 | 1 | **true** |
+
+All six are also in `designs/org.chipsalliance.t1.elaborator.t1emu.TestBench.toml`
+for t1emu sim regression.
+
+**Status (2026-05-17):**
+
+* **Phase 1 — config flag plumbing: DONE + VERIFIED.**
+  `T1Parameter.useFpgaMaskUnit` added (default `Some(false)`), threaded
+  through both elaborators (`elaborator/src/t1/T1.scala` +
+  `elaborator/src/t1emu/TestBench.scala`). New `_fpga_maskopt` configs
+  added next to the existing `_fpga` ones in both
+  `designs/org.chipsalliance.t1.elaborator.t1.T1.toml` and
+  `…t1emu.TestBench.toml`. Verified clean with t1emu sim:
+  `vision_task.simple_instruction_asm` under
+  `mudkip2d128big1bram1chain2lanescale_fpga_maskopt` →
+  **`success: true`, `meta_vlen=1024`, `total_cycles=21514`**, byte-identical
+  to the `_fpga` baseline (since the T1 instantiation still picks the
+  default `MaskUnit` — the flag is a no-op until Phase 4 wires the
+  selection). Wall: 6m 25s for a fresh verilator build.
+* **Phase 2 — `fpga/wrapper/v0_bram.v`: DRAFT WRITTEN.** XPM
+  `xpm_memory_sdpram` wrapper, 128 × 1024-bit storage, byte-write
+  strobe, simple dual-port (write A / read B), 1-cycle read latency.
+  TBD: verify Vivado infers ≤4 BRAM36 in synth (may need to refactor
+  to 8 parallel narrower instances if XPM uses too many).
+* **Phase 3b (Opt 3 — BRAM v0 + active-row cache): DONE + VERIFIED.**
+  `t1/src/mask/MaskUnitFpga.scala` is the parallel module (same
+  `MaskUnitInterface` IO, same package). v0Vec is replaced by a
+  `V0BramBlackBox extends BlackBox with HasBlackBoxResource` wrapping
+  `v0_bram` (XPM at `fpga/wrapper/v0_bram.v` for synthesis,
+  behavioural at `t1/resources/v0_bram.sv` for Verilator —
+  XPM cells don't exist in Verilator's lib). Active-row cache
+  (`v0Cache: UInt(vLen.W)`) + 2-state refill FSM
+  (issue read + latch). Merged-write path combines per-lane v0Updates
+  into one vLen-bit (data, strobe) BRAM port-A write per cycle, plus a
+  `pendingWrite{Data,Strb}` shadow that covers the write-during-refill
+  race for the same row.
+* **Phase 3c (Opt 1 — On-demand per-lane mask slicer): DONE + VERIFIED.**
+  `maskSliceFor(lane, sew, maskSelect, source)` computes only the
+  datapath-width slice this lane needs. SEW Mux1H now operates on
+  32-bit values instead of vLen-bit values.
+* **Phase 4 — Conditional MaskUnit/MaskUnitFpga at `t1/src/T1.scala`
+  line 556: DONE + VERIFIED.** `if (parameter.useFpgaMaskUnit.getOrElse(false))`
+  picks `MaskUnitFpga`; LUB inference (`Instance[+A]` is covariant)
+  resolves the seq type to the common supertype.
+* **t1emu sim verification on `_fpga_maskopt` big config:**
+  * `vision_task.simple_instruction_asm`: `success: true`,
+    `total_cycles=21514` — bit-identical to the `_fpga` baseline.
+  * `vision_task.benchmark_instructions`: 68/70 PASS (the 2 fails are
+    `vmv.x.s (H)` + `vmv.x.s (V)` — pre-existing per
+    maskunit_fpga_handoff.md § 8 risk #8).
+* **Phases 3d (Opt 2) and 3e (Opt 7): DEFERRED.** Both require non-trivial
+  FSM redesigns with multi-cycle slideV0Reg / writeMaskForMaskPipe
+  population, with downstream-timing coupling to the lane's pipeline.
+  Deferred until we measure Phases 3b+3c LUT delta in synth and assess
+  whether more optimisation is required to hit the 117K LUT cap.
+* **`fpga/system/system_top.tcl`: updated** with `add_files ...
+  fpga/wrapper/v0_bram.v` next to the existing `uram_scratchpad.v` add.
+* **FPGA synth pre-flight LAUNCHING NEXT.** Command:
+  `bash fpga/system/build_fpga.sh -c mudkip2d128big1bram1chain2lanescale_fpga_maskopt -s -a`
+  (synth-only, ~25-30 min wall). Target rows:
+  * MaskUnitFpga LUT ≤ 55,000 (estimate: Opts 3+1 should drop ~27K LUTs
+    from the 70K baseline, landing around 43K — still well above the
+    20K final target but a meaningful step toward the 117K system cap).
+  * MaskUnitFpga FF ≤ 15,000 (Opt 3 alone should drop ~131K FFs).
+  * System total LUT ≤ 130K (155K - 27K = 128K).
+  * BRAM36 ≤ 144 (was 139; +4 for v0_bram → 143).
+
+### 0.12 5s — LMUL=1 vLen=1024 baseline (synth pre-flight LAUNCHING 2026-05-16)
+
+**Motivation.** Switch the architectural assumption from LMUL=4 to LMUL=1,
+quadrupling SharedVRF storage so one LMUL=1 register at SEW=8 holds 128
+elements = one full 128-pixel image row. Same 128×128 grid, same memory
+layout, just 32 LMUL=1 register groups visible to programs (vs 8 LMUL=4
+groups previously). The KV260 program-visible architectural change: every
+kernel can address 4× more independent register temporaries. Plan file:
+`~/.claude/plans/please-read-home-cbt22-code-code-fyp-vis-validated-spark.md`.
+
+**Implementation done so far (2026-05-16 ~14:00 BST):**
+
+  * `T1Parameter`: added `baseLMUL: Option[Int] = Some(4)` field;
+    `targetElementNum = vLen * baseLMUL.getOrElse(4) / 8` (was hardcoded
+    `vLen * 4 / 8`). Default preserves all legacy configs numerically.
+  * `elaborator/src/t1/T1.scala` + `elaborator/src/t1emu/TestBench.scala`:
+    both `T1ParameterMain` definitions get the new `--baseLMUL` CLI arg.
+  * `designs/org.chipsalliance.t1.elaborator.t1.T1.toml` +
+    `…t1emu.TestBench.toml`: new pair of configs
+    `mudkip2d128big1bram1chain2lanescale` (sim, `minimal` VFU) and
+    `_fpga` variant (`minimalFpga` VFU). Both use
+    `--extensions zvl1024b --baseLMUL 1 --rowNumber 1`.
+  * `SharedVRF.scala`: stale "Assumes LMUL=4" comment in the wide-vert
+    overlay block replaced with worked examples for BOTH baseLMUL=4
+    (current) and baseLMUL=1 (new). No code change — the existing logic
+    parametric across both.
+
+**Simulator validation (t1emu, vLen=1024 / LMUL=1):**
+
+  * Elaboration: clean for both `big` and `big_fpga` configs (4m 14s wall,
+    no `require` failures). 5 chisel warnings — all pre-existing scaling
+    artefacts that ALSO appear at vLen=256, none new.
+  * `vision_task.simple_instruction_lmul1` — single-kernel LMUL=1 vsub:
+    **PASS**, all 128×128 cells correct, Spike difftest agreed at
+    `meta_vlen=1024`. 22026 cycles.
+  * `vision_task.simple_instruction_asm` — LMUL=4 backcompat under the
+    new "big" config (vsetvli `m4` still legal, vl=128 requested,
+    `vl_max=512`): **PASS**, 21514 cycles. Confirms the keep-LMUL=4 +
+    add-LMUL=1 strategy.
+  * `vision_task.benchmark_vadd_lmul1` — 6-test LMUL=1 benchmark
+    (vadd/vsadd/H+V blur/8-way pixel accumulate): **PASS**, all tests
+    including TEST 9's LMUL=1-only 8-way accumulate (16384 cells = 36,
+    proves the 32-group register headroom). 311433 cycles.
+  * `vision_task.benchmark_instructions_lmul1` — IN FLIGHT (vadd/vmul
+    passed; vrgather running).
+
+**Expected FPGA deltas vs 5r (BRAM only — user opted out of URAM swap for SharedVRF):**
+
+| Resource | 5r | Expected 5s | Delta |
+|---|---|---|---|
+| CLB LUTs (impl) | 100,220 (85.57%) | ~105–115k (89–98%) | +5–15k from wider chaining-record offset comparators (vrfOffsetBits 1→3); wider Mux1H trees in SharedVRF; 4× wider elementMask.andR (16→64 bits) |
+| CLB FFs | 126,946 (54.19%) | ~135–145k | Wider chaining records, deeper VRF address paths |
+| BRAM36 tiles | 44.5 / 144 (30.9%) | ~96–128 / 144 (67–89%) | 8 VRF banks × 4× depth (2048→8192 entries); packing-dependent |
+| URAM288 | 16 / 64 | 16 / 64 | Unchanged (scratchpad only; user opted no URAM for VRF) |
+
+**LUT cliff watch.** 5r was 85.57%; routing cliff was observed around 87–88%
+on past builds (5j hit 87.96% and failed-routed). The +5–15k LUT estimate
+puts us at 90–98% — borderline to past-the-cliff. The synth pre-flight
+(`-s` flag) will tell us the actual LUT before committing to the multi-hour
+full build. **Decision criterion:** if synth LUT ≥ ~108k, the BRAM-only
+path will likely not route; escalate to user about URAM swap for VRF.
+
+**Build dir (this attempt):** TBD after launch.
 
   1. **Build with `-c mudkip2d128small1bram1chain2lanescale_fpga`**
      (note the `_fpga` suffix). The non-`_fpga` config is +12-18k
