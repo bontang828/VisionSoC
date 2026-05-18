@@ -92,6 +92,16 @@ add_files -norecurse ${wrapper_dir}/t1_axi_lite_wrapper.sv
 # ZU+. See fpga_build_status.md § 0.11.
 add_files -norecurse ${wrapper_dir}/uram_scratchpad.v
 
+# MaskUnitFpga v0 mask shadow: xpm_memory_sdpram, 128 x 1024-bit, byte-
+# write enable, simple dual-port. Replaces the FF-replicated v0Vec in
+# MaskUnit at vLen=1024 (~131k FFs, ~15k LUTs of row-decode). Active only
+# when the elaborator was invoked with --useFpgaMaskUnit true (the
+# _fpga_maskopt config family); other configs do not instance v0_bram.
+# Sim path uses t1/resources/v0_bram.sv (behavioural model) via Chisel
+# HasBlackBoxResource. See fpga_build_status.md § 0.13 and
+# maskunit_fpga_handoff.md.
+add_files -norecurse ${wrapper_dir}/v0_bram.v
+
 update_compile_order -fileset sources_1
 
 
@@ -483,8 +493,17 @@ set_property -dict [list \
     CONFIG.SupportLevel                  {1} \
 ] [get_bd_cells mipi_csi2_rx]
 
-create_bd_cell -type ip -vlnv xilinx.com:ip:axis_data_fifo axis_data_fifo_cap
-set_property -dict [list CONFIG.FIFO_DEPTH {256}] [get_bd_cells axis_data_fifo_cap]
+# 2026-05-18 - replaced axis_data_fifo (256-deep, used 1 BRAM18) with a
+# 1-deep axis_register_slice to free one BRAM tile.
+# Rationale: the FIFO was only providing rate-match buffering between
+# mipi_csi2_rx and v_frmbuf_wr. At 128x128@26fps the per-pixel period is
+# ~700 cycles at 300 MHz - far longer than the typical PS HP1 DDR
+# write-back latency (10-100 cycles). The 256-deep buffer was 10x the
+# realistic need. A 1-deep skid buffer (axis_register_slice) covers the
+# odd 1-cycle stall and keeps the BD width-match intact.
+# Cell name preserved so downstream connect_bd_intf_net / connect_bd_net
+# don't need to change.
+create_bd_cell -type ip -vlnv xilinx.com:ip:axis_register_slice axis_data_fifo_cap
 
 create_bd_cell -type ip -vlnv xilinx.com:ip:axis_subset_converter axis_subset_converter_cap
 # F1 (5l): output widened 2 -> 3 bytes. v_frmbuf_wr/s_axis_video stays
@@ -613,9 +632,11 @@ connect_bd_net [get_bd_pins clk_wiz_0/clk_200M]                  [get_bd_pins mi
 connect_bd_net [get_bd_pins clk_wiz_0/clk_300M]                  [get_bd_pins mipi_csi2_rx/video_aclk]
 connect_bd_net [get_bd_pins proc_sys_reset_300M/peripheral_aresetn] [get_bd_pins mipi_csi2_rx/video_aresetn]
 
-# axis_data_fifo + axis_subset_converter (300 MHz video domain)
-connect_bd_net [get_bd_pins clk_wiz_0/clk_300M]                  [get_bd_pins axis_data_fifo_cap/s_axis_aclk]
-connect_bd_net [get_bd_pins proc_sys_reset_300M/peripheral_aresetn] [get_bd_pins axis_data_fifo_cap/s_axis_aresetn]
+# axis_register_slice (1-deep skid; was axis_data_fifo before 2026-05-18)
+# + axis_subset_converter (300 MHz video domain). axis_register_slice
+# uses `aclk`/`aresetn` pin names (no `s_axis_` prefix).
+connect_bd_net [get_bd_pins clk_wiz_0/clk_300M]                  [get_bd_pins axis_data_fifo_cap/aclk]
+connect_bd_net [get_bd_pins proc_sys_reset_300M/peripheral_aresetn] [get_bd_pins axis_data_fifo_cap/aresetn]
 connect_bd_net [get_bd_pins clk_wiz_0/clk_300M]                  [get_bd_pins axis_subset_converter_cap/aclk]
 connect_bd_net [get_bd_pins proc_sys_reset_300M/peripheral_aresetn] [get_bd_pins axis_subset_converter_cap/aresetn]
 
