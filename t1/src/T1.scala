@@ -142,7 +142,13 @@ case class T1Parameter(
   // expect one image-row per LMUL=4 register group at SEW=8;
   // set to 1 in configs that want one image-row per LMUL=1 register
   // (i.e. zvl1024b builds where vLen alone holds 128 elements).
-  baseLMUL:                Option[Int] = Some(4))
+  baseLMUL:                Option[Int] = Some(4),
+  // useFpgaMaskUnit: when true, instantiate MaskUnitFpga (BRAM-backed
+  // v0 shadow, on-demand per-lane slicing, pipelined slide shifters /
+  // write-mask trees) instead of the default MaskUnit. Mirrors the
+  // vfuInstantiateParameter == "minimalFpga" pattern but kept as a
+  // separate flag so the two can be mixed if needed.
+  useFpgaMaskUnit:         Option[Boolean] = Some(false))
     extends SerializableModuleParameter {
   // TODO: expose it with the Property API
   override def toString: String =
@@ -547,7 +553,14 @@ class T1(val parameter: T1Parameter)
   }
 
   omInstance.decoderIn := Property(decode.om.asAnyClassType)
-  val maskUnit2D: Seq[Instance[MaskUnit]] = Seq.tabulate(parameter.numRows)(_ => Instantiate(new MaskUnit(parameter)))
+  // useFpgaMaskUnit selects the BRAM-backed FPGA variant (MaskUnitFpga)
+  // over the FF-backed simulator default (MaskUnit). Both expose an
+  // identical MaskUnitInterface IO so downstream wiring is unchanged.
+  val maskUnit2D =
+    if (parameter.useFpgaMaskUnit.getOrElse(false))
+      Seq.tabulate(parameter.numRows)(_ => Instantiate(new MaskUnitFpga(parameter)))
+    else
+      Seq.tabulate(parameter.numRows)(_ => Instantiate(new MaskUnit(parameter)))
   maskUnit2D.foreach { maskUnit =>
       maskUnit.io.clock        := implicitClock
       maskUnit.io.reset        := implicitReset
