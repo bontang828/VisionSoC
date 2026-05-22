@@ -1,0 +1,24 @@
+#-----------------------------------------------------------
+# Vivado v2025.2 (64-bit)
+# SW Build 6299465 on Fri Nov 14 12:34:56 MST 2025
+# IP Build 6300035 on Fri Nov 14 10:48:45 MST 2025
+# SharedData Build 6298862 on Thu Nov 13 04:50:51 MST 2025
+# Start of session at: Mon May 18 05:56:38 2026
+# Process ID         : 199174
+# Current directory  : /home/cbt22/code/code_fyp/VisionSoC
+# Command line       : vivado -mode batch -source /dev/stdin -journal /home/cbt22/code/code_fyp/VisionSoC/fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430/vivado_synth.jou -log /home/cbt22/code/code_fyp/VisionSoC/fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430/vivado_synth.log
+# Log file           : /home/cbt22/code/code_fyp/VisionSoC/fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430/vivado_synth.log
+# Journal file       : /home/cbt22/code/code_fyp/VisionSoC/fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430/vivado_synth.jou
+# Running On         : cloud-vm-44-108
+# Platform           : Ubuntu
+# Operating System   : Ubuntu 20.04.6 LTS
+# Processor Detail   : Intel Xeon E312xx (Sandy Bridge)
+# CPU Frequency      : 2399.998 MHz
+# CPU Physical cores : 16
+# CPU Logical cores  : 16
+# Host memory        : 135075 MB
+# Swap memory        : 17179 MB
+# Total Virtual      : 152255 MB
+# Available Virtual  : 121870 MB
+#-----------------------------------------------------------
+source /dev/stdin
