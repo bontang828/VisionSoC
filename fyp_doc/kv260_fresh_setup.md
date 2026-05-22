@@ -17,6 +17,144 @@ the resolved/current state only.
 
 ---
 
+## Developer paths — which one are you? (READ FIRST)
+
+**Decide this before installing anything on the dev host.** It
+determines whether you need Vivado 2025.2 (≥ 80 GB install, ~1-2 h
+download, ~30 min install).
+
+### Path A — Kernel-only developer (no RTL changes)
+
+You are writing/iterating C and RISC-V vector assembly in
+`vision_software/` against an existing T1 bitstream. You will deploy
+one of the two pre-built `.bit.bin` files (5r or 5t-maskopt — see
+§ 0) and never rebuild the FPGA.
+
+**Vivado is NOT required.** You can finish the entire fresh-board
+setup, deploy the pre-built bitstream, and iterate kernels without
+ever installing Vivado.
+
+**All of the day-to-day developer scripts are pure Path A** (none
+shell out to `vivado` or `bootgen`, none require Nix):
+
+| Script | Purpose | Tools it actually uses |
+|---|---|---|
+| `vision_software/visionsoc_main/sync_kernel.sh` | swap the active T1 vector kernel, native-build on the board (§ 6) | `scp`, ssh, `make`, `riscv64-linux-gnu-as` (board side) |
+| `vision_software/visionsoc_main/sync_perf.sh` | scp + native-build the perf binaries on the board (§ 8.1) | `scp`, ssh, `make` (board side) |
+| `vision_software/visionsoc_main/gather_perf.sh` | run perf measurement, pull CSV, render plot (§ 8.1) | ssh, `scp`, `python3` + `matplotlib` (the only places it touches the deployed `.bit.bin` are an `sha256sum` for logging and a path string for `fpgautil` reload — never converts or builds) |
+| `vision_software/visionsoc_main/perf/plot_perf.py` | render the perf CSV → stacked-bar PNG (§ 8.1) | `python3`, `matplotlib`, `numpy` |
+| `vision_software/visionsoc_main/run_after_power_cycle.sh` | reload overlay + start `visionsoc_main` on the board (§ 8) | runs on the **board**, uses `fpgautil` (pre-installed on Kria-Ubuntu) — dev host doesn't need anything for this |
+
+If you want to **simulate a kernel under Verilator before deploying
+to hardware** (`./run-test.sh ...`), see Path C below — it's a
+separate Nix-based toolchain orthogonal to Path A.
+
+What you skip:
+  * § 2.1's `bootgen` row (Vivado-bundled tool) — pre-built
+    `.bit.bin` files are already in the repo build dirs.
+  * § 7.1's "freshly built bitstream" branch — the pre-built path
+    in § 7.1 is one `ls` to sanity-check the file exists.
+  * The whole bitstream-rebuild iteration loop (not documented
+    here; see `fpga_build_status.md`).
+
+What you still need (full list in § 2.1): `openssh-client`, `git`,
+`device-tree-compiler`, `python3` + `matplotlib` + `numpy` (only if
+running the perf harness in § 8.1), and `screen`/`picocom` for
+first-boot UART (§ 1.2). About **50-100 MB total on dev host**.
+
+This is the recommended path if you are an FYP / vision software
+developer extending kernels, tuning the camera→T1→display pipeline,
+or measuring performance.
+
+### Path B — RTL / bitstream developer
+
+You are modifying the T1 vector core (Chisel/Scala under `t1/`),
+the BD (`fpga/system/system_top.tcl`), the wrapper Verilog, or any
+of the IP configs that change the synthesised hardware. You will
+run Vivado to elaborate + synth + impl + write_bitstream, then
+deploy your new `.bit.bin`.
+
+**Vivado 2025.2 IS required.** Bitstream rebuild typically takes
+5-9 hours of Vivado runtime per attempt (see
+`fpga_build_status.md` §§ 0.7-0.13 for the project's iteration
+trail and routing-cliff warnings at >85% LUT util).
+
+Everything Path A installs, **plus**:
+  * Vivado 2025.2 from AMD's installer (the project's reference
+    install root is `~/Xilinx/2025.2/`). The `bootgen` binary in
+    `~/Xilinx/2025.2/Vivado/bin/bootgen` is the only Vivado-bundled
+    tool this setup doc directly invokes (§ 7.1).
+  * Optionally: `nproc`, `time`, monitoring tools — Vivado is
+    happy with whatever a stock Ubuntu dev host already has.
+
+For the actual rebuild flow (out of scope of this fresh-setup
+doc), see `fpga/system/build_fpga.sh` and `fpga_build_status.md` §§
+1, 2, and the `0.x` "build in flight" sections.
+
+### Path C — Kernel simulation via Verilator (`run-test.sh`)
+
+You want to validate a T1 vector kernel *before* deploying it to
+real hardware — the canonical pre-hardware test flow uses
+`run-test.sh` at the repo root, which drives the Nix-built
+Verilator emulator (`t1emu` or `t1rocketemu`) and, optionally,
+diff-tests against Spike. Examples:
+
+```sh
+# Run a vector test under the default Verilator emu (t1emu):
+./run-test.sh intrinsic.linear_normalization
+
+# Add waveform tracing:
+./run-test.sh intrinsic.linear_normalization -e verilator-emu-trace
+
+# Diff-test against Spike (the --check flag):
+./run-test.sh intrinsic.linear_normalization -e verilator-emu-trace --check
+```
+
+This is **strongly recommended for any new T1 kernel work** — it
+catches register-spill bugs (§ `2d_fabric_handoff.md` § 3.2), CSR
+0x7c0 mode mistakes, vredsum gotchas (§ 4.1), and other 2D-fabric
+specific footguns before you spend 30+ s on each hardware deploy
+iteration. Many of the project's memory entries (`run-test.sh
+max-cycles default`, `T1_MIRROR_RTL_WRITES=1 for vert-mode`, etc.)
+come from this workflow.
+
+**Nix IS required for Path C** (everything `run-test.sh` builds is
+expressed as Nix derivations in the project's `flake.nix`). You do
+**not** need Vivado.
+
+What Path C adds on top of Path A:
+  * **Nix** with flakes enabled. Install per the project's
+    `README.md` § "Nix setup" — either the official binary
+    installer (https://nixos.org/manual/nix/stable/installation/installing-binary.html)
+    + flake enable, or the Determinate Systems installer
+    (https://github.com/DeterminateSystems/nix-installer) which
+    enables flakes by default.
+  * **First-build cost:** the initial `nix build` of the T1
+    emulator pulls + compiles LLVM/Verilator/the RISC-V toolchain
+    /the Chisel elaborator. Expect **multiple hours and 10-50 GB
+    of disk** the first time; subsequent invocations hit the cache
+    and are seconds-to-minutes.
+
+What Path C does *not* need:
+  * Vivado (Path B only)
+  * The board / SSH / `vision_software/` (Path C runs entirely on
+    the dev host — useful for kernel work even without a Kria on
+    the bench)
+
+For the kernel-programming contract that Path C tests will
+target, read `fyp_doc/2d_fabric_handoff.md` (the
+non-negotiable programmer reference for the 2D fabric).
+
+### Paths are additive
+
+A typical FYP developer ends up with **Path A + Path C** (deploy +
+simulate), and only adds **Path B** if they need to change the
+hardware. The three paths share most of the dev-host package list
+in § 2.1 — only Vivado (Path B) and Nix (Path C) are unique to
+their respective paths.
+
+---
+
 ## 0. What you need on the bench
 
   * KV260 Vision AI Starter Kit (board + power brick + USB-UART
@@ -28,9 +166,10 @@ the resolved/current state only.
   * HDMI cable + a monitor that takes 1080p (HDMI out is on the
     carrier card).
   * Ethernet cable on the same subnet as your dev host.
-  * Dev host with internet access, capable of running Vivado 2025.2
-    if you ever need to re-build a bitstream (not required to just
-    re-deploy the existing `.bit.bin`).
+  * Dev host with internet access. Dev-host package list is in
+    § 2.1 — only ~50-100 MB for kernel-only work (Path A); Vivado
+    is only needed for Path B (see the "Developer paths" section
+    above).
 
 **Two stable bitstreams are available** as of 2026-05-18. Both share
 the same camera+display+URAM/DMA pipeline; pick by T1 vector core
@@ -159,6 +298,73 @@ This is the workflow the project uses throughout — all source builds
 happen **natively on the Kria** over SSH, not cross-compiled. The dev
 host pushes sources via `scp -r` and the Kria runs `make`.
 
+### 2.1 Dev-host packages
+
+The dev host needs the following tools to drive everything in §§ 4-9.
+The **Path** column refers to the developer-path decision at the top
+of this doc — Path A rows are required for everyone; Path B rows
+are only needed if you are rebuilding bitstreams.
+
+| Tool | Path | Used by | Ubuntu/Debian package |
+|---|:-:|---|---|
+| `ssh`, `scp`, `ssh-copy-id` | A | every dev → board hop | `openssh-client` |
+| `git` | A | clone `udmabuf` (§ 4) + `ap1302-firmware` (§ 5.1) | `git` |
+| `dtc` (device-tree-compiler) | A | compile `system_top_wrapper.dts` → `.dtbo` (§ 7.2) | `device-tree-compiler` |
+| `python3` + `matplotlib` + `numpy` | A | perf plotter `plot_perf.py` (§ 8.1, optional) | `python3 python3-matplotlib python3-numpy` |
+| `screen` or `picocom` | A | USB-UART console during first boot (§ 1.2) | `screen` (or `picocom`) |
+| **`bootgen`** | **B** | convert Vivado `.bit` → `.bit.bin` for `fpgautil` (§ 7.1, only needed for freshly-built bitstreams; the pre-built bitstreams in the repo already ship the `.bit.bin`) | from Vivado/Vitis 2025.2 install (`$XILINX/Vivado/bin/bootgen`) |
+| **Vivado 2025.2** | **B** | rebuild bitstream from source | from AMD installer (~80 GB install, ~1-2 h download) |
+| **`nix`** (flakes enabled) | **C** | drive `./run-test.sh` (Verilator simulation of T1 kernels) — all `nix build .#t1.<config>.<top>.verilator-emu` etc. invocations | upstream Nix binary installer or Determinate Systems installer (see project `README.md` § "Nix setup") |
+
+One-shot install of the Path-A tools on a Debian/Ubuntu dev host
+(this is all you need for kernel-only work that only iterates on
+hardware):
+
+```sh
+sudo apt install -y openssh-client git device-tree-compiler \
+                    python3 python3-matplotlib python3-numpy screen
+```
+
+**Path B addendum — only if you are also rebuilding bitstreams.**
+Install Vivado/Vitis 2025.2 from AMD's installer
+(https://www.xilinx.com/support/download.html). The project's
+reference install root is `~/Xilinx/2025.2/`. Then add `bootgen` to
+PATH so § 7.1 finds it:
+
+```sh
+export PATH="$HOME/Xilinx/2025.2/Vivado/bin:$PATH"
+which bootgen     # should return $HOME/Xilinx/2025.2/Vivado/bin/bootgen
+```
+
+(You can put the `export` line in `~/.bashrc` to make it permanent.)
+
+**Path C addendum — only if you want pre-hardware kernel simulation
+via `./run-test.sh`.** Install Nix with flakes enabled. The
+project's `README.md` § "Nix setup" is the canonical reference;
+the short form (Determinate Systems installer, flakes on by
+default):
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf -L \
+    https://install.determinate.systems/nix | sh -s -- install
+# Re-open your shell, then verify:
+nix --version
+nix flake show /home/cbt22/code/code_fyp/VisionSoC 2>&1 | head -5
+```
+
+Or the upstream installer + manual flake enable: see
+https://nixos.org/manual/nix/stable/installation/installing-binary.html
+then https://nixos.wiki/wiki/Flakes#Enable_flakes.
+
+First `./run-test.sh <case>` invocation will pull + compile LLVM /
+Verilator / RISC-V toolchain / the Chisel elaborator — expect
+**multiple hours and 10-50 GB** on first run, seconds-to-minutes
+after that (cached). Cycle-counts cap defaults to 10M; full-grid
+kernels need `--max-cycles 50000000` per
+`feedback_max_cycles_default.md`.
+
+### 2.2 SSH from dev host to board
+
 ```sh
 # On the dev host, ~/.ssh/config:
 Host kv260
@@ -179,11 +385,13 @@ ssh kv260 'uname -a; cat /etc/os-release | head -2'
 
 Known dev-host quirks (carried from `camera_bringup_status.md` § 3):
 
-  * **No `rsync` on the dev host** — use `scp -r` for all source
-    syncs. The scripts in `vision_software/` already do this.
+  * **No `rsync` on the dev host (this project's reference dev
+    host)** — every script uses `scp -r` instead. If your dev host
+    has `rsync`, the project scripts still work as written.
   * **`git clone` from the Kria fails for many HTTPS repos**
     ("could not read Username"). When you need a third-party repo
-    on the board, clone on the dev host and `scp -r` it over.
+    on the board, clone on the dev host and `scp -r` it over. This
+    is why §§ 4 and 5.1 below do the clone on the dev host first.
 
 ---
 
@@ -235,7 +443,9 @@ passwordless once the template is in `$HOME`.
 ### 3.2 Base packages
 
 These are needed for everything that follows (RISC-V assembler for
-T1 kernels, libdrm for HDMI, kernel headers for u-dma-buf, etc.):
+T1 kernels, libdrm for HDMI, kernel headers for u-dma-buf, dtc for
+ad-hoc dtbo re-compile on the board, `gst-inspect-1.0` for the § 9.1
+pre-flight check, etc.):
 
 ```sh
 ssh kv260 '
@@ -245,16 +455,31 @@ ssh kv260 '
     binutils-riscv64-linux-gnu \
     libdrm-dev \
     linux-headers-$(uname -r) \
-    dkms \
     build-essential \
+    pkg-config \
     v4l-utils \
     media-ctl \
-    i2c-tools
+    i2c-tools \
+    device-tree-compiler \
+    gstreamer1.0-tools
 '
 ```
 
-(`media-ctl` is part of `v4l-utils` on Ubuntu — both lines kept for
-clarity.)
+Notes:
+  * `media-ctl` is part of `v4l-utils` on Ubuntu — both lines kept
+    for clarity.
+  * `device-tree-compiler` provides `dtc`. The fresh-setup flow only
+    needs `dtc` on the dev host (§ 7.2 compiles the dtbo there) but
+    keeping it on the board too is useful for in-place edits during
+    debug and is what the § 9.1 pre-flight check expects.
+  * `gstreamer1.0-tools` provides `gst-inspect-1.0`, used to verify
+    `mediasrcbin` installed correctly in § 5.2. It is also pulled in
+    transitively by `vvas-essentials` in § 5.2; the explicit install
+    here just guarantees ordering.
+  * `pkg-config` is used by the `visionsoc_main` Makefile to find
+    `libdrm` via `pkg-config --cflags/--libs libdrm`. It is usually
+    pre-installed (it's a dep of `build-essential` on Ubuntu) but
+    listed here to be explicit.
 
 ---
 
@@ -362,6 +587,20 @@ a kernel oops; just reload the FPGA overlay (§ 7).
 
 ### 5.2 Xilinx PPAs + mediasrcbin install
 
+`mediasrcbin` lives in the Xilinx-patched `gstreamer1.0-plugins-bad`
+package available from two Launchpad PPAs:
+
+  * `ppa:ubuntu-xilinx/sdk` — provides `vvas-essentials`
+  * `ppa:ubuntu-xilinx/gstreamer` — provides the patched
+    `gstreamer1.0-plugins-bad`
+
+It is **not** in the stock Ubuntu archive and **not** in any
+`Xilinx/vvas` GitHub release — see `camera_handoff_2026-05-13.md`
+§§ 4.18-4.24 for the trail (`vvas-gst-plugins` was tried from
+source, `xlnx-app-kv260-smartcam` was tried via `xmutil loadapp`,
+neither shipped `mediasrcbin` standalone). The PPA path is the
+only one that worked end-to-end on Ubuntu 22.04 jammy/arm64.
+
 ```sh
 ssh kv260 '
   # Add the two ubuntu-xilinx PPAs (gstreamer + sdk):
@@ -453,25 +692,45 @@ you re-sync; step 3 overwrites the binary and will fail with
 ### 7.1 Convert the .bit to .bit.bin (one-time per build)
 
 `fpgautil` requires the raw `.bit.bin` format (no Vivado ASCII
-header). The 5r build dir already contains the converted file, so
-**for the deployed 5r bitstream you can skip this step entirely** —
-just set `$BUILD` for use in § 7.3 and move on:
+header). **Both pre-built bitstream dirs (5r and 5t-maskopt) already
+contain the converted `.bit.bin`**, so for the deployed bitstreams
+you can skip the conversion entirely. Just pick one and set `$BUILD`
+for use in § 7.3:
 
 ```sh
-# Run from the VisionSoC repo root on the dev host:
-BUILD=fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260516-010205
+# Run from the VisionSoC repo root on the dev host.
+# Pick ONE of the two stable bitstreams (see § 0):
+BUILD=fpga/build/mudkip2d128small1bram1chain2lanescale_fpga-20260516-010205          # 5r (vLen=256)
+# or:
+# BUILD=fpga/build/mudkip2d128big1bram1chain2lanescale_fpga_maskopt-20260518-055430  # 5t-maskopt (vLen=1024)
+
 ls $BUILD/system_top_wrapper.bit.bin    # sanity-check it exists
 ```
 
-Only do the conversion below for a freshly built bitstream that
-doesn't have a `.bit.bin` yet:
+If you are deploying a *freshly built* bitstream that has only the
+Vivado `.bit` and no `.bit.bin`, run `bootgen` against the build
+dir's `.bif` file (every build dir ships a 4-line bif like
+`5r.bif` / `deploy.bif`). The `bootgen` binary is part of the
+Vivado/Vitis 2025.2 install (see § 2.1):
 
 ```sh
-# bit2bin.py (small Python helper; if not in the repo, drop it in /tmp):
-python3 /tmp/bit2bin.py \
-    $BUILD/system_top_wrapper.bit \
-    $BUILD/system_top_wrapper.bit.bin
+# Run inside the build dir on the dev host (path-relative refs).
+cd $BUILD
+ls *.bif                                        # e.g. 5r.bif or deploy.bif
+bootgen -arch zynqmp -image 5r.bif -w -o system_top_wrapper.bit.bin
 ```
+
+A typical `.bif` is just:
+
+```
+all:
+{
+    [destination_device = pl] system_top_wrapper.bit
+}
+```
+
+If none exists, create one with the snippet above. `fpga/system/deploy_camtest3.sh`
+has the canonical bootgen invocation as a working reference.
 
 ### 7.2 Compile the device-tree overlay
 
@@ -571,6 +830,53 @@ What this script does (see
 If step 4 or 5 fails the script dumps the active overlays and the
 last 80 lines of dmesg filtered for fpga/firmware/overlay/camera
 keywords, then exits non-zero.
+
+### 8.1 Performance measurement workflow (optional)
+
+For cycle/timing breakdown of the kernels — `sobel`, `optical_flow`,
+`matmul_8bitraw_short`, and the full `pipeline` (frame end-to-end) —
+the repo ships a four-piece harness under `vision_software/visionsoc_main/`:
+
+| Script / file | Where it runs | Purpose |
+|---|---|---|
+| `sync_perf.sh` | dev host | scp's the perf C sources + `run_perf.sh` to the board and native-builds `{visionsoc_main,sobel,optical_flow,matmul_8bitraw_short}_perf` on aarch64 |
+| `run_perf.sh` | board | invoked over ssh by `gather_perf.sh`; runs the perf binary, writes CSV to `/tmp/<mode>_perf.csv` |
+| `gather_perf.sh` | dev host | orchestrator: ssh→`run_perf.sh`, scp CSV back, run `plot_perf.py`, drop everything in `perf/<UTC-timestamp>-<mode>/` |
+| `perf/plot_perf.py` | dev host | reads the CSV and renders a stacked-bar PNG (matplotlib backend `Agg`, no display required) |
+
+All four scripts arrive on the board for free as part of § 6's
+`scp -r vision_software kv260:~/` (sync_perf.sh and gather_perf.sh
+sit in the same directory). No new sudoers entries needed — the perf
+binaries get installed into `~/vision_software/libt1/test/` on the
+board, which is already on the NOPASSWD allowlist from § 3.1.
+
+**Pre-reqs:** § 2.1's dev-host install must include
+`python3-matplotlib` and `python3-numpy` (the plotter's imports).
+
+**Canonical invocation:**
+
+```sh
+# Dev host, in vision_software/visionsoc_main/:
+./sync_perf.sh                        # one-time after editing any *_perf.c
+./gather_perf.sh sobel    100         # 100 sobel iterations
+./gather_perf.sh pipeline 30          # 30 frames through full pipeline
+./gather_perf.sh both     100         # both modes back-to-back
+```
+
+Outputs land in `vision_software/visionsoc_main/perf/<UTC>-<mode>/`:
+
+```
+perf/2026-05-22T10-15-32Z-sobel/
+  sobel_perf.csv
+  sobel_breakdown.per_instr.png
+  sobel_breakdown.grouped.png
+  run.log
+  meta.txt        # mode, N, t1-hz, board hostname, bitstream sha256
+```
+
+Full reference (csv schema, what each binary measures, how the
+T1-cycles vs wall-µs decomposition is computed): see
+`vision_software/visionsoc_main/perf/README.md`.
 
 ---
 
@@ -695,17 +1001,33 @@ needed), kill the current run with Ctrl-C, re-sync via
     two PPAs (§ 5.2). Stock `gstreamer1.0-plugins-bad` from the
     Ubuntu archive does not contain mediasrcbin and will mask the
     Xilinx-patched version if a later apt run pulls it in.
-  * **Need to revert from 5r to 5q-r3** → on the Kria:
+  * **Need to revert from 5r to 5q-r3, or swap between 5r ↔
+    5t-maskopt** → if the destination bitstream is staged at
+    `/lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin.<tag>-backup`,
+    swap it in and reload:
     ```sh
-    sudo cp /lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin.5q-r3-backup \
+    sudo cp /lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin.<tag>-backup \
             /lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin
-    sudo cp /lib/firmware/xilinx/visionsoc/system_top_wrapper.dtbo.5q-r3-backup \
+    sudo cp /lib/firmware/xilinx/visionsoc/system_top_wrapper.dtbo.<tag>-backup \
             /lib/firmware/xilinx/visionsoc/system_top_wrapper.dtbo
+    sudo rmdir /sys/kernel/config/device-tree/overlays/full && sleep 1
     sudo fpgautil -b /lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin \
                   -o /lib/firmware/xilinx/visionsoc/system_top_wrapper.dtbo
     ```
-    (5q-r3 backup is preserved on the deployed board per
-    `fpga_build_status.md` § 0.11.)
+    **For a freshly set-up KV260 those `.<tag>-backup` files won't
+    exist** — they're a convention that grew on the project's own
+    deployed board (5q-r3 backup is preserved per
+    `fpga_build_status.md` § 0.11; 5q-final earlier). To create
+    them on a fresh board, before swapping, snapshot the currently
+    active files:
+    ```sh
+    sudo cp /lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin \
+            /lib/firmware/xilinx/visionsoc/system_top_wrapper.bit.bin.<current-tag>-backup
+    sudo cp /lib/firmware/xilinx/visionsoc/system_top_wrapper.dtbo \
+            /lib/firmware/xilinx/visionsoc/system_top_wrapper.dtbo.<current-tag>-backup
+    ```
+    Then repeat § 7.3 with the new build dir's `$BUILD` to install
+    + reload the new bitstream.
 
 ---
 
@@ -722,3 +1044,6 @@ needed), kill the current run with Ctrl-C, re-sync via
     read this before writing or debugging any T1 vector kernel.
   * `fyp_doc/driver_function_spec.md` + `vision_software/libt1/` —
     libt1 API surface.
+  * `vision_software/visionsoc_main/perf/README.md` — perf-harness
+    binary catalogue, CSV schema, T1-cycles/wall-µs decomposition
+    reference. Read before invoking § 8.1.

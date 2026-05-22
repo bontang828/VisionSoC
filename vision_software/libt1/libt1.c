@@ -644,6 +644,20 @@ int t1_issue_kernel(const uint32_t *kernel, size_t n_words,
     return 0;
 }
 
+int t1_wait_ready(void)
+{
+    if (require_init() < 0) {
+        return -1;
+    }
+    /* Block until the core re-asserts ISSUE_READY, i.e. the last issued
+     * instruction has FULLY drained all its writeback paths (the
+     * issueWritebackDrained gate in T1.scala). Note ISSUE_BUSY clears at
+     * acceptance (issue.fire), which is much earlier than drain; callers
+     * that want to time an instruction's true latency must wait on
+     * ISSUE_READY here, not on ISSUE_BUSY. */
+    return wait_ctrl_ready();
+}
+
 uint32_t t1_perf_start(uint8_t tag)
 {
     if (require_init() < 0) {

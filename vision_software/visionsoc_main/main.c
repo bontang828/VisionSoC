@@ -12,6 +12,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifndef ACTIVE_KERNEL_FLOW_COLOR
+#define ACTIVE_KERNEL_FLOW_COLOR 0
+#endif
+
 /*
  * 5r scratchpad path: T1 reads its input from URAM half A and writes
  * its output to URAM half B. The PS uses DMA mm2s to stage the camera Y
@@ -183,6 +187,122 @@ static void copy_nv12_to_display(void *dst, uint32_t dst_pitch,
     }
 }
 
+/*
+ * Faster display path for luma-only kernels (sobel/optical_flow). The DRM
+ * buffer is still RGB565, so we still pack pixels, but neutral UV means the
+ * expensive YUV chroma math is unnecessary.
+ */
+static void copy_gray_to_display(void *dst, uint32_t dst_pitch,
+                                 uint32_t dst_width, uint32_t dst_height,
+                                 const void *src)
+{
+    const uint8_t *src_y_plane = (const uint8_t *)src;
+    uint8_t *dst_base = dst;
+
+    uint32_t square = dst_width < dst_height ? dst_width : dst_height;
+    if (square == 0) {
+        return;
+    }
+    uint32_t x0 = (dst_width  - square) / 2u;
+    uint32_t y0 = (dst_height - square) / 2u;
+    uint32_t inv = (128u << 16) / square;
+
+    for (uint32_t y = 0; y < dst_height; y++) {
+        uint16_t *dst_line = (uint16_t *)(void *)(dst_base + (size_t)y * dst_pitch);
+        memset(dst_line, 0, (size_t)dst_width * sizeof(*dst_line));
+
+        if (y < y0 || y >= y0 + square) {
+            continue;
+        }
+
+        uint32_t src_yi = ((y - y0) * inv) >> 16;
+        if (src_yi > 127u) {
+            src_yi = 127u;
+        }
+        const uint8_t *y_line = src_y_plane + (size_t)src_yi * 128u;
+
+        for (uint32_t x = x0; x < x0 + square; x++) {
+            uint32_t src_xi = ((x - x0) * inv) >> 16;
+            if (src_xi > 127u) {
+                src_xi = 127u;
+            }
+
+            uint8_t y8 = y_line[src_xi];
+            dst_line[x] = (uint16_t)(((uint16_t)(y8 >> 3) << 11) |
+                                     ((uint16_t)(y8 >> 2) << 5)  |
+                                      (uint16_t)(y8 >> 3));
+        }
+    }
+}
+
+static uint16_t flow_color_rgb565_ps(uint8_t code)
+{
+    switch (code) {
+        case 0:   return 0x0000u;  /* static */
+        case 50:  return 0xf800u;  /* right: red */
+        case 100: return 0x07ffu;  /* left: cyan */
+        case 150: return 0x07e0u;  /* down: green */
+        case 200: return 0xf81fu;  /* up: magenta */
+        default:
+            return (uint16_t)(((uint16_t)(code >> 3) << 11) |
+                              ((uint16_t)(code >> 2) << 5)  |
+                               (uint16_t)(code >> 3));
+    }
+}
+
+static void copy_flow_to_display(void *dst, uint32_t dst_pitch,
+                                 uint32_t dst_width, uint32_t dst_height,
+                                 const void *src)
+{
+    const uint8_t *src_y_plane = (const uint8_t *)src;
+    uint8_t *dst_base = dst;
+
+    uint32_t square = dst_width < dst_height ? dst_width : dst_height;
+    if (square == 0) {
+        return;
+    }
+    uint32_t x0 = (dst_width  - square) / 2u;
+    uint32_t y0 = (dst_height - square) / 2u;
+    uint32_t inv = (128u << 16) / square;
+
+    for (uint32_t y = 0; y < dst_height; y++) {
+        uint16_t *dst_line = (uint16_t *)(void *)(dst_base + (size_t)y * dst_pitch);
+        memset(dst_line, 0, (size_t)dst_width * sizeof(*dst_line));
+
+        if (y < y0 || y >= y0 + square) {
+            continue;
+        }
+
+        uint32_t src_yi = ((y - y0) * inv) >> 16;
+        if (src_yi > 127u) {
+            src_yi = 127u;
+        }
+        const uint8_t *y_line = src_y_plane + (size_t)src_yi * 128u;
+
+        for (uint32_t x = x0; x < x0 + square; x++) {
+            uint32_t src_xi = ((x - x0) * inv) >> 16;
+            if (src_xi > 127u) {
+                src_xi = 127u;
+            }
+
+            dst_line[x] = flow_color_rgb565_ps(y_line[src_xi]);
+        }
+    }
+}
+
+static void copy_frame_to_display(void *dst, uint32_t dst_pitch,
+                                  uint32_t dst_width, uint32_t dst_height,
+                                  const void *src)
+{
+    if (ACTIVE_KERNEL_FLOW_COLOR) {
+        copy_flow_to_display(dst, dst_pitch, dst_width, dst_height, src);
+    } else if (ACTIVE_KERNEL_NEUTRAL_UV) {
+        copy_gray_to_display(dst, dst_pitch, dst_width, dst_height, src);
+    } else {
+        copy_nv12_to_display(dst, dst_pitch, dst_width, dst_height, src);
+    }
+}
+
 static void draw_debug_marker(void *dst, uint32_t pitch,
                               uint32_t width, uint32_t height)
 {
@@ -261,6 +381,40 @@ int main(int argc, char **argv)
         die("camera_open");
     }
     camera_set_cancel_flag(&cam, &g_should_exit);
+
+#ifdef ACTIVE_KERNEL_NEEDS_WEIGHTS
+    /*
+     * matmul kernels read a fixed 128x128 weight matrix B from an internal
+     * URAM region (the kernel's (a1) -> ACTIVE_KERNEL_WEIGHT_PA). B is
+     * read-only to the kernel, so build it once on the PS, DMA it into URAM
+     * via the same async-pair pattern used for the camera frame, then free
+     * the DDR staging buffer -- the URAM copy persists across every frame.
+     */
+    {
+        struct t1_buf wbuf = {0};
+        if (t1_buf_alloc(&wbuf, FRAME_BYTES) < 0) {
+            die("t1_buf_alloc(weights)");
+        }
+        mmk_build_weights((uint8_t *)wbuf.va, ACTIVE_KERNEL_WEIGHT_PATTERN);
+        if (t1_buf_sync_for_device(&wbuf) < 0) {
+            die("t1_buf_sync_for_device(weights)");
+        }
+        if (t1_dma_s2mm_async(0, ACTIVE_KERNEL_WEIGHT_PA, FRAME_BYTES) < 0) {
+            die("t1_dma_s2mm_async(arm weights)");
+        }
+        if (t1_dma_mm2s_async(wbuf.pa, 0, FRAME_BYTES) < 0) {
+            die("t1_dma_mm2s_async(weights)");
+        }
+        if (t1_dma_wait() < 0) {
+            die("t1_dma_wait(weights -> uram)");
+        }
+        t1_buf_free(&wbuf);
+        fprintf(stderr,
+                "matmul: staged 128x128 weight matrix B (pattern %d) -> 0x%08x\n",
+                (int)ACTIVE_KERNEL_WEIGHT_PATTERN,
+                (unsigned)ACTIVE_KERNEL_WEIGHT_PA);
+    }
+#endif
 
     unsigned frame_count = 0;
     uint32_t last_kernel_cycles = 0;
@@ -375,14 +529,16 @@ int main(int argc, char **argv)
             die("display buffer pitch smaller than display width");
         }
         /*
-         * Display path stays on the PS - copy_nv12_to_display scales and
-         * colour-converts the NV12 frame in `out` (now containing T1's
-         * URAM-staged Y plane + the PS-filled UV plane after ps_edit)
-         * into the DRM RGB565 buffer. We do not DMA URAM -> DRM directly
-         * because the display buffer requires letterboxing + RGB565
-         * conversion the DMA can't do.
+         * Display path stays on the PS. Optical flow uses a false-colour
+         * RGB565 map, other luma-only kernels use grayscale, and full-colour
+         * kernels scale and colour-convert NV12. We do not DMA URAM -> DRM
+         * directly because the display buffer requires letterboxing + RGB565
+         * packing/conversion the DMA can't do.
          */
-        copy_nv12_to_display(db.va, db.pitch, db.width, db.height, out.va);
+        /* T1 colour-pack helper kept in kernels/flow_color_rgb565.S, but the
+         * active path is PS false-colour because it is faster in the measured
+         * pipeline. */
+        copy_frame_to_display(db.va, db.pitch, db.width, db.height, out.va);
         if (marker) {
             draw_debug_marker(db.va, db.pitch, db.width, db.height);
         }

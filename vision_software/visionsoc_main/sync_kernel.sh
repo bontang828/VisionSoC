@@ -90,10 +90,13 @@ scp "$HERE"/kernels/*.S "$HERE"/kernels/*.h "$REMOTE_KERNELS/"
 echo "[3/4] build_kernel.sh + make on board (native aarch64)"
 ssh kv260 "cd ~/vision_software/visionsoc_main && \
            ../libt1/build_kernel.sh kernels/$NAME.S kernels/$NAME.h $NAME && \
-           make"
+           make -B"
 
 echo "[4/4] scp $NAME.h -> local (assembler-verified)"
 scp "$REMOTE_KERNELS/$NAME.h" "$LOCAL_H"
+if ssh kv260 "test -f ~/vision_software/visionsoc_main/kernels/flow_color_rgb565.h"; then
+    scp "$REMOTE_KERNELS/flow_color_rgb565.h" "$HERE/kernels/flow_color_rgb565.h"
+fi
 
 cat <<EOF
 

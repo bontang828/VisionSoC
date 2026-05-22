@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -60,6 +61,12 @@ static drmModeModeInfo pick_mode(const drmModeConnector *conn)
         }
     }
     return conn->modes[0];
+}
+
+static int wait_vblank_enabled(void)
+{
+    const char *value = getenv("VISIONSOC_WAIT_VBLANK");
+    return value && strcmp(value, "0") != 0 && strcmp(value, "false") != 0;
 }
 
 /* Mode-sized RGB565 scanout buffer. We use this as the CRTC framebuffer
@@ -249,17 +256,18 @@ int display_qbuf(struct display *disp, const struct display_buf *db)
         return -1;
     }
 
-    /*
-     * Pace to the next vblank. drmModeSetPlane has no completion event;
-     * waiting one vblank bounds tearing and guarantees the previous buffer
-     * is no longer being scanned out before the caller reuses it. Best
-     * effort -- a driver without vblank support just returns an error.
-     */
-    drmVBlank vbl;
-    memset(&vbl, 0, sizeof(vbl));
-    vbl.request.type = DRM_VBLANK_RELATIVE;
-    vbl.request.sequence = 1;
-    (void)drmWaitVBlank(disp->drm_fd, &vbl);
+    if (wait_vblank_enabled()) {
+        /*
+         * Optional pacing to the next vblank. The default path skips this
+         * wait because it quantizes the live pipeline into 2- or 3-vblank
+         * buckets, which is what made optical_flow look capped at 20 fps.
+         */
+        drmVBlank vbl;
+        memset(&vbl, 0, sizeof(vbl));
+        vbl.request.type = DRM_VBLANK_RELATIVE;
+        vbl.request.sequence = 1;
+        (void)drmWaitVBlank(disp->drm_fd, &vbl);
+    }
 
     disp->front_index = db->index;
     return 0;

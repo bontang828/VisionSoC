@@ -1,0 +1,356 @@
+<mxfile host="app.diagrams.net" agent="Claude Code" version="24.7.7">
+  <diagram name="Sobel on T1" id="sobel-t1-stages">
+    <mxGraphModel dx="1480" dy="1040" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1060" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ===================== TITLE ===================== -->
+        <mxCell id="title" parent="1" vertex="1"
+          value="Sobel edge filter on the T1 2-D fabric"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#212121;">
+          <mxGeometry x="40" y="20" width="900" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" parent="1" vertex="1"
+          value="The horizontal and vertical passes use the SAME two slide instructions &#8212; flipping one mode bit rotates the slide 90&#176;."
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#616161;">
+          <mxGeometry x="40" y="52" width="1000" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- pixel-colour legend -->
+        <mxCell id="lg_c" parent="1" vertex="1" value="centre pixel" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E9B5;strokeColor=#FFFFFF;strokeWidth=2;fontSize=11;"><mxGeometry x="1150" y="22" width="100" height="22" as="geometry"/></mxCell>
+        <mxCell id="lg_lr" parent="1" vertex="1" value="row neighbour" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#BBD7EC;strokeColor=#FFFFFF;strokeWidth=2;fontSize=11;"><mxGeometry x="1260" y="22" width="100" height="22" as="geometry"/></mxCell>
+        <mxCell id="lg_ab" parent="1" vertex="1" value="col neighbour" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#CFE3C0;strokeColor=#FFFFFF;strokeWidth=2;fontSize=11;"><mxGeometry x="1370" y="22" width="100" height="22" as="geometry"/></mxCell>
+
+        <!-- ============================================================= -->
+        <!-- STAGE 1 PANEL : horizontal pass (Gx)                            -->
+        <!-- ============================================================= -->
+        <mxCell id="p1" parent="1" vertex="1" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F4F8FD;strokeColor=#6C8EBF;strokeWidth=2;">
+          <mxGeometry x="30" y="90" width="440" height="380" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_h" parent="1" vertex="1" value="STAGE 1 &#183; Horizontal pass"
+          style="text;html=1;align=center;fontSize=15;fontStyle=1;fontColor=#1565C0;">
+          <mxGeometry x="40" y="100" width="420" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_mode" parent="1" vertex="1" value="Horizontal mode&#160;&#160;(CSR 0x7c0 = 0)"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBD7EC;strokeColor=#6C8EBF;fontSize=11;fontStyle=1;">
+          <mxGeometry x="120" y="128" width="260" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- 3x3 grid stage1 : origin 175,180 cell 50 -->
+        <mxCell id="g1_00" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="175" y="180" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_01" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="225" y="180" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_02" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="275" y="180" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_10" parent="1" vertex="1" value="L" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#BBD7EC;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;fontSize=14;"><mxGeometry x="175" y="230" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_11" parent="1" vertex="1" value="x" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E9B5;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;fontSize=14;"><mxGeometry x="225" y="230" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_12" parent="1" vertex="1" value="R" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2C9C9;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;fontSize=14;"><mxGeometry x="275" y="230" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_20" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="175" y="280" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_21" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="225" y="280" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g1_22" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="275" y="280" width="50" height="50" as="geometry"/></mxCell>
+
+        <!-- horizontal slide arrows (within the row) -->
+        <mxCell id="a1_r" parent="1" edge="1"
+          style="endArrow=classic;html=1;strokeColor=#B85450;strokeWidth=3;startArrow=none;"
+          source="g1_12" target="g1_11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a1_l" parent="1" edge="1"
+          style="endArrow=classic;html=1;strokeColor=#1565C0;strokeWidth=3;startArrow=none;"
+          source="g1_10" target="g1_11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_axis" parent="1" vertex="1" value="&#8592;&#160;&#160;slide within the row&#160;&#160;&#8594;"
+          style="text;html=1;align=center;fontSize=12;fontStyle=2;fontColor=#37474F;">
+          <mxGeometry x="120" y="338" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_op1" parent="1" vertex="1" value="vslidedown &#8594; bring R"
+          style="text;html=1;align=center;fontSize=12;fontColor=#B85450;">
+          <mxGeometry x="120" y="372" width="260" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_op2" parent="1" vertex="1" value="vslideup &#8594; bring L"
+          style="text;html=1;align=center;fontSize=12;fontColor=#1565C0;">
+          <mxGeometry x="120" y="392" width="260" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_res" parent="1" vertex="1" value="Gx = R &#8722; L"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=14;fontStyle=1;">
+          <mxGeometry x="150" y="420" width="200" height="34" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================= -->
+        <!-- STAGE 2 PANEL : vertical pass (Gy)                              -->
+        <!-- ============================================================= -->
+        <mxCell id="p2" parent="1" vertex="1" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDF6EE;strokeColor=#D79B00;strokeWidth=3;">
+          <mxGeometry x="500" y="90" width="440" height="380" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_h" parent="1" vertex="1" value="STAGE 2 &#183; Vertical pass"
+          style="text;html=1;align=center;fontSize=15;fontStyle=1;fontColor=#E65100;">
+          <mxGeometry x="510" y="100" width="420" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_mode" parent="1" vertex="1" value="Vertical mode&#160;&#160;(CSR 0x7c0 = 1)"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F6D7B0;strokeColor=#D79B00;fontSize=11;fontStyle=1;">
+          <mxGeometry x="590" y="128" width="260" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- 3x3 grid stage2 : origin 645,180 cell 50 -->
+        <mxCell id="g2_00" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="645" y="180" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_01" parent="1" vertex="1" value="A" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#CFE3C0;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;fontSize=14;"><mxGeometry x="695" y="180" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_02" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="745" y="180" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_10" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="645" y="230" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_11" parent="1" vertex="1" value="x" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E9B5;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;fontSize=14;"><mxGeometry x="695" y="230" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_12" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="745" y="230" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_20" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="645" y="280" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_21" parent="1" vertex="1" value="B" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EBC6DC;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;fontSize=14;"><mxGeometry x="695" y="280" width="50" height="50" as="geometry"/></mxCell>
+        <mxCell id="g2_22" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="745" y="280" width="50" height="50" as="geometry"/></mxCell>
+
+        <!-- vertical slide arrows (between rows) -->
+        <mxCell id="a2_b" parent="1" edge="1"
+          style="endArrow=classic;html=1;strokeColor=#9C27B0;strokeWidth=3;startArrow=none;"
+          source="g2_21" target="g2_11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2_a" parent="1" edge="1"
+          style="endArrow=classic;html=1;strokeColor=#2E7D32;strokeWidth=3;startArrow=none;"
+          source="g2_01" target="g2_11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_axis" parent="1" vertex="1" value="&#8593;&#160;&#160;slide between rows&#160;&#160;&#8595;"
+          style="text;html=1;align=center;fontSize=12;fontStyle=2;fontColor=#37474F;">
+          <mxGeometry x="590" y="338" width="260" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_op1" parent="1" vertex="1" value="vslidedown &#8594; bring B (row below)"
+          style="text;html=1;align=center;fontSize=12;fontColor=#9C27B0;">
+          <mxGeometry x="560" y="372" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_op2" parent="1" vertex="1" value="vslideup &#8594; bring A (row above)"
+          style="text;html=1;align=center;fontSize=12;fontColor=#2E7D32;">
+          <mxGeometry x="560" y="392" width="320" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_res" parent="1" vertex="1" value="Gy = B &#8722; A"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=14;fontStyle=1;">
+          <mxGeometry x="620" y="420" width="200" height="34" as="geometry"/>
+        </mxCell>
+
+        <!-- callout : same instructions, rotated -->
+        <mxCell id="same_note" parent="1" vertex="1"
+          value="&#8635;  SAME two instructions as Stage 1 &#8212;&#10;the mode bit rotates the slide 90&#176;"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#E65100;strokeWidth=2;dashed=1;fontSize=12;fontStyle=1;fontColor=#E65100;">
+          <mxGeometry x="485" y="478" width="470" height="46" as="geometry"/>
+        </mxCell>
+        <!-- arrow linking stage1 ops to stage2 ops to underline 'same' -->
+        <mxCell id="same_arrow" parent="1" edge="1"
+          style="endArrow=classic;startArrow=classic;html=1;strokeColor=#E65100;strokeWidth=2;dashed=1;"
+          source="p1_op1" target="p2_op1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="420" y="381"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================= -->
+        <!-- STAGE 3 PANEL : combine                                        -->
+        <!-- ============================================================= -->
+        <mxCell id="p3" parent="1" vertex="1" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAFAFA;strokeColor=#666666;strokeWidth=2;">
+          <mxGeometry x="970" y="90" width="470" height="380" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3_h" parent="1" vertex="1" value="STAGE 3 &#183; Combine"
+          style="text;html=1;align=center;fontSize=15;fontStyle=1;fontColor=#424242;">
+          <mxGeometry x="980" y="100" width="450" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3_mode" parent="1" vertex="1" value="element-wise &#183; works in any mode"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#90A4AE;fontSize=11;fontStyle=1;">
+          <mxGeometry x="1075" y="128" width="260" height="26" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p3_gx" parent="1" vertex="1" value="|Gx|"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBD7EC;strokeColor=#6C8EBF;fontSize=13;fontStyle=1;">
+          <mxGeometry x="1000" y="185" width="110" height="46" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3_gy" parent="1" vertex="1" value="|Gy|"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F6D7B0;strokeColor=#D79B00;fontSize=13;fontStyle=1;">
+          <mxGeometry x="1000" y="255" width="110" height="46" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3_sum" parent="1" vertex="1" value="sat8( |Gx| + |Gy| )"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;fontStyle=1;">
+          <mxGeometry x="1180" y="220" width="160" height="46" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3_a1" parent="1" edge="1" source="p3_gx" target="p3_sum"
+          style="endArrow=classic;html=1;strokeColor=#6C8EBF;strokeWidth=2;rounded=0;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3_a2" parent="1" edge="1" source="p3_gy" target="p3_sum"
+          style="endArrow=classic;html=1;strokeColor=#D79B00;strokeWidth=2;rounded=0;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- output edge grid 4x4 -->
+        <mxCell id="o00" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1110" y="320" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o01" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#607D8B;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1144" y="320" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o02" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#607D8B;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1178" y="320" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o03" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1212" y="320" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o10" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1110" y="354" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o11" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#90A4AE;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1144" y="354" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o12" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#607D8B;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1178" y="354" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o13" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1212" y="354" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o20" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1110" y="388" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o21" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#607D8B;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1144" y="388" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o22" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#90A4AE;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1178" y="388" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o23" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1212" y="388" width="34" height="34" as="geometry"/></mxCell>
+        <mxCell id="o_lbl" parent="1" vertex="1" value="edge map out"
+          style="text;html=1;align=center;fontSize=12;fontStyle=2;fontColor=#37474F;">
+          <mxGeometry x="1110" y="426" width="136" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3_sum_arrow" parent="1" edge="1" source="p3_sum" target="o01"
+          style="endArrow=classic;html=1;strokeColor=#D6B656;strokeWidth=2;rounded=0;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- stage flow arrows (Gx, Gy carried right) -->
+        <mxCell id="flow12" parent="1" edge="1" source="p1_res" target="p2"
+          value="carry Gx"
+          style="endArrow=classic;html=1;strokeColor=#455A64;strokeWidth=2;rounded=0;edgeStyle=orthogonalEdgeStyle;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.95;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="flow23" parent="1" edge="1" source="p2_res" target="p3_gx"
+          value="Gx + Gy"
+          style="endArrow=classic;html=1;strokeColor=#455A64;strokeWidth=2;rounded=0;edgeStyle=orthogonalEdgeStyle;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;entryX=0;entryY=0.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="958" y="437"/><mxPoint x="958" y="208"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================= -->
+        <!-- COMPARISON SECTION                                             -->
+        <!-- ============================================================= -->
+        <mxCell id="cmp_h" parent="1" vertex="1"
+          value="Why this matters &#8212; computing the vertical gradient"
+          style="text;html=1;align=left;fontSize=16;fontStyle=1;fontColor=#212121;">
+          <mxGeometry x="40" y="552" width="900" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- == Traditional 1-D card == -->
+        <mxCell id="trad" parent="1" vertex="1" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF6F4;strokeColor=#B85450;strokeWidth=2;">
+          <mxGeometry x="40" y="586" width="690" height="450" as="geometry"/>
+        </mxCell>
+        <mxCell id="trad_h" parent="1" vertex="1" value="Traditional 1-D vector machine"
+          style="text;html=1;align=center;fontSize=15;fontStyle=1;fontColor=#B85450;">
+          <mxGeometry x="50" y="596" width="670" height="22" as="geometry"/>
+        </mxCell>
+
+        <!-- trad Gx: one row, slide within -->
+        <mxCell id="trad_gx_lbl" parent="1" vertex="1" value="Gx (horizontal):  slide inside the one row  &#10003;"
+          style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#2E7D32;">
+          <mxGeometry x="60" y="630" width="420" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="tr_x0" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#BBD7EC;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="60" y="652" width="40" height="40" as="geometry"/></mxCell>
+        <mxCell id="tr_x1" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E9B5;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="100" y="652" width="40" height="40" as="geometry"/></mxCell>
+        <mxCell id="tr_x2" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2C9C9;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="140" y="652" width="40" height="40" as="geometry"/></mxCell>
+        <mxCell id="tr_x3" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="180" y="652" width="40" height="40" as="geometry"/></mxCell>
+        <mxCell id="tr_x4" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="220" y="652" width="40" height="40" as="geometry"/></mxCell>
+        <mxCell id="tr_xar" parent="1" edge="1"
+          style="endArrow=classic;startArrow=classic;html=1;strokeColor=#455A64;strokeWidth=2;"
+          source="tr_x0" target="tr_x2">
+          <mxGeometry relative="1" as="geometry"><mxPoint x="80" y="640" as="sourcePoint"/><mxPoint x="160" y="640" as="targetPoint"/></mxGeometry>
+        </mxCell>
+
+        <!-- trad Gy: must load 3 rows -->
+        <mxCell id="trad_gy_lbl" parent="1" vertex="1" value="Gy (vertical):  a register is only ONE row &#8594; load 3 rows separately"
+          style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#B85450;">
+          <mxGeometry x="60" y="716" width="600" height="18" as="geometry"/>
+        </mxCell>
+        <!-- memory with rows -->
+        <mxCell id="tr_mem" parent="1" vertex="1" value="DDR&#10;image rows"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=11;verticalAlign=top;spacingTop=6;">
+          <mxGeometry x="60" y="744" width="110" height="250" as="geometry"/>
+        </mxCell>
+        <mxCell id="tr_mr0" parent="1" vertex="1" value="row r-1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#CFE3C0;strokeColor=#FFFFFF;strokeWidth=2;fontSize=10;"><mxGeometry x="72" y="788" width="86" height="34" as="geometry"/></mxCell>
+        <mxCell id="tr_mr1" parent="1" vertex="1" value="row r" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E9B5;strokeColor=#FFFFFF;strokeWidth=2;fontSize=10;"><mxGeometry x="72" y="844" width="86" height="34" as="geometry"/></mxCell>
+        <mxCell id="tr_mr2" parent="1" vertex="1" value="row r+1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EBC6DC;strokeColor=#FFFFFF;strokeWidth=2;fontSize=10;"><mxGeometry x="72" y="900" width="86" height="34" as="geometry"/></mxCell>
+
+        <!-- 3 separate vector registers -->
+        <mxCell id="tr_va" parent="1" vertex="1" value="vec: row above (A)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFE3C0;strokeColor=#82B366;fontSize=11;"><mxGeometry x="300" y="788" width="190" height="34" as="geometry"/></mxCell>
+        <mxCell id="tr_vc" parent="1" vertex="1" value="vec: current row" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E9B5;strokeColor=#D6B656;fontSize=11;"><mxGeometry x="300" y="844" width="190" height="34" as="geometry"/></mxCell>
+        <mxCell id="tr_vb" parent="1" vertex="1" value="vec: row below (B)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBC6DC;strokeColor=#9673A6;fontSize=11;"><mxGeometry x="300" y="900" width="190" height="34" as="geometry"/></mxCell>
+        <mxCell id="tr_la" parent="1" edge="1" source="tr_mr0" target="tr_va" value="load" style="endArrow=classic;html=1;strokeColor=#B85450;strokeWidth=2;labelBackgroundColor=#FFF6F4;fontSize=10;rounded=0;edgeStyle=orthogonalEdgeStyle;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="tr_lc" parent="1" edge="1" source="tr_mr1" target="tr_vc" value="load" style="endArrow=classic;html=1;strokeColor=#B85450;strokeWidth=2;labelBackgroundColor=#FFF6F4;fontSize=10;rounded=0;edgeStyle=orthogonalEdgeStyle;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="tr_lb" parent="1" edge="1" source="tr_mr2" target="tr_vb" value="load" style="endArrow=classic;html=1;strokeColor=#B85450;strokeWidth=2;labelBackgroundColor=#FFF6F4;fontSize=10;rounded=0;edgeStyle=orthogonalEdgeStyle;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <!-- subtract -->
+        <mxCell id="tr_gy" parent="1" vertex="1" value="Gy = B &#8722; A" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;fontStyle=1;"><mxGeometry x="540" y="844" width="130" height="34" as="geometry"/></mxCell>
+        <mxCell id="tr_sa" parent="1" edge="1" source="tr_va" target="tr_gy" style="endArrow=classic;html=1;strokeColor=#455A64;strokeWidth=2;rounded=0;edgeStyle=orthogonalEdgeStyle;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="tr_sb" parent="1" edge="1" source="tr_vb" target="tr_gy" style="endArrow=classic;html=1;strokeColor=#455A64;strokeWidth=2;rounded=0;edgeStyle=orthogonalEdgeStyle;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="tr_cost" parent="1" vertex="1" value="&#10007;  3 loads + address arithmetic (or a transpose)"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=12;fontStyle=1;fontColor=#B85450;">
+          <mxGeometry x="300" y="952" width="370" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- == T1 2-D card == -->
+        <mxCell id="t1c" parent="1" vertex="1" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2FBF4;strokeColor=#2E7D32;strokeWidth=2;">
+          <mxGeometry x="760" y="586" width="680" height="450" as="geometry"/>
+        </mxCell>
+        <mxCell id="t1c_h" parent="1" vertex="1" value="T1 2-D fabric"
+          style="text;html=1;align=center;fontSize=15;fontStyle=1;fontColor=#2E7D32;">
+          <mxGeometry x="770" y="596" width="660" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="t1c_sub" parent="1" vertex="1" value="one register holds the WHOLE image (loaded once)"
+          style="text;html=1;align=left;fontSize=12;fontStyle=1;fontColor=#2E7D32;">
+          <mxGeometry x="780" y="628" width="500" height="18" as="geometry"/>
+        </mxCell>
+
+        <!-- memory -> single load -->
+        <mxCell id="t1_mem" parent="1" vertex="1" value="DDR&#10;image"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#666666;fontSize=11;">
+          <mxGeometry x="780" y="700" width="90" height="170" as="geometry"/>
+        </mxCell>
+
+        <!-- single 4x4 register grid : origin 980,700 cell 38 -->
+        <mxCell id="t1_00" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="980" y="700" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_01" parent="1" vertex="1" value="A" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#CFE3C0;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;"><mxGeometry x="1018" y="700" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_02" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1056" y="700" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_03" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1094" y="700" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_10" parent="1" vertex="1" value="L" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#BBD7EC;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;"><mxGeometry x="980" y="738" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_11" parent="1" vertex="1" value="x" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E9B5;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;"><mxGeometry x="1018" y="738" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_12" parent="1" vertex="1" value="R" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2C9C9;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;"><mxGeometry x="1056" y="738" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_13" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1094" y="738" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_20" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="980" y="776" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_21" parent="1" vertex="1" value="B" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#EBC6DC;strokeColor=#FFFFFF;strokeWidth=2;fontStyle=1;"><mxGeometry x="1018" y="776" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_22" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1056" y="776" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_23" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1094" y="776" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_30" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="980" y="814" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_31" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1018" y="814" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_32" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1056" y="814" width="38" height="38" as="geometry"/></mxCell>
+        <mxCell id="t1_33" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F2F2F2;strokeColor=#FFFFFF;strokeWidth=2;"><mxGeometry x="1094" y="814" width="38" height="38" as="geometry"/></mxCell>
+
+        <mxCell id="t1_load" parent="1" edge="1" source="t1_mem" target="t1_10" value="load once"
+          style="endArrow=classic;html=1;strokeColor=#2E7D32;strokeWidth=2;labelBackgroundColor=#F2FBF4;fontSize=11;rounded=0;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Gx horizontal slide on the single grid -->
+        <mxCell id="t1_hx" parent="1" edge="1" source="t1_12" target="t1_10"
+          value="Gx: slide  &#8596;  (Horizontal mode)"
+          style="endArrow=classic;startArrow=classic;html=1;strokeColor=#1565C0;strokeWidth=3;labelBackgroundColor=#F2FBF4;fontSize=11;rounded=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1037" y="690"/></Array>
+          </mxGeometry>
+        </mxCell>
+        <!-- Gy vertical slide on the single grid -->
+        <mxCell id="t1_vy" parent="1" edge="1" source="t1_01" target="t1_21"
+          value="Gy: same slide  &#8597;  (Vertical mode)"
+          style="endArrow=classic;startArrow=classic;html=1;strokeColor=#9C27B0;strokeWidth=3;labelBackgroundColor=#F2FBF4;fontSize=11;rounded=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1160" y="757"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="t1_win" parent="1" vertex="1" value="&#10003;  one load, one register &#8212; Gy is the same slide with the mode bit flipped"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#2E7D32;fontSize=12;fontStyle=1;fontColor=#2E7D32;">
+          <mxGeometry x="780" y="952" width="630" height="30" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

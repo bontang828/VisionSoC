@@ -45,6 +45,20 @@ int t1_wait_rd(uint32_t *data, uint8_t *rd_addr, bool *is_fp, int timeout_ms);
 int t1_wait_csr(uint32_t *vxsat, uint32_t *fflag, int timeout_ms);
 int t1_wait_mem(unsigned n_events);
 
+/*
+ * Block until the T1 core re-asserts ISSUE_READY, meaning the most
+ * recently issued instruction has fully drained ALL its writeback paths.
+ *
+ * This is distinct from t1_issue()'s internal completion check: for a
+ * compute op t1_issue() returns at *acceptance* (ISSUE_BUSY clears at
+ * issue.fire), while the op keeps draining in the background for
+ * thousands of cycles. Per-instruction timing harnesses must call
+ * t1_wait_ready() inside their perf bracket so the measured cycle count
+ * reflects this op's own latency rather than leaking into the next
+ * issue's wait. Returns 0 once ready, -1 with errno=ETIMEDOUT on stall.
+ */
+int t1_wait_ready(void);
+
 uint32_t t1_perf_start(uint8_t tag);
 uint32_t t1_perf_stop(void);
 uint64_t t1_cycles(void);

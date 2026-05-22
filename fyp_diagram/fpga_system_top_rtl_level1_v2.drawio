@@ -1,0 +1,525 @@
+<mxfile host="app.diagrams.net" agent="Claude Code" version="24.7.7">
+  <diagram name="VisionSoC Level 1 v2" id="visionsoc-level1-v2">
+    <mxGraphModel dx="1820" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1820" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- =============================================================
+             TITLE
+             ============================================================= -->
+        <mxCell id="title" parent="1" vertex="1"
+          value="VisionSoC FPGA &#8212; Level 1, Plain-English RTL Overview"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;whiteSpace=wrap;fontColor=#212121;">
+          <mxGeometry x="40" y="20" width="1200" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" parent="1" vertex="1"
+          value="Block names describe what each unit does; bracketed tags reference the synthesis-report cell name. Data path flows left to right; configuration/control comes down from the top."
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=12;whiteSpace=wrap;fontColor=#616161;">
+          <mxGeometry x="40" y="50" width="1400" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             TOP-LEVEL CONTAINERS
+             ============================================================= -->
+
+        <!-- External sensor module -->
+        <mxCell id="c_ext" parent="1" vertex="1"
+          value="Camera module (off-chip daughtercard)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9E9E9E;strokeWidth=2;dashed=1;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#37474F;">
+          <mxGeometry x="20" y="320" width="240" height="380" as="geometry"/>
+        </mxCell>
+
+        <!-- FPGA PL container -->
+        <mxCell id="c_pl" parent="1" vertex="1"
+          value="FPGA Programmable Logic (custom RTL on the Kria KV260 SoC)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#212121;strokeWidth=3;verticalAlign=top;align=left;spacingLeft=14;spacingTop=10;fontSize=15;fontStyle=1;fontColor=#212121;">
+          <mxGeometry x="320" y="90" width="1100" height="890" as="geometry"/>
+        </mxCell>
+
+        <!-- PS (hard logic) -->
+        <mxCell id="c_ps" parent="1" vertex="1"
+          value="Application Processor side (hard-wired Zynq PS)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#546E7A;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontSize=13;fontStyle=1;fontColor=#37474F;">
+          <mxGeometry x="1500" y="130" width="300" height="830" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             NESTED SUBSYSTEMS INSIDE PL
+             ============================================================= -->
+
+        <!-- Control plane (top) -->
+        <mxCell id="sub_ctrl" parent="1" vertex="1"
+          value="Configuration / control plane (CPU writes registers to set up peripherals)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#9E9E9E;strokeWidth=1.5;dashed=1;dashPattern=8 4;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;fontColor=#424242;">
+          <mxGeometry x="340" y="150" width="1060" height="150" as="geometry"/>
+        </mxCell>
+
+        <!-- Camera data path (middle) -->
+        <mxCell id="sub_cam" parent="1" vertex="1"
+          value="Camera data path (pixels stream into main memory)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#9E9E9E;strokeWidth=1.5;dashed=1;dashPattern=8 4;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;fontColor=#424242;">
+          <mxGeometry x="340" y="340" width="1060" height="180" as="geometry"/>
+        </mxCell>
+
+        <!-- Compute data path (bottom) -->
+        <mxCell id="sub_cmp" parent="1" vertex="1"
+          value="Compute data path (T1 vector core processes pixels, DMA stages data through scratchpad)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#9E9E9E;strokeWidth=1.5;dashed=1;dashPattern=8 4;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;fontColor=#424242;">
+          <mxGeometry x="340" y="560" width="1060" height="410" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             EXTERNAL LEAF BLOCKS
+             ============================================================= -->
+
+        <mxCell id="b_ar1335" parent="1" vertex="1"
+          value="Image Sensor&#10;&#10;13 MP CMOS array&#10;[AR1335]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#AD1457;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="40" y="360" width="200" height="110" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_ap1302" parent="1" vertex="1"
+          value="Camera ISP&#10;&#10;Crops &amp; downscales the&#10;sensor image to a 128 &#215; 128&#10;pixel frame, packs it as&#10;YUV (NV12)&#10;[AP1302]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#AD1457;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="40" y="500" width="200" height="170" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             PS LEAF BLOCKS
+             ============================================================= -->
+
+        <mxCell id="b_arm" parent="1" vertex="1"
+          value="CPU Cluster&#10;&#10;ARM Cortex-A53 &#215; 4&#10;runs Ubuntu Linux + libt1"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#00838F;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;fontStyle=1;">
+          <mxGeometry x="1520" y="170" width="260" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_ps_hpm" parent="1" vertex="1"
+          value="CPU Register-Write Port&#10;(control bus master out)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;strokeWidth=1;fontSize=11;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="1520" y="290" width="260" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_ddr" parent="1" vertex="1"
+          value="Main Memory&#10;&#10;DDR4 controller, 2 GB&#10;stores camera frames and&#10;compute working set"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;fontStyle=1;">
+          <mxGeometry x="1520" y="390" width="260" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_ps_hp" parent="1" vertex="1"
+          value="Memory Access Ports&#10;(slaves in)&#10;PL writes pixels and compute&#10;data into DDR via these"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#EF6C00;strokeWidth=1;fontSize=11;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="1520" y="600" width="260" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_ps_irq" parent="1" vertex="1"
+          value="Interrupt Inputs&#10;(6 lines from PL peripherals)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#455A64;strokeWidth=1;fontSize=11;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="1520" y="740" width="260" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_ps_emio" parent="1" vertex="1"
+          value="GPIO Outputs&#10;(software-controlled signals)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#455A64;strokeWidth=1;fontSize=11;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="1520" y="830" width="260" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             PL CONTROL SUBSYSTEM BLOCKS
+             ============================================================= -->
+
+        <mxCell id="b_iic" parent="1" vertex="1"
+          value="Camera Config Bus&#10;&#10;I&#178;C master, 400 kHz&#10;writes settings to the ISP&#10;[sensor_iic]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="360" y="190" width="220" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_ctrl_ic" parent="1" vertex="1"
+          value="Configuration Crossbar&#10;&#10;Fans CPU register writes&#10;out to every peripheral&#10;[smartconnect_ctrl + _lpd]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#827717;strokeWidth=1.5;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;fontStyle=1;">
+          <mxGeometry x="1160" y="190" width="220" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             PL CAMERA SUBSYSTEM BLOCKS
+             ============================================================= -->
+
+        <mxCell id="b_csi2" parent="1" vertex="1"
+          value="Pixel Lane Receiver&#10;&#10;Recovers serial MIPI&#10;CSI-2 pixel data from&#10;the camera (4 lanes)&#10;[mipi_csi2_rx]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="360" y="380" width="220" height="130" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_axis_cap" parent="1" vertex="1"
+          value="Pixel Stream Buffer&#10;&#10;Rate-match skid +&#10;width adapter for the&#10;next stage&#10;[axis_data_fifo_cap]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="640" y="380" width="220" height="130" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_frmbuf" parent="1" vertex="1"
+          value="Frame Buffer Writer&#10;&#10;Captures incoming pixels&#10;into a frame in DDR&#10;(up to 256 &#215; 256 px)&#10;[v_frmbuf_wr]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="920" y="380" width="220" height="130" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_video_ic" parent="1" vertex="1"
+          value="Video Memory Bridge&#10;&#10;Routes the frame buffer&#10;writer&#39;s memory bus to&#10;the PS memory port&#10;[smartconnect_video]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#827717;strokeWidth=1.5;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;fontStyle=1;">
+          <mxGeometry x="1180" y="380" width="200" height="130" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             PL COMPUTE SUBSYSTEM BLOCKS
+             ============================================================= -->
+
+        <mxCell id="b_t1" parent="1" vertex="1"
+          value="T1 Vector Compute Core&#10;&#10;Custom RISC-V vector unit&#10;runs vision kernels:&#10;Sobel, blur, optical flow,&#10;histogram, &#8230;&#10;&#10;Reads/writes the shared&#10;on-chip scratchpad as it&#10;computes&#10;[t1_fpga_top]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=2;fontSize=13;align=center;verticalAlign=middle;fontColor=#212121;fontStyle=1;">
+          <mxGeometry x="360" y="620" width="220" height="320" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_dma" parent="1" vertex="1"
+          value="Memory Mover&#10;(DMA Engine)&#10;&#10;Transfers blocks of data&#10;between DDR and the&#10;shared scratchpad while&#10;the CPU does other work&#10;[axi_dma]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="620" y="620" width="220" height="160" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_dma_skid" parent="1" vertex="1"
+          value="DMA Streaming Loopback&#10;&#10;Wraps the DMA&#39;s output stream&#10;back into its input stream&#10;(enables memory-to-memory&#10;copy)&#10;[axis_reg_slice_dma]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;strokeWidth=1;fontSize=11;align=center;verticalAlign=middle;fontColor=#212121;">
+          <mxGeometry x="620" y="810" width="220" height="130" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_data_ic" parent="1" vertex="1"
+          value="Compute Data Crossbar&#10;&#10;Arbitrates between three&#10;requesters &#8212; the vector&#10;core (reads + writes),&#10;DMA outbound (reads&#10;DDR), and DMA inbound&#10;(writes DDR) &#8212; sharing&#10;the scratchpad and the&#10;PS memory port&#10;[smartconnect_hb + _idx]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#827717;strokeWidth=1.5;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;fontStyle=1;">
+          <mxGeometry x="880" y="620" width="220" height="320" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b_uram" parent="1" vertex="1"
+          value="On-chip Scratchpad&#10;&#10;512 KB UltraRAM&#10;&#10;Shared by:&#10;&#8226; T1 vector core&#10;  (compute working set)&#10;&#8226; DMA engine&#10;  (DDR &#8596; scratchpad&#10;   prefetch / write-back)&#10;&#10;Single-cycle read from T1,&#10;avoiding DDR latency&#10;[uram_scratchpad]"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;strokeWidth=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#212121;fontStyle=1;">
+          <mxGeometry x="1140" y="620" width="240" height="320" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             EDGES &#8212; CAMERA DATA PATH (left to right)
+             ============================================================= -->
+
+        <mxCell id="e_d1" parent="1" edge="1" source="b_ar1335" target="b_ap1302"
+          value="Raw Bayer pixels (parallel)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#424242;strokeWidth=1.5;dashed=1;fontSize=11;exitX=0.5;exitY=1;entryX=0.5;entryY=0;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_d2" parent="1" edge="1" source="b_ap1302" target="b_csi2"
+          value="Serial pixel lanes&#10;(4 &#215; MIPI CSI-2,&#10;896 Mbps each)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#424242;strokeWidth=1.5;dashed=1;fontSize=11;exitX=1;exitY=0.3;entryX=0;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="290" y="551"/>
+              <mxPoint x="290" y="445"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_d3" parent="1" edge="1" source="b_csi2" target="b_axis_cap"
+          value="Pixel stream&#10;(16-bit, 300 MHz)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#1565C0;strokeWidth=2;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_d4" parent="1" edge="1" source="b_axis_cap" target="b_frmbuf"
+          value="Pixel stream&#10;(24-bit)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#1565C0;strokeWidth=2;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_d5" parent="1" edge="1" source="b_frmbuf" target="b_video_ic"
+          value="Pixel write-back bus&#10;(128-bit)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#1565C0;strokeWidth=2;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_d6" parent="1" edge="1" source="b_video_ic" target="b_ps_hp"
+          value="Camera frames &#8594; DDR&#10;(memory bus, 128-bit @ 300 MHz)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#1565C0;strokeWidth=2;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.2;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1450" y="445"/>
+              <mxPoint x="1450" y="624"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- =============================================================
+             EDGES &#8212; COMPUTE DATA PATH
+             ============================================================= -->
+
+        <!-- T1 -> Data Crossbar (routes through gap between DMA and DMA Skid) -->
+        <mxCell id="e_d7" parent="1" edge="1" source="b_t1" target="b_data_ic"
+          value="Vector load/store&#10;(compute data bus)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#E65100;strokeWidth=2;fontSize=11;exitX=1;exitY=0.59;entryX=0;entryY=0.59;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="790"/>
+              <mxPoint x="860" y="790"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- DMA -> Data Crossbar -->
+        <mxCell id="e_d8" parent="1" edge="1" source="b_dma" target="b_data_ic"
+          value="DMA &#8596; memory&#10;(read + write streams)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#E65100;strokeWidth=2;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.2;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- DMA <-> DMA Skid (loopback) -->
+        <mxCell id="e_d9a" parent="1" edge="1" source="b_dma" target="b_dma_skid"
+          value="DMA outbound&#10;stream"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#E65100;strokeWidth=1.5;fontSize=10;exitX=0.25;exitY=1;entryX=0.25;entryY=0;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_d9b" parent="1" edge="1" source="b_dma_skid" target="b_dma"
+          value="DMA inbound&#10;stream"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#E65100;strokeWidth=1.5;fontSize=10;exitX=0.75;exitY=0;entryX=0.75;entryY=1;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Data Crossbar <-> URAM Scratchpad (memory interface, double arrow) -->
+        <mxCell id="e_d10" parent="1" edge="1" source="b_data_ic" target="b_uram"
+          value="Shared scratchpad access&#10;(both T1 + DMA route here)"
+          style="endArrow=classicThin;startArrow=classicThin;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#2E7D32;strokeWidth=3;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Data Crossbar -> PS HP (routes above all compute blocks) -->
+        <mxCell id="e_d11" parent="1" edge="1" source="b_data_ic" target="b_ps_hp"
+          value="Compute &#8596; DDR&#10;(memory bus, 128-bit @ 60 MHz)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#E65100;strokeWidth=2;fontSize=11;exitX=0.5;exitY=0;entryX=0;entryY=0.8;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="990" y="590"/>
+              <mxPoint x="1470" y="590"/>
+              <mxPoint x="1470" y="696"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- =============================================================
+             EDGES &#8212; CONTROL PATH (top)
+             ============================================================= -->
+
+        <!-- PS HPM -> Control Crossbar -->
+        <mxCell id="e_c1" parent="1" edge="1" source="b_ps_hpm" target="b_ctrl_ic"
+          value="Register-write bus&#10;(CPU &#8594; peripherals)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=1.8;fontSize=11;exitX=0;exitY=0.5;entryX=1;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1430" y="330"/>
+              <mxPoint x="1430" y="240"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Control Crossbar -> Sensor IIC -->
+        <mxCell id="e_c2" parent="1" edge="1" source="b_ctrl_ic" target="b_iic"
+          value="Camera config registers"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=1.8;fontSize=11;exitX=0;exitY=0.5;entryX=1;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Control Crossbar -> Camera subsystem (CSR fan-out) -->
+        <mxCell id="e_c3" parent="1" edge="1" source="b_ctrl_ic" target="sub_cam"
+          value="Camera peripheral configs&#10;(CSI receiver + frame buffer)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=1.8;fontSize=11;exitX=0.7;exitY=1;entryX=0.95;entryY=0;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1314" y="320"/>
+              <mxPoint x="1347" y="320"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Control Crossbar -> Compute subsystem (CSR fan-out, routes through camera gap) -->
+        <mxCell id="e_c4" parent="1" edge="1" source="b_ctrl_ic" target="sub_cmp"
+          value="Compute peripheral configs&#10;(vector core + DMA engine)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=1.8;fontSize=11;exitX=0.25;exitY=1;entryX=0.05;entryY=0;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1215" y="320"/>
+              <mxPoint x="395" y="320"/>
+              <mxPoint x="395" y="540"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- =============================================================
+             EDGES &#8212; SIDEBAND (I2C, GPIO, IRQ)
+             ============================================================= -->
+
+        <!-- Sensor IIC <-> AP1302 (I2C bus, bidirectional) -->
+        <mxCell id="e_s1" parent="1" edge="1" source="b_iic" target="b_ap1302"
+          value="I&#178;C bus&#10;(camera register access)"
+          style="endArrow=open;startArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#424242;strokeWidth=1.5;dashed=1;fontSize=11;exitX=0;exitY=0.5;entryX=1;entryY=0.4;labelBackgroundColor=#FFFFFF;fontColor=#212121;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="305" y="240"/>
+              <mxPoint x="305" y="568"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- PS EMIO -> AP1302 reset (long route around bottom of page) -->
+        <mxCell id="e_s2" parent="1" edge="1" source="b_ps_emio" target="b_ap1302"
+          value="Camera reset signal&#10;(software controlled)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#9E9E9E;strokeWidth=1;dashed=1;fontSize=11;exitX=0;exitY=0.5;entryX=0.5;entryY=1;labelBackgroundColor=#FFFFFF;fontColor=#424242;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1465" y="865"/>
+              <mxPoint x="1465" y="985"/>
+              <mxPoint x="140" y="985"/>
+              <mxPoint x="140" y="685"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- IRQ bundle (PL compute -> PS IRQ inputs) -->
+        <mxCell id="e_s3" parent="1" edge="1" source="sub_cmp" target="b_ps_irq"
+          value="Hardware interrupts&#10;(6 lines: T1 done, DMA done &#215; 2, sensor I&#178;C, CSI, frame buffer)"
+          style="endArrow=open;html=1;rounded=0;edgeStyle=orthogonalEdgeStyle;strokeColor=#9E9E9E;strokeWidth=1;dashed=1;fontSize=11;exitX=1;exitY=0.45;entryX=0;entryY=0.5;labelBackgroundColor=#FFFFFF;fontColor=#424242;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1450" y="745"/>
+              <mxPoint x="1450" y="775"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- =============================================================
+             ANNOTATION explaining T1 / DMA cooperation
+             ============================================================= -->
+        <mxCell id="note_coop" parent="1" vertex="1"
+          value="How T1 and DMA cooperate&#10;&#10;The vector core does not talk to the DMA engine directly. Instead, both connect to the&#10;Compute Data Crossbar, which gives them coordinated access to the same on-chip&#10;scratchpad. Typical use: software programs the DMA to copy a tile of pixels from&#10;DDR &#8594; scratchpad, then kicks off the T1 to process that tile in place, then DMA copies&#10;the result back to DDR. The scratchpad acts as a high-bandwidth handoff buffer."
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFDE7;strokeColor=#827717;strokeWidth=1;dashed=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;fontColor=#212121;">
+          <mxGeometry x="40" y="730" width="240" height="200" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================
+             LEGEND
+             ============================================================= -->
+        <mxCell id="lg_box" parent="1" vertex="1"
+          value="Legend (line type)"
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#9E9E9E;strokeWidth=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontSize=12;fontStyle=1;fontColor=#212121;">
+          <mxGeometry x="1500" y="20" width="300" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- legend rows -->
+        <mxCell id="lg_pt1a" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1510" y="48" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_pt1b" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1560" y="48" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_e1" parent="1" edge="1" source="lg_pt1a" target="lg_pt1b"
+          style="endArrow=open;html=1;rounded=0;strokeColor=#1565C0;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_l1" parent="1" vertex="1" value="Camera data path (pixels)"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#212121;">
+          <mxGeometry x="1575" y="44" width="220" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_pt2a" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1510" y="68" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_pt2b" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1560" y="68" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_e2" parent="1" edge="1" source="lg_pt2a" target="lg_pt2b"
+          style="endArrow=open;html=1;rounded=0;strokeColor=#E65100;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_l2" parent="1" vertex="1" value="Compute data path (T1 + DMA)"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#212121;">
+          <mxGeometry x="1575" y="64" width="220" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_pt3a" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1510" y="88" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_pt3b" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1560" y="88" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_e3" parent="1" edge="1" source="lg_pt3a" target="lg_pt3b"
+          style="endArrow=classicThin;startArrow=classicThin;html=1;rounded=0;strokeColor=#2E7D32;strokeWidth=3;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_l3" parent="1" vertex="1" value="Memory interface (scratchpad)"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#212121;">
+          <mxGeometry x="1575" y="84" width="220" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_pt4a" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1700" y="48" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_pt4b" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1750" y="48" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_e4" parent="1" edge="1" source="lg_pt4a" target="lg_pt4b"
+          style="endArrow=open;html=1;rounded=0;strokeColor=#6A1B9A;strokeWidth=1.8;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_l4" parent="1" vertex="1" value="Control (register access)"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#212121;">
+          <mxGeometry x="1620" y="44" width="170" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_pt5a" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1700" y="68" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_pt5b" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1750" y="68" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_e5" parent="1" edge="1" source="lg_pt5a" target="lg_pt5b"
+          style="endArrow=open;html=1;rounded=0;strokeColor=#9E9E9E;strokeWidth=1;dashed=1;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_l5" parent="1" vertex="1" value="Sideband (IRQ, GPIO)"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#212121;">
+          <mxGeometry x="1620" y="64" width="170" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_pt6a" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1700" y="88" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_pt6b" parent="1" vertex="1" value=""
+          style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1750" y="88" width="8" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_e6" parent="1" edge="1" source="lg_pt6a" target="lg_pt6b"
+          style="endArrow=open;html=1;rounded=0;strokeColor=#424242;strokeWidth=1.5;dashed=1;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_l6" parent="1" vertex="1" value="External / off-chip"
+          style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#212121;">
+          <mxGeometry x="1620" y="84" width="170" height="20" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

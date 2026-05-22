@@ -50,6 +50,14 @@
 #define T1_VTYPE_E8_M4_TA_MA     0x000000C2u
 
 /*
+ * Standard RVV vtype value for e8, m1, ta, ma.
+ * vma=1, vta=1, vsew=0, vlmul=0. Used by kernels written for the
+ * "big" config (vLen=1024) where LMUL=1 already gives vl=128 = one
+ * image row, so the 4x widening from LMUL=4 is unnecessary.
+ */
+#define T1_VTYPE_E8_M1_TA_MA     0x000000C0u
+
+/*
  * Xilinx AXI DMA simple-mode register subset, relative to the DMA
  * AXI-Lite BAR at 0xA0010000.
  */

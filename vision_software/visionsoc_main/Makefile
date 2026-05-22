@@ -15,6 +15,21 @@ all: visionsoc_main
 visionsoc_main: $(OBJS) ../libt1/libt1.a
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
+# Perf binaries: main_perf is a stage-instrumented twin of main.c (full
+# camera+display loop, one CSV row per frame). The *_perf binaries are
+# standalone T1-instrumented drivers for individual kernels.
+visionsoc_main_perf: main_perf.o camera.o display.o cnn2d_decoder.o ../libt1/libt1.a
+	$(CC) $(CFLAGS) -o $@ main_perf.o camera.o display.o cnn2d_decoder.o $(LDLIBS)
+
+sobel_perf: sobel_perf.o ../libt1/libt1.a
+	$(CC) $(CFLAGS) -o $@ sobel_perf.o $(LDLIBS)
+
+optical_flow_perf: optical_flow_perf.o ../libt1/libt1.a
+	$(CC) $(CFLAGS) -o $@ optical_flow_perf.o $(LDLIBS)
+
+matmul_8bitraw_short_perf: matmul_8bitraw_short_perf.o ../libt1/libt1.a
+	$(CC) $(CFLAGS) -o $@ matmul_8bitraw_short_perf.o $(LDLIBS)
+
 display_smoke: display_smoke.o display.o
 	$(CC) $(CFLAGS) -o $@ display_smoke.o display.o $(DRM_LIBS)
 
@@ -33,17 +48,57 @@ kernels/sobel.h: kernels/sobel.S
 kernels/cnn2d_decoder_primitives.h: kernels/cnn2d_decoder_primitives.S
 	../libt1/build_kernel.sh $< $@ cnn2d_decoder_primitives
 
+kernels/optical_flow.h: kernels/optical_flow.S
+	../libt1/build_kernel.sh $< $@ optical_flow
+
+kernels/flow_color_rgb565.h: kernels/flow_color_rgb565.S
+	../libt1/build_kernel.sh $< $@ flow_color_rgb565
+
+kernels/matmul.h: kernels/matmul.S
+	../libt1/build_kernel.sh $< $@ matmul
+
+kernels/matmul_8bitraw.h: kernels/matmul_8bitraw.S
+	../libt1/build_kernel.sh $< $@ matmul_8bitraw
+
+kernels/matmul_8bitraw_short.h: kernels/matmul_8bitraw_short.S
+	../libt1/build_kernel.sh $< $@ matmul_8bitraw_short
+
 cnn2d_decoder.o: kernels/cnn2d_decoder_primitives.h
 # main.o transitively includes whichever <name>_select.h the active_kernel.h
 # points at, plus the shared dispatcher. List every potential kernel + select
 # header so a change to any of them triggers a rebuild.
 main.o: kernels/active_kernel.h kernels/active_kernel_dispatcher.h \
         kernels/frame_passthrough_select.h kernels/frame_passthrough.h \
-        kernels/sobel_select.h            kernels/sobel.h
+        kernels/sobel_select.h            kernels/sobel.h \
+        kernels/optical_flow_select.h     kernels/optical_flow.h \
+        kernels/flow_color_rgb565_dispatch.h kernels/flow_color_rgb565.h \
+        kernels/matmul_select.h           kernels/matmul.h \
+        kernels/matmul_8bitraw_select.h   kernels/matmul_8bitraw.h \
+        kernels/matmul_8bitraw_short_select.h kernels/matmul_8bitraw_short.h \
+        kernels/matmul_weights.h
 
-kernels: kernels/grid_vadd.h kernels/frame_passthrough.h kernels/sobel.h kernels/cnn2d_decoder_primitives.h
+main_perf.o: kernels/active_kernel.h kernels/active_kernel_dispatcher.h \
+             kernels/frame_passthrough_select.h kernels/frame_passthrough.h \
+             kernels/sobel_select.h            kernels/sobel.h \
+             kernels/optical_flow_select.h     kernels/optical_flow.h \
+             kernels/flow_color_rgb565_dispatch.h kernels/flow_color_rgb565.h \
+             kernels/matmul_select.h           kernels/matmul.h \
+             kernels/matmul_8bitraw_select.h   kernels/matmul_8bitraw.h \
+             kernels/matmul_8bitraw_short_select.h kernels/matmul_8bitraw_short.h \
+             kernels/matmul_weights.h
+
+sobel_perf.o: kernels/sobel.h
+
+optical_flow_perf.o: kernels/optical_flow.h
+
+matmul_8bitraw_short_perf.o: kernels/matmul_8bitraw_short.h kernels/matmul_weights.h
+
+kernels: kernels/grid_vadd.h kernels/frame_passthrough.h kernels/sobel.h kernels/cnn2d_decoder_primitives.h kernels/optical_flow.h kernels/flow_color_rgb565.h kernels/matmul.h kernels/matmul_8bitraw.h kernels/matmul_8bitraw_short.h
 
 clean:
-	$(RM) $(OBJS) display_smoke.o visionsoc_main display_smoke
+	$(RM) $(OBJS) main_perf.o sobel_perf.o optical_flow_perf.o \
+		matmul_8bitraw_short_perf.o display_smoke.o \
+		visionsoc_main visionsoc_main_perf sobel_perf optical_flow_perf \
+		matmul_8bitraw_short_perf display_smoke
 
 .PHONY: all clean kernels

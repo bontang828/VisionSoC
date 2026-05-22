@@ -1,0 +1,251 @@
+<mxfile host="app.diagrams.net" agent="Claude Code" version="24.7.7">
+  <diagram name="VisionSoC RTL Top" id="visionsoc-rtl-top">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="780" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" parent="1" vertex="1" value="VisionSoC FPGA &#8212; RTL Block Diagram&#10;mudkip2d128big1bram1chain2lanescale_fpga_maskopt (5t-maskopt), xck26-sfvc784-2LV-c" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=1;whiteSpace=wrap;">
+          <mxGeometry x="20" y="0" width="900" height="18" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Subsystem boundaries ============ -->
+        <mxCell id="c_ps" parent="1" vertex="1" value="Zynq UltraScale+ MPSoC (PS, hard logic)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;fontStyle=1;">
+          <mxGeometry x="20" y="20" width="240" height="660" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cam" parent="1" vertex="1" value="Camera capture pipeline (PL) &#8212; AXIS video @ 300 MHz, CSR @ 100 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;fontStyle=1;">
+          <mxGeometry x="290" y="20" width="900" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_cmp" parent="1" vertex="1" value="T1 / DMA / scratchpad (PL) &#8212; AXI4 data @ 60 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;fontStyle=1;">
+          <mxGeometry x="290" y="270" width="900" height="320" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_iic" parent="1" vertex="1" value="Sensor control (PL) &#8212; CSR @ 60 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;fontStyle=1;">
+          <mxGeometry x="290" y="610" width="900" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="c_ext" parent="1" vertex="1" value="IAS daughtercard (external)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=2;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;fontSize=12;fontStyle=1;dashed=1;">
+          <mxGeometry x="1210" y="20" width="220" height="230" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ PS leaf cells ============ -->
+        <mxCell id="arm" parent="1" vertex="1" value="ARM Cortex-A53 &#215;4 (APU)&#10;L1 + 1 MB L2 + CCI-400" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="35" y="55" width="210" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="ddr" parent="1" vertex="1" value="DDR4 controller&#10;2 GB" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="35" y="125" width="210" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_hpmf" parent="1" vertex="1" value="M_AXI_HPM0_FPD  128b @ 60 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="195" width="210" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_hpml" parent="1" vertex="1" value="M_AXI_HPM0_LPD  128b @ 100 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="230" width="210" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_hpc0" parent="1" vertex="1" value="S_AXI_HPC0_FPD  128b @ 60 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="280" width="210" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_hp0" parent="1" vertex="1" value="S_AXI_HP0_FPD   32b @ 60 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="315" width="210" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_hp1" parent="1" vertex="1" value="S_AXI_HP1_FPD  128b @ 300 MHz" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="350" width="210" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_irq" parent="1" vertex="1" value="pl_ps_irq0[5:0]" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="405" width="210" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_emio" parent="1" vertex="1" value="emio_gpio_o[1:0]" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="440" width="210" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="p_pclk" parent="1" vertex="1" value="pl_clk0 (100 MHz)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="35" y="475" width="210" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Camera lane leaf cells ============ -->
+        <mxCell id="sc_lpd" parent="1" vertex="1" value="smartconnect_lpd&#10;1&#215;2  (100&#8594;300 MHz CDC)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontSize=10;">
+          <mxGeometry x="305" y="90" width="130" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="csi2" parent="1" vertex="1" value="mipi_csi2_rx&#10;4 lanes, 896 Mbps&#10;DT=0x18 (NV12)&#10;CSR @ 0x8000_0000" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="460" y="90" width="160" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="skid_cam" parent="1" vertex="1" value="axis_data_fifo_cap&#10;(axis_register_slice)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="645" y="110" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="frmbuf" parent="1" vertex="1" value="v_frmbuf_wr&#10;NV12, &#8804;256&#215;256&#10;CSR @ 0x8001_0000" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="810" y="90" width="160" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="sc_vid" parent="1" vertex="1" value="smartconnect_video&#10;1&#215;1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontSize=10;">
+          <mxGeometry x="995" y="90" width="130" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Compute lane leaf cells ============ -->
+        <mxCell id="sc_ctrl" parent="1" vertex="1" value="smartconnect_ctrl&#10;1&#215;3" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontSize=10;">
+          <mxGeometry x="305" y="360" width="130" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="reg_hb" parent="1" vertex="1" value="axi_reg_slice_hb" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="460" y="305" width="140" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="t1" parent="1" vertex="1" value="t1_top&#10;(T1 vector core +&#10;AXI-Lite CSR wrapper)&#10;&#10;s_axi_ctrl&#10;m_axi_hb 128b&#10;m_axi_idx 32b&#10;irq" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;align=center;verticalAlign=top;spacingTop=8;">
+          <mxGeometry x="460" y="370" width="160" height="180" as="geometry"/>
+        </mxCell>
+        <mxCell id="dma" parent="1" vertex="1" value="axi_dma&#10;(mm2s + s2mm,&#10;no SG, len_w=23)&#10;CSR @ 0xA001_0000" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="640" y="295" width="160" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="reg_dma" parent="1" vertex="1" value="axis_reg_slice_dma  (mm2s &#8594; s2mm skid)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="640" y="405" width="160" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="sc_hb" parent="1" vertex="1" value="smartconnect_hb&#10;3&#215;2" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontSize=10;">
+          <mxGeometry x="820" y="295" width="130" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="sc_idx" parent="1" vertex="1" value="smartconnect_idx  1&#215;1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontSize=10;">
+          <mxGeometry x="820" y="470" width="130" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="bram_ctrl" parent="1" vertex="1" value="bram_ctrl  (axi_bram_ctrl)&#10;AXI4 128b  &#8596;  BRAM_PORTA" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="970" y="295" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="uram" parent="1" vertex="1" value="bram (uram_scratchpad)&#10;XPM SPRAM, ultra prim.&#10;512 KB, 16 URAM288&#10;@ 0xA008_0000" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="970" y="355" width="160" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Sensor lane leaf cells ============ -->
+        <mxCell id="iic" parent="1" vertex="1" value="sensor_iic&#10;AXI IIC 400 kHz&#10;CSR @ 0xA005_0000" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=10;">
+          <mxGeometry x="460" y="625" width="200" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ External leaf cells ============ -->
+        <mxCell id="ap1302" parent="1" vertex="1" value="AP1302 ISP&#10;crop + downscale&#10;to 128&#215;128 NV12" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;dashed=1;fontSize=10;">
+          <mxGeometry x="1220" y="60" width="200" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="ar1335" parent="1" vertex="1" value="AR1335 sensor" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;dashed=1;fontSize=10;">
+          <mxGeometry x="1220" y="155" width="200" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Edges ============ -->
+
+        <!-- Control path edges (thin grey, open arrow) -->
+        <mxCell id="e1" parent="1" edge="1" source="p_hpmf" target="sc_ctrl" value="AXI4-Lite 128b @ 60 MHz" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" parent="1" edge="1" source="sc_ctrl" target="t1" value="AXI4-Lite&#10;0xA000_0000" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.25;entryX=0;entryY=0.15;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" parent="1" edge="1" source="sc_ctrl" target="dma" value="AXI4-Lite&#10;0xA001_0000" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.85;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" parent="1" edge="1" source="sc_ctrl" target="iic" value="AXI4-Lite&#10;0xA005_0000" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" parent="1" edge="1" source="p_hpml" target="sc_lpd" value="AXI4-Lite 128b @ 100 MHz" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" parent="1" edge="1" source="sc_lpd" target="csi2" value="AXI4-Lite&#10;0x8000_0000" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.3;entryX=0;entryY=0.3;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" parent="1" edge="1" source="sc_lpd" target="frmbuf" value="AXI4-Lite&#10;0x8001_0000&#10;(100&#8594;300 MHz CDC)" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.75;entryX=0;entryY=0.25;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- Data path edges (thick black, open arrow) -->
+        <mxCell id="e8" parent="1" edge="1" source="t1" target="reg_hb" value="m_axi_hb&#10;AXI4 128b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=0;entryX=0.5;entryY=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" parent="1" edge="1" source="reg_hb" target="sc_hb" value="AXI4 128b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.15;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" parent="1" edge="1" source="dma" target="sc_hb" value="M_AXI_MM2S&#10;AXI4 128b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.3;entryX=0;entryY=0.4;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" parent="1" edge="1" source="dma" target="sc_hb" value="M_AXI_S2MM&#10;AXI4 128b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.75;entryX=0;entryY=0.65;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" parent="1" edge="1" source="sc_hb" target="p_hpc0" value="AXI4 128b @ 60 MHz&#10;DDR @ 0x0  (2 GB)" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;entryX=1;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e13" parent="1" edge="1" source="sc_hb" target="bram_ctrl" value="AXI4 128b&#10;URAM @ 0xA008_0000" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.15;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e14" parent="1" edge="1" source="bram_ctrl" target="uram" value="BRAM_PORTA 128b" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=3;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e15" parent="1" edge="1" source="t1" target="sc_idx" value="m_axi_idx&#10;AXI4 32b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.85;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e16" parent="1" edge="1" source="sc_idx" target="p_hp0" value="AXI4 32b @ 60 MHz&#10;DDR @ 0x0" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;entryX=1;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- DMA loopback (AXIS) -->
+        <mxCell id="e17" parent="1" edge="1" source="dma" target="reg_dma" value="M_AXIS_MM2S 128b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0.25;exitY=1;entryX=0.25;entryY=0;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e18" parent="1" edge="1" source="reg_dma" target="dma" value="S_AXIS_S2MM 128b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0.75;exitY=0;entryX=0.75;entryY=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- Camera AXIS data path -->
+        <mxCell id="e19" parent="1" edge="1" source="csi2" target="skid_cam" value="video_out  AXIS 16b @ 300 MHz" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e20" parent="1" edge="1" source="skid_cam" target="frmbuf" value="s_axis_video  AXIS 24b&#10;(subset_conv pads UYVY)" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e21" parent="1" edge="1" source="frmbuf" target="sc_vid" value="m_axi_mm_video  AXI4 128b @ 300 MHz" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e22" parent="1" edge="1" source="sc_vid" target="p_hp1" value="AXI4 128b @ 300 MHz&#10;DDR @ 0x0" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- External edges (dashed black) -->
+        <mxCell id="e23" parent="1" edge="1" source="ar1335" target="ap1302" value="Bayer (parallel)" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=0;entryX=0.5;entryY=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e24" parent="1" edge="1" source="ap1302" target="csi2" value="MIPI CSI-2&#10;4 lanes @ 896 Mbps" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;entryX=1;entryY=0.75;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e25" parent="1" edge="1" source="iic" target="ap1302" value="I&#178;C 400 kHz" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0.25;entryY=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- GPIO / IRQ (dashed grey) -->
+        <mxCell id="e26" parent="1" edge="1" source="p_emio" target="ap1302" value="emio_gpio_o[1] &#8594; ap1302_rst_b&#10;(via xlslice)" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0.75;entryY=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e27" parent="1" edge="1" source="t1" target="p_irq" value="irq" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;entryX=1;entryY=0.5;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e28" parent="1" edge="1" source="dma" target="p_irq" value="mm2s_introut /&#10;s2mm_introut" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.1;entryX=1;entryY=0.3;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e29" parent="1" edge="1" source="iic" target="p_irq" value="iic2intc_irpt" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;entryX=0.85;entryY=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e30" parent="1" edge="1" source="csi2" target="p_irq" value="csirxss_csi_irq" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=1;entryX=0.5;entryY=0;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e31" parent="1" edge="1" source="frmbuf" target="p_irq" value="interrupt" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=1;entryX=0.7;entryY=0;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- Clock fan-out (informational) -->
+        <mxCell id="e32" parent="1" edge="1" source="p_pclk" target="sc_hb" value="pl_clk0 100 MHz &#8594; clk_wiz_0&#10;(60 / 100 / 200 / 300 MHz)" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;entryX=0;entryY=0.95;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- PS internal connection ARM <-> DDR (memory mark) -->
+        <mxCell id="e_ps_arm_ddr" parent="1" edge="1" source="arm" target="ddr" value="ACE / coherent" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;fontSize=9;edgeStyle=orthogonalEdgeStyle;exitX=0.5;exitY=1;entryX=0.5;entryY=0;"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- ============ Legend ============ -->
+        <mxCell id="lg_box" parent="1" vertex="1" value="Legend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;strokeWidth=1;verticalAlign=top;align=left;spacingLeft=6;spacingTop=2;fontSize=11;fontStyle=1;">
+          <mxGeometry x="1210" y="270" width="220" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_block" parent="1" vertex="1" value="IP block" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="1220" y="295" width="80" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_ic" parent="1" vertex="1" value="SmartConnect" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1.5;fontSize=9;">
+          <mxGeometry x="1220" y="320" width="80" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_mem" parent="1" vertex="1" value="Memory" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#D9D9D9;strokeColor=#000000;strokeWidth=1;fontSize=9;">
+          <mxGeometry x="1220" y="345" width="80" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_ext" parent="1" vertex="1" value="External" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;strokeWidth=1;dashed=1;fontSize=9;">
+          <mxGeometry x="1220" y="370" width="80" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_ctrl_a" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1310" y="295" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_ctrl_b" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1410" y="295" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_ctrl_e" parent="1" edge="1" source="lg_ctrl_a" target="lg_ctrl_b" style="endArrow=open;html=1;rounded=0;strokeColor=#606060;strokeWidth=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="lg_ctrl_l" parent="1" vertex="1" value="Control path (AXI4-Lite)" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;">
+          <mxGeometry x="1310" y="295" width="114" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_data_a" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1310" y="320" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_data_b" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1410" y="320" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_data_e" parent="1" edge="1" source="lg_data_a" target="lg_data_b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=2;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="lg_data_l" parent="1" vertex="1" value="Data path (AXI4 / AXIS)" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;">
+          <mxGeometry x="1310" y="320" width="114" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_mem_a" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1310" y="345" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_mem_b" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1410" y="345" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_mem_e" parent="1" edge="1" source="lg_mem_a" target="lg_mem_b" style="endArrow=none;html=1;rounded=0;strokeColor=#000000;strokeWidth=3;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="lg_mem_l" parent="1" vertex="1" value="Memory interface" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;">
+          <mxGeometry x="1310" y="345" width="114" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_irq_a" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1310" y="370" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_irq_b" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1410" y="370" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_irq_e" parent="1" edge="1" source="lg_irq_a" target="lg_irq_b" style="endArrow=open;html=1;rounded=0;strokeColor=#808080;strokeWidth=1;dashed=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="lg_irq_l" parent="1" vertex="1" value="IRQ / GPIO sideband" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;">
+          <mxGeometry x="1310" y="370" width="114" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_ext_a" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1310" y="395" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_ext_b" parent="1" vertex="1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;">
+          <mxGeometry x="1410" y="395" width="14" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="lg_ext_e" parent="1" edge="1" source="lg_ext_a" target="lg_ext_b" style="endArrow=open;html=1;rounded=0;strokeColor=#000000;strokeWidth=1.5;dashed=1;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="lg_ext_l" parent="1" vertex="1" value="MIPI / I&#178;C / external" style="text;html=1;align=left;verticalAlign=middle;fontSize=9;">
+          <mxGeometry x="1310" y="395" width="114" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lg_note" parent="1" vertex="1" value="Blocks shown = first layer of utilization_synth.rpt&#10;hierarchy under system_top_i (16 cells), plus the&#10;ARM Cortex-A53 cluster and DDR4 controller inside&#10;the PS, plus AP1302 + AR1335 on the IAS card.&#10;Glue cells (clk_wiz_0, proc_sys_reset_*, irq_concat,&#10;xlslice, xlconstant, axis_subset_converter_cap)&#10;collapsed to wires &#8212; omitted." style="text;html=1;align=left;verticalAlign=top;fontSize=8;whiteSpace=wrap;">
+          <mxGeometry x="1220" y="425" width="200" height="80" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
