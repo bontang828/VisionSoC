@@ -40,4 +40,4 @@ wave_debug.json
 **/*.o
 *.so
 **/*.so
-visionsoc_main/perf/*T*Z*
+/vision_software/visionsoc_main/perf/*T*Z*
