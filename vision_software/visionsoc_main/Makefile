@@ -21,6 +21,13 @@ visionsoc_main: $(OBJS) ../libt1/libt1.a
 visionsoc_main_perf: main_perf.o camera.o display.o cnn2d_decoder.o ../libt1/libt1.a
 	$(CC) $(CFLAGS) -o $@ main_perf.o camera.o display.o cnn2d_decoder.o $(LDLIBS)
 
+# Capture binary: twin of main.c that writes 4 PPM snapshots per capture
+# frame (camera Y, camera color, T1 output, display framebuffer) for the
+# report. Same camera+display+T1 path as main.c, just with snapshot sites
+# inside the per-frame loop.
+visionsoc_main_capture: main_capture.o camera.o display.o cnn2d_decoder.o ../libt1/libt1.a
+	$(CC) $(CFLAGS) -o $@ main_capture.o camera.o display.o cnn2d_decoder.o $(LDLIBS)
+
 sobel_perf: sobel_perf.o ../libt1/libt1.a
 	$(CC) $(CFLAGS) -o $@ sobel_perf.o $(LDLIBS)
 
@@ -87,6 +94,16 @@ main_perf.o: kernels/active_kernel.h kernels/active_kernel_dispatcher.h \
              kernels/matmul_8bitraw_short_select.h kernels/matmul_8bitraw_short.h \
              kernels/matmul_weights.h
 
+main_capture.o: kernels/active_kernel.h kernels/active_kernel_dispatcher.h \
+                kernels/frame_passthrough_select.h kernels/frame_passthrough.h \
+                kernels/sobel_select.h            kernels/sobel.h \
+                kernels/optical_flow_select.h     kernels/optical_flow.h \
+                kernels/flow_color_rgb565_dispatch.h kernels/flow_color_rgb565.h \
+                kernels/matmul_select.h           kernels/matmul.h \
+                kernels/matmul_8bitraw_select.h   kernels/matmul_8bitraw.h \
+                kernels/matmul_8bitraw_short_select.h kernels/matmul_8bitraw_short.h \
+                kernels/matmul_weights.h
+
 sobel_perf.o: kernels/sobel.h
 
 optical_flow_perf.o: kernels/optical_flow.h
@@ -96,9 +113,10 @@ matmul_8bitraw_short_perf.o: kernels/matmul_8bitraw_short.h kernels/matmul_weigh
 kernels: kernels/grid_vadd.h kernels/frame_passthrough.h kernels/sobel.h kernels/cnn2d_decoder_primitives.h kernels/optical_flow.h kernels/flow_color_rgb565.h kernels/matmul.h kernels/matmul_8bitraw.h kernels/matmul_8bitraw_short.h
 
 clean:
-	$(RM) $(OBJS) main_perf.o sobel_perf.o optical_flow_perf.o \
+	$(RM) $(OBJS) main_perf.o main_capture.o sobel_perf.o optical_flow_perf.o \
 		matmul_8bitraw_short_perf.o display_smoke.o \
-		visionsoc_main visionsoc_main_perf sobel_perf optical_flow_perf \
+		visionsoc_main visionsoc_main_perf visionsoc_main_capture \
+		sobel_perf optical_flow_perf \
 		matmul_8bitraw_short_perf display_smoke
 
 .PHONY: all clean kernels
