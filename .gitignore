@@ -41,3 +41,4 @@ wave_debug.json
 *.so
 **/*.so
 /vision_software/visionsoc_main/perf/*T*Z*
+/vision_software/visionsoc_main/capture
