@@ -20,7 +20,7 @@ Examples:
 
 Output:
   PDFs are written to ../selected_output/
-  LaTeX snippets are written to ../selected_output/drawio_figures.tex
+  LaTeX figure commands are written to ../selected_output/drawio_figures.tex
 
 Environment:
   DRAWIO_BIN=/path/to/drawio             Override the draw.io CLI command
@@ -110,27 +110,75 @@ prepare_export_source() {
   fi
 }
 
+command_from_stem() {
+  local stem="$1"
+
+  case "$stem" in
+    fabric_instruction_basics) printf '%s\n' figFabricInstructionBasics ;;
+    fpga_system_top_t1style_v4) printf '%s\n' figFpgaSystemTop ;;
+    image_to_vector_fabric_v3) printf '%s\n' figImageToVectorFabric ;;
+    matmul_8bitraw_short_perf) printf '%s\n' figMatmulPerf ;;
+    matmul_8bitraw_short_steps_v3) printf '%s\n' figMatmulSteps ;;
+    optical_flow_perf) printf '%s\n' figOpticalFlowPerf ;;
+    rvv_vs_t1_v2) printf '%s\n' figRvvVsTOne ;;
+    sobel_kernel_steps_v2) printf '%s\n' figSobelSteps ;;
+    sobel_perf) printf '%s\n' figSobelPerf ;;
+    T1_abstract_arch_fpga) printf '%s\n' figTOneAbstractArchFpga ;;
+    T1_abstract_arch_rtl) printf '%s\n' figTOneAbstractArchRtl ;;
+    t1_vs_scamp5_v3) printf '%s\n' figTOneVsScamp ;;
+    vrf_diagonal_banking_v3) printf '%s\n' figVrfDiagonalBanking ;;
+    *)
+      STEM="$stem" perl -e '
+        my %digit = (
+          0 => "Zero", 1 => "One", 2 => "Two", 3 => "Three", 4 => "Four",
+          5 => "Five", 6 => "Six", 7 => "Seven", 8 => "Eight", 9 => "Nine"
+        );
+        my $s = $ENV{STEM};
+        $s =~ s/_v\d+$//;
+        $s =~ s/[^A-Za-z0-9]+/ /g;
+        my @parts = split /\s+/, $s;
+        print "fig";
+        for my $part (@parts) {
+          next if $part eq "";
+          $part =~ s/([0-9])/$digit{$1}/ge;
+          $part = lc $part;
+          $part = ucfirst $part;
+          $part =~ s/[^A-Za-z]//g;
+          print $part;
+        }
+        print "\n";
+      '
+      ;;
+  esac
+}
+
 caption_from_stem() {
   local stem="$1"
 
-  STEM="$stem" perl -e '
-    my $s = $ENV{STEM};
-    $s =~ s/_v\d+$//;
-    $s =~ s/_/ /g;
-    $s =~ s/\bfpga\b/FPGA/ig;
-    $s =~ s/\bvrf\b/VRF/ig;
-    $s =~ s/\brvv\b/RVV/ig;
-    $s =~ s/\bt1\b/T1/ig;
-    $s =~ s/\bscamp5\b/SCAMP-5/ig;
-    $s =~ s/\b(\d+)bit\b/$1-bit/ig;
-    print ucfirst($s);
-  '
+  case "$stem" in
+    fabric_instruction_basics) printf '%s\n' 'Instruction basics for the 2D T1 fabric. Highlighted the difference between horizontal and vertical mode execution with same RVV opcode' ;;
+    fpga_system_top_t1style_v4) printf '%s\n' 'Top level FPGA system architecture for AMD Kria KV260. Highlighted with 3 major component group: Camera module, Processor System, Programmable Logic' ;;
+    image_to_vector_fabric_v3) printf '%s\n' 'Demonstrate an image map to a 1D vector processor and a 2D vector processor' ;;
+    matmul_8bitraw_short_perf) printf '%s\n' 'One frame of high level 8-bits MatMul kernel FPGA execution pipeline breakdown in time stages(top bar). Detailed breakdown of 8-bits MatMul kernel with individual RVV instruction performance in time stages(bottom bar). The 128 iteration of MatMul instructions(6-12) in the bottom bar are grouped together for clarity of total execution time used per instruction group. The actual MatMul instructions would looks like a fine breakdown of 128 iterations each use a fraction of the total T1 kernel time.' ;;
+    matmul_8bitraw_short_steps_v3) printf '%s\n' 'Execution steps for matrix multiplication on the 2D vector architecture using RVV ISA.' ;;
+    optical_flow_perf) printf '%s\n' 'One frame of high level Optical-flow kernel FPGA execution pipeline breakdown in time stages(top bar). Detailed breakdown of Optical-flow kernel with individual RVV instruction performance in time stages(bottom bar).' ;;
+    rvv_vs_t1_v2) printf '%s\n' '[Diagram work in progress] Comparison between 1D RVV execution and the 2D RVV T1 fabric in data transaction footprints. Highlighted the reduction in data round trips required between transpose on 2D RVV compared to 1D RVV.' ;;
+    sobel_kernel_steps_v2) printf '%s\n' 'Sobel kernel execution steps on the RVV 2D vector architecture.' ;;
+    sobel_perf) printf '%s\n' 'One frame of high level Sobel kernel FPGA execution pipeline breakdown in time stages(top bar). Detailed breakdown of Sobel kernel with individual RVV instruction performance in time stages(bottom bar).' ;;
+    T1_abstract_arch_fpga) printf '%s\n' 'Abstracted top level FPGA adaptation of the 2D T1 architecture. Highlighted with time multiplex lane processing, PS interface wrapper and scratch-pad memory subsystem.' ;;
+    T1_abstract_arch_rtl) printf '%s\n' 'Abstracted top level RTL of 2D T1 architecture.' ;;
+    t1_vs_scamp5_v3) printf '%s\n' 'Comparison between the T1 fabric and SCAMP-5 in programmability. Highlighted the data control abstractions with RISC-V RVV instructions and execution in a 2D plane.' ;;
+    vrf_diagonal_banking_v3) printf '%s\n' 'Diagonal banking scheme used for the vector register file in 2D T1 memory subsystem.' ;;
+    *)
+      printf '%s\n' "$stem"
+      ;;
+  esac
 }
 
 write_tex_file() {
   local tex_path="${DRAWIO_TEX_PATH:-project_diagram/selected_output}"
   local tex_width="${DRAWIO_TEX_WIDTH:-\\textwidth}"
-  local pdf stem caption graphic_path
+  local pdf stem command caption graphic_path
   local -a pdfs=()
 
   while IFS= read -r -d '' pdf; do
@@ -138,12 +186,19 @@ write_tex_file() {
   done < <(find "$output_dir" -maxdepth 1 -type f -name '*.pdf' -print0 | sort -z)
 
   {
-    printf '%% Auto-generated by %s. Do not edit by hand.\n' "$(basename "$0")"
-    printf '%% Include from your main file with: \\input{%s/drawio_figures}\n' "$tex_path"
-    printf '%% Required package in the main preamble: \\usepackage{graphicx}\n\n'
+    printf '%% This file defines reusable figure commands.\n'
+    printf '%% Include this once in the main file before chapter inputs:\n'
+    printf '%% \\input{%s/drawio_figures}\n' "$tex_path"
+    printf '%% Then call figures inside chapters using commands such as:\n'
+    printf '%% \\figImageToVectorFabric\n'
+    printf '%% Required package in main preamble:\n'
+    printf '%% \\usepackage{graphicx}\n'
+    printf '%% \\usepackage{float}\n'
+    printf '%% Auto-generated by %s. Do not edit by hand.\n\n' "$(basename "$0")"
 
     for pdf in "${pdfs[@]}"; do
       stem="$(basename "$pdf" .pdf)"
+      command="$(command_from_stem "$stem")"
       caption="$(caption_from_stem "$stem")"
 
       if [[ -n "$tex_path" ]]; then
@@ -153,7 +208,8 @@ write_tex_file() {
       fi
 
       cat <<EOF
-\\begin{figure}[htbp]
+\\newcommand{\\${command}}{%
+\\begin{figure}[H]
     \\centering
     \\includegraphics[
         width=${tex_width}
@@ -161,6 +217,7 @@ write_tex_file() {
     \\caption{${caption}}
     \\label{fig:${stem}}
 \\end{figure}
+}
 
 EOF
     done
@@ -209,7 +266,7 @@ if [[ "$tex_only" -eq 1 ]]; then
   [[ "${#requested[@]}" -eq 0 ]] || die "--tex-only rebuilds from all PDFs in $output_dir and does not accept filenames"
   mkdir -p "$output_dir"
   write_tex_file
-  printf 'Done. LaTeX snippets are in %s\n' "$tex_file"
+  printf 'Done. LaTeX figure commands are in %s\n' "$tex_file"
   exit 0
 fi
 
@@ -258,4 +315,4 @@ done
 
 printf 'Done. PDFs are in %s\n' "$output_dir"
 write_tex_file
-printf 'Done. LaTeX snippets are in %s\n' "$tex_file"
+printf 'Done. LaTeX figure commands are in %s\n' "$tex_file"

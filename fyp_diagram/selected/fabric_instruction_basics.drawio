@@ -1,10 +1,10 @@
 <mxfile host="65bd71144e">
     <diagram name="fabric_instruction_basics" id="fabric-isa-basics">
-        <mxGraphModel dx="601" dy="420" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1190" math="0" shadow="0">
+        <mxGraphModel dx="888" dy="784" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1190" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
-                <mxCell id="title" value="Instruction basics on the 2-D fabric — the SAME opcode, Horizontal vs Vertical mode" style="text;html=1;align=left;fontSize=16;fontStyle=1;fontColor=#212121;" parent="1" vertex="1">
+                <mxCell id="title" value="Instruction basics on the 2D fabric — the SAME opcode, Horizontal vs Vertical mode" style="text;html=1;align=left;fontSize=16;fontStyle=1;fontColor=#212121;" parent="1" vertex="1">
                     <mxGeometry x="14" y="14" width="820" height="24" as="geometry"/>
                 </mxCell>
                 <mxCell id="note" value="One instruction per row. Colour tracks where data goes (numbers where the value matters). Flipping CSR 0x7c0 rotates each spatial op 90° — so a pixel is free to move anywhere on the grid. (vadd / vmv / vmerge are element-wise, so H = V.)" style="text;html=1;align=left;fontSize=11;fontColor=#5D6D7E;whiteSpace=wrap;" parent="1" vertex="1">
