@@ -20,4 +20,4 @@
  */
 #pragma once
 
-#include "sobel_select.h"
+#include "matmul_8bitraw_short_select.h"
