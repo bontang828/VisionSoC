@@ -1,0 +1,74 @@
+% =====================================================================
+% SharedVRF dLen / bank-count sweep -- synthesis resource comparison.
+%
+% Synthesis-only study (KV260, Vivado 2025.2, -s -a). Three configs differ
+% only in dLen (and the VLEN / 2D grid that scales with it): laneScale is
+% chosen so Lane_num = 2 in all three (2 lanes <-> 2 dual-port BRAM ports),
+% and each SharedVRF bank is an explicit XPM block-RAM (xpm_memory_tdpram,
+% MEMORY_PRIMITIVE="block"). Numbers are post-synth utilization
+% (report_utilization -hierarchical). NOT functionally verified.
+%
+% Percentages are usage relative to the KV260 (XCK26) capacity:
+%   LUT 117,120 | FF 234,240 | DSP 1,248 | BRAM36 144 | URAM 64.
+%
+% Values > 1000 are shown in "k"; the raw integers are kept in a trailing
+% "% raw:" comment on each such row for easy editing.
+%
+% Requires: \usepackage{booktabs}. Compile directly, or drop the table
+% environment into your report. Caption is at the bottom.
+% =====================================================================
+\documentclass[11pt]{article}
+\usepackage{booktabs}
+\usepackage[margin=1.8cm]{geometry}
+\begin{document}
+
+\begin{table}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{6pt}
+  \begin{tabular}{l rrr}
+    \toprule
+    & \textbf{Small} & \textbf{Medium} & \textbf{Large} \\
+    \midrule
+    \multicolumn{4}{l}{\textit{Configuration}}\\
+    Pixel grid                            & 64$\times$64    & 128$\times$128  & 256$\times$256  \\
+    \texttt{dLen} (bits processing/cycle) & 64              & 128             & 256             \\
+    Lane\_num $\times$ lane width (bits)  & 2 $\times$ 32   & 2 $\times$ 64   & 2 $\times$ 128  \\
+    Number of vector registers            & 32              & 32              & 32              \\
+    Vector register length, VLEN (bits per row) & 512       & 1024            & 2048            \\
+    Number of row in grid (grid height)   & 64              & 128             & 256             \\
+    2D vector register file, $32{\times}$VLEN$\times$rows (MB) & 0.125 & 0.5   & 2.0             \\ % raw bits: 1048576, 4194304, 16777216
+    \midrule
+    \multicolumn{4}{l}{\textit{Whole-system synthesis (\% of KV260)}}\\
+    System LUT (camera pipeline + T1)     & 64.4k (55.0\%)  & 104.4k (89.1\%) & 231.2k (197.4\%) \\ % raw LUT: 64448, 104392, 231183
+    \midrule
+    \multicolumn{4}{l}{\textit{T1 vector core, incl.\ SharedVRF (\% of KV260)}}\\
+    T1 LUT                                & 43.2k (36.9\%)  & 82.8k (70.7\%)  & 207.4k (177.1\%) \\ % raw LUT: 43199, 82830, 207443
+    T1 FF                                 & 46.9k (20.0\%)  & 79.1k (33.8\%)  & 142.0k (60.6\%)  \\ % raw FF: 46913, 79148, 141972
+    T1 BRAM (RAMB36 tiles)                & 33 (22.9\%)     & 132 (91.7\%)    & 512 (355.6\%)    \\
+    T1 DSP                                & 19 (1.5\%)      & 31 (2.5\%)      & 55 (4.4\%)       \\
+    \midrule
+    \multicolumn{4}{l}{\textit{SharedVRF (\% of KV260)}}\\
+    SharedVRF LUT                         & 3.4k (2.9\%)    & 10.8k (9.2\%)   & 57.5k (49.1\%)   \\ % raw LUT: 3351, 10816, 57482
+    SharedVRF BRAM (RAMB36 tiles)         & 32 (22.2\%)     & 128 (88.9\%)    & 512 (355.6\%)    \\
+    Number of banks                       & 4               & 8               & 16               \\
+    BRAM per bank (RAMB36 tiles)          & 8               & 16              & 32               \\
+    LUT per BRAM tile                     & 104.7           & 84.5            & 112.3            \\
+    \midrule
+    \multicolumn{4}{l}{\textit{Scaling vs.\ small ($\times$1)}}\\
+    SharedVRF LUT scale                   & $\times$1.0     & $\times$3.2     & $\times$17.2     \\
+    SharedVRF BRAM scale                  & $\times$1       & $\times$4       & $\times$16       \\
+    LUT-per-BRAM-tile scale               & $\times$1.0     & $\times$0.8     & $\times$1.1      \\
+    \bottomrule
+  \end{tabular}
+  \caption{T1 vector-core and SharedVRF post-synthesis resource usage for three
+    design points: \emph{small} (64$\times$64), \emph{medium} (128$\times$128)
+    and \emph{large} (256$\times$256) pixel grid. Each has 2 vector processing
+    lanes $\leftrightarrow$ dual-port BRAM in SharedVRF. ``BRAM tile'' is a
+    Vivado RAMB36 tile (36\,kb). Percentages are utilisation of the KV260
+    (XCK26), whose capacity is 117.1k LUT, 234.2k FF, 1\,248 DSP and 144
+    BRAM36 tiles.}
+  \label{tab:dlen-sweep}
+\end{table}
+
+\end{document}

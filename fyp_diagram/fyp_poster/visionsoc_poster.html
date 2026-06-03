@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<!--
+  VisionSoC — one-page project poster (portrait).
+  Self-contained: no external fonts, scripts, or images.
+  View: open in any browser.
+  Export: File ▸ Print ▸ "Save as PDF" ▸ paper size A2 (or A3), portrait,
+          margins "None", background graphics ON.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VisionSoC — a vision processor on open RISC-V</title>
+<style>
+  :root{
+    --paper:#f7f5ef;
+    --ink:#1b2138;
+    --ink-soft:#4a5168;
+    --muted:#8a8f9c;
+    --line:#e2ded2;
+    --coral:#e3674f;
+    --teal:#1f8a8a;
+    --gold:#d9a441;
+    --indigo:#3a4a8c;
+    --chip:#eef0ea;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --sans:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#d9d6cc;}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    display:flex;
+    justify-content:center;
+    padding:28px 16px;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+
+  .poster{
+    width:1000px;
+    background:
+      radial-gradient(1200px 480px at 78% -8%, rgba(58,74,140,.07), transparent 60%),
+      radial-gradient(900px 420px at -6% 108%, rgba(31,138,138,.07), transparent 55%),
+      var(--paper);
+    border:1px solid var(--line);
+    box-shadow:0 24px 70px rgba(27,33,56,.18);
+    padding:46px 50px 38px;
+  }
+
+  /* ---------- header ---------- */
+  .topline{
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:var(--mono);font-size:11px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--muted);
+    border-bottom:1px solid var(--line);padding-bottom:12px;
+  }
+  .topline .dot{color:var(--coral);}
+  h1{
+    font-family:var(--serif);
+    font-size:74px;line-height:.96;margin:20px 0 0;
+    letter-spacing:-.5px;font-weight:600;
+  }
+  h1 .soc{color:var(--coral);}
+  .tagline{
+    font-family:var(--serif);font-style:italic;
+    font-size:23px;color:var(--ink-soft);margin:10px 0 0;
+  }
+
+  /* RISC-V plain-language hook */
+  .hook{
+    margin-top:20px;
+    display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:stretch;
+    background:linear-gradient(180deg,#fff,#fbfaf6);
+    border:1px solid var(--line);border-left:5px solid var(--coral);
+    border-radius:12px;padding:18px 22px;
+  }
+  .hook .badge{
+    align-self:center;text-align:center;font-family:var(--mono);
+    border-right:1px solid var(--line);padding-right:20px;color:var(--indigo);
+  }
+  .hook .badge b{display:block;font-size:30px;letter-spacing:1px;color:var(--ink);}
+  .hook .badge span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);}
+  .hook p{margin:0;font-size:15.5px;line-height:1.5;color:var(--ink-soft);}
+  .hook p b{color:var(--ink);font-weight:600;}
+  .hook .em{color:var(--coral);font-weight:600;font-style:normal;}
+
+  /* ---------- hero pipeline ---------- */
+  .hero{margin-top:26px;}
+  .hero h2,.section h2{
+    font-family:var(--mono);font-size:12px;letter-spacing:.24em;
+    text-transform:uppercase;color:var(--teal);margin:0 0 12px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .hero h2::after,.section h2::after{
+    content:"";flex:1;height:1px;background:var(--line);
+  }
+  .hero svg{display:block;width:100%;height:auto;}
+
+  /* ---------- body columns ---------- */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:30px;}
+  .section{margin-bottom:26px;}
+  .section h3{
+    font-family:var(--serif);font-size:22px;margin:0 0 8px;font-weight:600;
+  }
+  .section p{font-size:14.5px;line-height:1.55;color:var(--ink-soft);margin:0 0 10px;}
+  .section p b{color:var(--ink);}
+
+  .idea-grid{display:flex;gap:16px;align-items:center;margin:6px 0 4px;}
+  .idea-grid svg{flex:0 0 auto;}
+  .idea-grid .cap{font-size:13px;color:var(--ink-soft);line-height:1.45;}
+  .idea-grid .cap b{color:var(--coral);}
+
+  code.snippet{
+    display:block;font-family:var(--mono);font-size:12.5px;
+    background:#1b2138;color:#e9ecf5;border-radius:8px;
+    padding:11px 14px;margin:8px 0 4px;line-height:1.5;
+  }
+  code.snippet .k{color:#ffb38a;}
+  code.snippet .c{color:#7f8aa8;}
+
+  ul.demos{list-style:none;margin:6px 0 0;padding:0;}
+  ul.demos li{
+    display:grid;grid-template-columns:130px 1fr;gap:12px;
+    padding:9px 0;border-bottom:1px dashed var(--line);font-size:14px;
+  }
+  ul.demos li:last-child{border-bottom:none;}
+  ul.demos li b{font-family:var(--mono);font-size:12.5px;color:var(--indigo);}
+  ul.demos li span{color:var(--ink-soft);line-height:1.4;}
+
+  .modes{display:flex;gap:12px;margin-top:8px;}
+  .mode{
+    flex:1;border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+    background:#fff;
+  }
+  .mode .t{font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--teal);margin-bottom:6px;}
+  .mode b{color:var(--ink);}
+  .mode p{font-size:12.5px;margin:4px 0 0;}
+
+  /* ---------- footer stats ---------- */
+  .stats{
+    margin-top:14px;border-top:2px solid var(--ink);padding-top:18px;
+    display:flex;flex-wrap:wrap;gap:10px 12px;
+  }
+  .stat{
+    background:var(--chip);border:1px solid var(--line);border-radius:999px;
+    padding:8px 16px;display:flex;align-items:baseline;gap:8px;
+  }
+  .stat b{font-family:var(--serif);font-size:20px;color:var(--ink);line-height:1;}
+  .stat span{font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;}
+
+  .footer{
+    margin-top:22px;display:flex;justify-content:space-between;align-items:center;
+    font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+    color:var(--muted);text-transform:uppercase;
+    border-top:1px solid var(--line);padding-top:14px;
+  }
+  .footer .stack span{color:var(--ink-soft);}
+
+  @media print{
+    @page{size:A2 portrait;margin:0;}
+    html,body{background:#fff;}
+    body{padding:0;}
+    .poster{box-shadow:none;border:none;width:100%;}
+  }
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- header -->
+  <div class="topline">
+    <span><span class="dot">●</span> Final-Year Project · On-/Near-Sensor Vision</span>
+    <span>RISC-V&nbsp;V · FPGA · Live Camera Pipeline</span>
+  </div>
+
+  <h1>Vision<span class="soc">SoC</span></h1>
+  <p class="tagline">A camera that thinks in whole pictures — a vision processor built on open RISC-V silicon.</p>
+
+  <!-- RISC-V plain-language hook -->
+  <div class="hook">
+    <div class="badge">
+      <b>RISC-V</b>
+      <span>open chip standard</span>
+    </div>
+    <p>
+      <b>RISC-V is an open, royalty-free design for processors</b> — the open-source
+      answer to Intel and Arm, that anyone can build a chip around. Its
+      <span class="em">vector extension</span> adds the muscle to crunch many numbers at once.
+      VisionSoC takes that vector engine and reshapes it so an <b>entire camera image
+      becomes a single instruction</b> — then runs the whole thing as a live
+      camera&nbsp;→&nbsp;chip&nbsp;→&nbsp;screen system on one FPGA board.
+    </p>
+  </div>
+
+  <!-- hero pipeline -->
+  <div class="hero">
+    <h2>The end-to-end system &nbsp;·&nbsp; capture → process → display, live</h2>
+    <svg viewBox="0 0 1000 300" role="img" aria-label="Camera to FPGA to HDMI pipeline">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#1b2138"/>
+        </marker>
+        <linearGradient id="core" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3a4a8c"/>
+          <stop offset="1" stop-color="#2b3568"/>
+        </linearGradient>
+      </defs>
+
+      <!-- board enclosure -->
+      <rect x="250" y="22" width="500" height="256" rx="18" fill="#fff" stroke="#cfd3df" stroke-width="1.5"/>
+      <rect x="250" y="22" width="500" height="30" rx="18" fill="#eef0f6"/>
+      <rect x="250" y="38" width="500" height="14" fill="#eef0f6"/>
+      <text x="270" y="42" font-family="SF Mono,Menlo,monospace" font-size="12" fill="#5b6480" letter-spacing="1">AMD KRIA KV260 — FPGA + Arm Linux, one board</text>
+
+      <!-- camera (left, external) -->
+      <g>
+        <rect x="20" y="96" width="150" height="108" rx="14" fill="#fff" stroke="#cfd3df" stroke-width="1.5"/>
+        <circle cx="95" cy="138" r="22" fill="#f7f5ef" stroke="#e3674f" stroke-width="3"/>
+        <circle cx="95" cy="138" r="9" fill="#e3674f"/>
+        <text x="95" y="182" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#1b2138" font-weight="bold">Camera</text>
+        <text x="95" y="198" text-anchor="middle" font-family="SF Mono,Menlo,monospace" font-size="10" fill="#8a8f9c">AR1335 sensor</text>
+      </g>
+
+      <!-- T1 core (center, hero) -->
+      <g>
+        <rect x="372" y="74" width="256" height="150" rx="14" fill="url(#core)"/>
+        <text x="500" y="100" text-anchor="middle" font-family="Georgia,serif" font-size="17" fill="#fff" font-weight="bold">T1 vector core</text>
+        <text x="500" y="118" text-anchor="middle" font-family="SF Mono,Menlo,monospace" font-size="10" fill="#aeb6dc" letter-spacing="1px">RISC-V V · 128 × 128 grid</text>
+        <!-- mini grid motif -->
+        <g transform="translate(430,132)">
+          <!-- 10x5 lit cells -->
+          <g fill="#ff8a6e" opacity="0.95">
+            <!-- generated grid -->
+            <g>
+              <rect x="0"  y="0"  width="11" height="11" rx="2"/><rect x="14" y="0" width="11" height="11" rx="2"/><rect x="28" y="0" width="11" height="11" rx="2"/><rect x="42" y="0" width="11" height="11" rx="2"/><rect x="56" y="0" width="11" height="11" rx="2"/><rect x="70" y="0" width="11" height="11" rx="2"/><rect x="84" y="0" width="11" height="11" rx="2"/><rect x="98" y="0" width="11" height="11" rx="2"/><rect x="112" y="0" width="11" height="11" rx="2"/><rect x="126" y="0" width="11" height="11" rx="2"/>
+              <rect x="0"  y="14" width="11" height="11" rx="2"/><rect x="14" y="14" width="11" height="11" rx="2"/><rect x="28" y="14" width="11" height="11" rx="2"/><rect x="42" y="14" width="11" height="11" rx="2"/><rect x="56" y="14" width="11" height="11" rx="2"/><rect x="70" y="14" width="11" height="11" rx="2"/><rect x="84" y="14" width="11" height="11" rx="2"/><rect x="98" y="14" width="11" height="11" rx="2"/><rect x="112" y="14" width="11" height="11" rx="2"/><rect x="126" y="14" width="11" height="11" rx="2"/>
+              <rect x="0"  y="28" width="11" height="11" rx="2"/><rect x="14" y="28" width="11" height="11" rx="2"/><rect x="28" y="28" width="11" height="11" rx="2"/><rect x="42" y="28" width="11" height="11" rx="2"/><rect x="56" y="28" width="11" height="11" rx="2"/><rect x="70" y="28" width="11" height="11" rx="2"/><rect x="84" y="28" width="11" height="11" rx="2"/><rect x="98" y="28" width="11" height="11" rx="2"/><rect x="112" y="28" width="11" height="11" rx="2"/><rect x="126" y="28" width="11" height="11" rx="2"/>
+              <rect x="0"  y="42" width="11" height="11" rx="2"/><rect x="14" y="42" width="11" height="11" rx="2"/><rect x="28" y="42" width="11" height="11" rx="2"/><rect x="42" y="42" width="11" height="11" rx="2"/><rect x="56" y="42" width="11" height="11" rx="2"/><rect x="70" y="42" width="11" height="11" rx="2"/><rect x="84" y="42" width="11" height="11" rx="2"/><rect x="98" y="42" width="11" height="11" rx="2"/><rect x="112" y="42" width="11" height="11" rx="2"/><rect x="126" y="42" width="11" height="11" rx="2"/>
+            </g>
+          </g>
+        </g>
+        <text x="500" y="208" text-anchor="middle" font-family="SF Mono,Menlo,monospace" font-size="9.5" fill="#aeb6dc">processes the whole frame at once</text>
+      </g>
+
+      <!-- memory substrate inside board -->
+      <rect x="280" y="238" width="440" height="26" rx="8" fill="#eef0ea" stroke="#dfe2d8"/>
+      <text x="500" y="255" text-anchor="middle" font-family="SF Mono,Menlo,monospace" font-size="11" fill="#5b6480">frames flow through DDR memory + on-chip scratchpad</text>
+
+      <!-- display (right, external) -->
+      <g>
+        <rect x="830" y="96" width="150" height="108" rx="14" fill="#fff" stroke="#cfd3df" stroke-width="1.5"/>
+        <rect x="852" y="116" width="106" height="56" rx="6" fill="#1b2138"/>
+        <rect x="858" y="122" width="94" height="44" rx="3" fill="#2b3568"/>
+        <rect x="893" y="172" width="24" height="8" fill="#1b2138"/>
+        <text x="905" y="198" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#1b2138" font-weight="bold">HDMI display</text>
+      </g>
+
+      <!-- arrows -->
+      <line x1="172" y1="150" x2="246" y2="150" stroke="#1b2138" stroke-width="2.5" marker-end="url(#arr)"/>
+      <line x1="754" y1="150" x2="826" y2="150" stroke="#1b2138" stroke-width="2.5" marker-end="url(#arr)"/>
+      <text x="500" y="288" text-anchor="middle" font-family="SF Mono,Menlo,monospace" font-size="11" fill="#e3674f" letter-spacing="1px">▸ live, ~20 frames per second ◂</text>
+    </svg>
+  </div>
+
+  <!-- body columns -->
+  <div class="cols">
+    <!-- LEFT -->
+    <div>
+      <div class="section">
+        <h2>The big idea</h2>
+        <h3>One instruction, a whole image</h3>
+        <p>
+          An ordinary processor touches a handful of pixels per instruction. VisionSoC's
+          vector engine is wired as a <b>2-D fabric</b>: every instruction is broadcast across
+          <b>128 hardware rows</b> at once, so a single load pulls in a complete
+          128×128 frame — <b>16,384 pixels</b> — and a single add, multiply or filter step
+          works on all of them in parallel.
+        </p>
+        <div class="idea-grid">
+          <svg width="92" height="92" viewBox="0 0 92 92" aria-hidden="true">
+            <rect x="1" y="1" width="90" height="90" rx="8" fill="#fff" stroke="#e2ded2"/>
+            <g fill="#e3674f" opacity="0.9">
+              <!-- 8x8 -->
+              <g>
+                <rect x="8"  y="8"  width="8" height="8" rx="1.5"/><rect x="18" y="8" width="8" height="8" rx="1.5"/><rect x="28" y="8" width="8" height="8" rx="1.5"/><rect x="38" y="8" width="8" height="8" rx="1.5"/><rect x="48" y="8" width="8" height="8" rx="1.5"/><rect x="58" y="8" width="8" height="8" rx="1.5"/><rect x="68" y="8" width="8" height="8" rx="1.5"/><rect x="78" y="8" width="6" height="8" rx="1.5"/>
+                <rect x="8"  y="18" width="8" height="8" rx="1.5"/><rect x="18" y="18" width="8" height="8" rx="1.5"/><rect x="28" y="18" width="8" height="8" rx="1.5"/><rect x="38" y="18" width="8" height="8" rx="1.5"/><rect x="48" y="18" width="8" height="8" rx="1.5"/><rect x="58" y="18" width="8" height="8" rx="1.5"/><rect x="68" y="18" width="8" height="8" rx="1.5"/><rect x="78" y="18" width="6" height="8" rx="1.5"/>
+                <rect x="8"  y="28" width="8" height="8" rx="1.5"/><rect x="18" y="28" width="8" height="8" rx="1.5"/><rect x="28" y="28" width="8" height="8" rx="1.5"/><rect x="38" y="28" width="8" height="8" rx="1.5"/><rect x="48" y="28" width="8" height="8" rx="1.5"/><rect x="58" y="28" width="8" height="8" rx="1.5"/><rect x="68" y="28" width="8" height="8" rx="1.5"/><rect x="78" y="28" width="6" height="8" rx="1.5"/>
+                <rect x="8"  y="38" width="8" height="8" rx="1.5"/><rect x="18" y="38" width="8" height="8" rx="1.5"/><rect x="28" y="38" width="8" height="8" rx="1.5"/><rect x="38" y="38" width="8" height="8" rx="1.5"/><rect x="48" y="38" width="8" height="8" rx="1.5"/><rect x="58" y="38" width="8" height="8" rx="1.5"/><rect x="68" y="38" width="8" height="8" rx="1.5"/><rect x="78" y="38" width="6" height="8" rx="1.5"/>
+                <rect x="8"  y="48" width="8" height="8" rx="1.5"/><rect x="18" y="48" width="8" height="8" rx="1.5"/><rect x="28" y="48" width="8" height="8" rx="1.5"/><rect x="38" y="48" width="8" height="8" rx="1.5"/><rect x="48" y="48" width="8" height="8" rx="1.5"/><rect x="58" y="48" width="8" height="8" rx="1.5"/><rect x="68" y="48" width="8" height="8" rx="1.5"/><rect x="78" y="48" width="6" height="8" rx="1.5"/>
+                <rect x="8"  y="58" width="8" height="8" rx="1.5"/><rect x="18" y="58" width="8" height="8" rx="1.5"/><rect x="28" y="58" width="8" height="8" rx="1.5"/><rect x="38" y="58" width="8" height="8" rx="1.5"/><rect x="48" y="58" width="8" height="8" rx="1.5"/><rect x="58" y="58" width="8" height="8" rx="1.5"/><rect x="68" y="58" width="8" height="8" rx="1.5"/><rect x="78" y="58" width="6" height="8" rx="1.5"/>
+                <rect x="8"  y="68" width="8" height="8" rx="1.5"/><rect x="18" y="68" width="8" height="8" rx="1.5"/><rect x="28" y="68" width="8" height="8" rx="1.5"/><rect x="38" y="68" width="8" height="8" rx="1.5"/><rect x="48" y="68" width="8" height="8" rx="1.5"/><rect x="58" y="68" width="8" height="8" rx="1.5"/><rect x="68" y="68" width="8" height="8" rx="1.5"/><rect x="78" y="68" width="6" height="8" rx="1.5"/>
+                <rect x="8"  y="78" width="8" height="6" rx="1.5"/><rect x="18" y="78" width="8" height="6" rx="1.5"/><rect x="28" y="78" width="8" height="6" rx="1.5"/><rect x="38" y="78" width="8" height="6" rx="1.5"/><rect x="48" y="78" width="8" height="6" rx="1.5"/><rect x="58" y="78" width="8" height="6" rx="1.5"/><rect x="68" y="78" width="8" height="6" rx="1.5"/><rect x="78" y="78" width="6" height="6" rx="1.5"/>
+              </g>
+            </g>
+          </svg>
+          <div class="cap">
+            One <span style="font-family:var(--mono)">vle8.v</span> load = <b>all 128×128 pixels lit at once.</b>
+            That's where the "free" parallelism — and the real-time speed — comes from.
+          </div>
+        </div>
+        <code class="snippet"><span class="k">vle8.v</span> v8, (frame) <span class="c">// pull in the entire image — 16,384 px</span>
+<span class="k">vadd.vv</span> v8, v8, v8 <span class="c">// one op brightens every pixel together</span></code>
+      </div>
+
+      <div class="section">
+        <h2>Looking in two directions</h2>
+        <h3>2-D filters, no data juggling</h3>
+        <p>
+          A single mode switch lets the same instructions sweep <b>across a row</b> or
+          <b>down a column</b>. That's what makes 2-D image operations — edges, blur, motion —
+          cheap and natural, instead of needing to rearrange the image first.
+        </p>
+        <div class="modes">
+          <div class="mode">
+            <div class="t">Horizontal mode</div>
+            <p><b>left ⟷ right.</b> Compare each pixel with its neighbours along the row.</p>
+          </div>
+          <div class="mode">
+            <div class="t">Vertical mode</div>
+            <p><b>up ⟷ down.</b> The same op now compares across image rows — for free.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="section">
+        <h2>How the system runs</h2>
+        <h3>A real, live pipeline</h3>
+        <p>
+          A real camera streams frames into memory. The RISC-V&nbsp;V core — living inside the
+          FPGA fabric — runs a small <b>kernel</b> (program) on each frame and writes the result
+          straight back out to an <b>HDMI monitor</b>, ~20 times a second.
+        </p>
+        <p>
+          It's driven by <b>plain C on bare Linux</b> running on the board's Arm cores — a handful
+          of register writes, no heavyweight framework. Swapping in a new vision algorithm is
+          just swapping the kernel.
+        </p>
+      </div>
+
+      <div class="section">
+        <h2>What it can do today</h2>
+        <h3>Vision kernels, running on hardware</h3>
+        <ul class="demos">
+          <li><b>passthrough</b><span>Pixel-perfect round-trip — proves the camera→chip→screen path is exact.</span></li>
+          <li><b>sobel</b><span>Edge detection — outlines everything the camera sees.</span></li>
+          <li><b>optical_flow</b><span>Motion as colour — which way each part of the scene is moving.</span></li>
+          <li><b>cnn_digit</b><span>A small neural network that recognises hand-drawn digits.</span></li>
+          <li><b>matmul</b><span>Matrix multiply — the building block for ML inference.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- footer stats -->
+  <div class="stats">
+    <div class="stat"><b>16,384</b><span>pixels / instruction</span></div>
+    <div class="stat"><b>128 × 128</b><span>parallel grid</span></div>
+    <div class="stat"><b>~20</b><span>fps, live</span></div>
+    <div class="stat"><b>1024-bit</b><span>vector length</span></div>
+    <div class="stat"><b>RISC-V&nbsp;V</b><span>open vector ISA</span></div>
+    <div class="stat"><b>KV260</b><span>AMD FPGA board</span></div>
+  </div>
+
+  <div class="footer">
+    <span>VisionSoC · on-/near-sensor vision</span>
+    <span class="stack">built with&nbsp; <span>Chisel RTL · RISC-V V · Verilator · bare-metal Linux + libt1</span></span>
+  </div>
+
+</div>
+</body>
+</html>

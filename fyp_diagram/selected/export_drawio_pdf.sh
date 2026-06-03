@@ -127,6 +127,7 @@ command_from_stem() {
     T1_abstract_arch_rtl) printf '%s\n' figTOneAbstractArchRtl ;;
     t1_vs_scamp5_v3) printf '%s\n' figTOneVsScamp ;;
     vrf_diagonal_banking_v3) printf '%s\n' figVrfDiagonalBanking ;;
+    vrf_diagonal_banking_v5_per_word) printf '%s\n' figVrfDiagonalBankingVfivePerWord ;;
     *)
       STEM="$stem" perl -e '
         my %digit = (
@@ -169,6 +170,7 @@ caption_from_stem() {
     T1_abstract_arch_rtl) printf '%s\n' 'Abstracted top level RTL of 2D T1 architecture.' ;;
     t1_vs_scamp5_v3) printf '%s\n' 'Comparison between the T1 fabric and SCAMP-5 in programmability. Highlighted the data control abstractions with RISC-V RVV instructions and execution in a 2D plane.' ;;
     vrf_diagonal_banking_v3) printf '%s\n' 'Diagonal banking scheme used for the vector register file in 2D T1 memory subsystem.' ;;
+    vrf_diagonal_banking_v5_per_word) printf '%s\n' 'Diagonal banking scheme used for the vector register file in 2D T1 memory subsystem.' ;;
     *)
       printf '%s\n' "$stem"
       ;;

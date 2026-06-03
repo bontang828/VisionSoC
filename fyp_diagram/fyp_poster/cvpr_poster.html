@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FOVEA — CVPR Poster</title>
+<style>
+  :root{
+    --ink:#0f1722;
+    --muted:#5b6b7d;
+    --sw:#0e7c86;       /* software / CV teal */
+    --sw-bg:#e9f7f8;
+    --hw:#b9591a;       /* hardware amber */
+    --hw-bg:#fdf1e7;
+    --today:#1f7a45;    /* working-today green */
+    --today-bg:#e9f6ee;
+    --line:#d7dee6;
+    --riscv:#5c2d91;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#48535f;font-family:"Helvetica Neue",Arial,sans-serif;color:var(--ink);}
+  /* A0 landscape ratio (1189 x 841). Scale on screen, exact on print. */
+  .poster{
+    width:1189mm;height:841mm;margin:18px auto;background:#fff;
+    display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:0 8px 40px rgba(0,0,0,.45);
+  }
+  /* ---------- HERO ---------- */
+  .hero{padding:26mm 30mm 16mm;background:linear-gradient(120deg,#0b1f3a 0%,#10394f 55%,#0e5660 100%);color:#fff;position:relative;}
+  .kicker{font-size:15pt;letter-spacing:.45em;text-transform:uppercase;color:#8fd4dd;font-weight:700;}
+  .hero h1{font-size:118pt;line-height:.92;margin:6mm 0 2mm;font-weight:800;letter-spacing:-2px;}
+  .hero h1 sup{font-size:46pt;vertical-align:super;color:#ffd27a;}
+  .hero .sub{font-size:30pt;font-weight:600;color:#dff0f4;margin:0 0 5mm;}
+  .hero .lead{font-size:23pt;line-height:1.32;max-width:62%;color:#eef6f8;font-weight:400;}
+  .hero .lead b{color:#ffd27a;font-weight:700;}
+  .badges{position:absolute;right:30mm;top:30mm;text-align:right;display:flex;flex-direction:column;gap:9px;align-items:flex-end;}
+  .badge{display:inline-block;font-size:15pt;font-weight:700;padding:9px 16px;border-radius:999px;}
+  .badge.riscv{background:#fff;color:var(--riscv);}
+  .badge.open{background:#ffd27a;color:#3a2700;}
+  .badge.near{background:rgba(255,255,255,.14);color:#fff;border:1.5px solid rgba(255,255,255,.5);}
+  /* ---------- BODY: two columns ---------- */
+  .body{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:0;}
+  .col{padding:14mm 26mm 8mm;display:flex;flex-direction:column;}
+  .col.sw{background:var(--sw-bg);}
+  .col.hw{background:var(--hw-bg);}
+  .col-head{display:flex;align-items:baseline;gap:14px;border-bottom:4px solid;padding-bottom:10px;margin-bottom:8mm;}
+  .sw .col-head{border-color:var(--sw);}
+  .hw .col-head{border-color:var(--hw);}
+  .col-head .who{font-size:33pt;font-weight:800;}
+  .sw .col-head .who{color:var(--sw);}
+  .hw .col-head .who{color:var(--hw);}
+  .col-head .for{font-size:16pt;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+  .point{display:flex;gap:18px;margin-bottom:7mm;}
+  .num{flex:0 0 auto;width:58px;height:58px;border-radius:14px;color:#fff;font-size:27pt;font-weight:800;display:flex;align-items:center;justify-content:center;}
+  .sw .num{background:var(--sw);}
+  .hw .num{background:var(--hw);}
+  .point h3{font-size:23pt;margin:2px 0 5px;font-weight:800;line-height:1.1;}
+  .point p{font-size:16.5pt;line-height:1.34;margin:0;color:#26313d;}
+  .point p code,.today code{background:rgba(0,0,0,.07);padding:1px 7px;border-radius:5px;font-family:"SF Mono",Menlo,Consolas,monospace;font-size:14.5pt;}
+  .point .big{font-weight:800;}
+  .sw .point .big{color:var(--sw);}
+  .hw .point .big{color:var(--hw);}
+  /* center spine sketch */
+  .spine{grid-column:1 / -1;}
+  /* ---------- WORKING TODAY band ---------- */
+  .today{background:var(--today-bg);border-top:6px solid var(--today);padding:11mm 26mm 12mm;}
+  .today .th{display:flex;align-items:center;gap:16px;margin-bottom:6mm;}
+  .today .th .dot{width:22px;height:22px;border-radius:50%;background:var(--today);box-shadow:0 0 0 6px rgba(31,122,69,.18);}
+  .today .th h2{font-size:31pt;font-weight:800;color:var(--today);margin:0;}
+  .today .th .live{font-size:14pt;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#fff;background:var(--today);padding:5px 12px;border-radius:6px;}
+  .today-grid{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:24px;}
+  .tcard{background:#fff;border:1.5px solid #c5e2d0;border-radius:12px;padding:16px 20px;}
+  .tcard h4{font-size:17pt;margin:0 0 8px;color:var(--today);font-weight:800;}
+  .tcard p{font-size:15pt;line-height:1.32;margin:0;color:#283a30;}
+  .pipe{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:13.5pt;font-weight:700;color:#0f1722;line-height:1.7;}
+  .pipe span{background:#fff;border:1.5px solid var(--today);border-radius:6px;padding:3px 8px;display:inline-block;margin:2px 0;}
+  .pipe .ar{color:var(--today);font-weight:800;padding:0 2px;}
+  .stats{display:flex;gap:34px;margin-top:9mm;padding-top:7mm;border-top:1.5px dashed #b6d6c2;}
+  .stat{text-align:left;}
+  .stat .v{font-size:34pt;font-weight:800;color:var(--today);line-height:1;}
+  .stat .l{font-size:13.5pt;color:#3a4a40;font-weight:600;margin-top:5px;max-width:230px;}
+  /* footer */
+  .foot{display:flex;justify-content:space-between;align-items:center;padding:7mm 30mm;background:#0b1f3a;color:#cdd9e4;font-size:14pt;}
+  .foot b{color:#fff;}
+  .foot .rv{color:#c9b3e6;font-weight:700;}
+  @media print{
+    @page{size:1189mm 841mm;margin:0;}
+    html,body{background:#fff;}
+    .poster{margin:0;box-shadow:none;}
+  }
+</style>
+</head>
+<body>
+<div class="poster">
+
+  <!-- ================= HERO ================= -->
+  <header class="hero">
+    <div class="kicker">A Two-Dimensional RISC-V Vector Fabric for Near-Sensor Vision</div>
+    <h1>FOVEA<sup>&nbsp;RVV²</sup></h1>
+    <div class="sub">An image <i>is</i> a vector register — 128×128 pixels per instruction.</div>
+    <p class="lead">Load a whole frame with one <b>vle8.v</b>. Every RISC-V Vector instruction is
+      broadcast across a <b>128-row grid</b>, so a single op touches the entire image.
+      Flip one CSR and rows become columns — for <b>free</b>. Write real CV kernels in
+      <b>plain RVV</b>, with <b>no HDL</b> and <b>no proprietary ISA</b>.</p>
+    <div class="badges">
+      <span class="badge riscv">RISC-V&nbsp;“V”&nbsp;Extension</span>
+      <span class="badge open">100% open-source · open T1 core</span>
+      <span class="badge near">On / near-sensor processing</span>
+    </div>
+  </header>
+
+  <!-- ================= TWO COLUMNS ================= -->
+  <section class="body">
+
+    <!-- ---------- SOFTWARE / CV ---------- -->
+    <div class="col sw">
+      <div class="col-head">
+        <span class="who">Software</span>
+        <span class="for">For computer-vision researchers</span>
+      </div>
+
+      <div class="point">
+        <div class="num">1</div>
+        <div>
+          <h3>An image is a vector register</h3>
+          <p>One <code>vle8.v</code> loads a 128×128 frame across the grid; one <code>vse8.v</code>
+            writes it back. Convolutions, FC layers, matmul, optical flow, even a full int8 CNN are
+            each <span class="big">a few dozen standard RVV instructions</span> — not a Verilog project.
+            If you can write a vector loop, you can program the accelerator.</p>
+        </div>
+      </div>
+
+      <div class="point">
+        <div class="num">2</div>
+        <div>
+          <h3>The second dimension is free</h3>
+          <p>A single CSR flip (<code>csrw 0x7c0</code>) turns every <i>horizontal</i> op into a
+            <i>vertical</i> one. Separable filters, <span class="big">on-chip transpose, matmul, and
+            cross-row reductions</span> cost nothing extra. Sobel’s vertical gradient is the exact same
+            code as the horizontal one + one <code>csrw</code> — on stock RVV that needs an explicit transpose.</p>
+        </div>
+      </div>
+
+      <div class="point">
+        <div class="num">3</div>
+        <div>
+          <h3>One instruction = thousands of pixel ops</h3>
+          <p><code>vrgather</code> → <span class="big">16,384 parallel LUT look-ups</span> in one
+            instruction (gamma / tone-map / activation). Per-row <code>vredsum</code> → 128 dot-products
+            (FC layer / template match / SAD stereo). Native <span class="big">int8 saturating math</span>
+            for quantized inference, and argmax runs on the vector unit — no scalar tournament.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- HARDWARE ---------- -->
+    <div class="col hw">
+      <div class="col-head">
+        <span class="who">Hardware</span>
+        <span class="for">For hardware engineers</span>
+      </div>
+
+      <div class="point">
+        <div class="num">1</div>
+        <div>
+          <h3>128× logical parallelism at ~2-lane cost</h3>
+          <p>The 128-row grid is <span class="big">time-multiplexed over a narrow physical datapath</span>
+            (2 lanes) — you get an image-wide fabric without 16K physical PEs. Built on the open
+            ChipsAlliance <b>T1</b> vector machine; fully parameterizable vLen / lanes / banks.</p>
+        </div>
+      </div>
+
+      <div class="point">
+        <div class="num">2</div>
+        <div>
+          <h3>Conflict-free transpose in the register file</h3>
+          <p>A <span class="big">diagonal-skewed VRF banking</span> scheme scatters bytes so a column
+            (cross-row) access is as cheap as a row access — <i>same SRAM, same cycle</i>. The “vertical
+            mode” is just a read/write permutation: <span class="big">no transpose engine, no ping-pong buffer.</span></p>
+        </div>
+      </div>
+
+      <div class="point">
+        <div class="num">3</div>
+        <div>
+          <h3>FPGA-proven, area-tuned, reproducible</h3>
+          <p>Synthesized &amp; deployed on a <b>Xilinx KV260</b> (Zynq US+): <span class="big">~105K LUT
+            (89%), 144/144 BRAM, timing closed (WNS&nbsp;+0.24&nbsp;ns)</span>. vLen=1024 enabled by a
+            MaskUnit area pass (BRAM-backed v0, on-demand slicer, pipelined slide). Full vLen 256→2048
+            resource sweep characterized.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WORKING TODAY ================= -->
+  <section class="today">
+    <div class="th">
+      <span class="dot"></span>
+      <h2>What works today</h2>
+      <span class="live">● running on real silicon</span>
+    </div>
+
+    <div class="today-grid">
+      <div class="tcard">
+        <h4>End-to-end live SoC on KV260</h4>
+        <div class="pipe">
+          <span>AR1335 sensor</span><span class="ar">→</span><span>AP1302 ISP</span><span class="ar">→</span><span>MIPI CSI-2</span>
+          <span class="ar">→</span><span>FOVEA / T1 2D fabric</span><span class="ar">→</span><span>HDMI out</span>
+        </div>
+        <p style="margin-top:10px">128×128 frames at <b>~26–30 fps</b>; T1 kernel ≈&nbsp;6&nbsp;ms/frame. Two
+          timing-closed bitstreams: <b>vLen=256</b> and <b>vLen=1024</b> (4× register file).</p>
+      </div>
+
+      <div class="tcard">
+        <h4>Live demos on the board</h4>
+        <p><b>Dense optical flow</b> (false-colour motion direction), <b>Sobel</b> edge detect, and
+          camera passthrough — all running on hardware, not just in simulation. On-chip vertical-mode
+          transpose load/store verified end-to-end.</p>
+      </div>
+
+      <div class="tcard">
+        <h4>Cycle-accurate &amp; difftested vs Spike</h4>
+        <p>Sobel · Gaussian blur · FC + ReLU layer · <b>128×128 matmul</b> (via on-chip transpose) ·
+          end-to-end <b>int8 CNN digit classifier</b> — <b>10/10</b> inputs classified correctly. Every
+          kernel checked bit-exact against the RISC-V reference model.</p>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="v">16,384</div><div class="l">pixels touched by a single vector instruction</div></div>
+      <div class="stat"><div class="v">~30 fps</div><div class="l">live camera → fabric → HDMI on commodity FPGA</div></div>
+      <div class="stat"><div class="v">1 CSR</div><div class="l">flips the whole fabric from rows to columns</div></div>
+      <div class="stat"><div class="v">10 / 10</div><div class="l">CNN digit classes correct, fully int8</div></div>
+      <div class="stat"><div class="v">100%</div><div class="l">open ISA + open-source T1 core, reproducible</div></div>
+    </div>
+  </section>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="foot">
+    <div><b>FOVEA — RVV²</b> · a 2D RISC-V Vector fabric for near-sensor vision · <span class="rv">built on the open RISC-V “V” extension + ChipsAlliance T1</span></div>
+    <div>Imperial College London — Final-Year Project · <b>&lt;authors / repo URL&gt;</b></div>
+  </footer>
+
+</div>
+</body>
+</html>
