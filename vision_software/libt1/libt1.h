@@ -121,23 +121,26 @@ int t1_buf_sync_for_cpu(struct t1_buf *buf);
 int t1_buf_sync_for_device(struct t1_buf *buf);
 
 /*
- * BRAM scratchpad on the F4 / 5l bitstream: 32 KB at PA 0xB0000000,
- * reachable from T1 m_axi_hb (via smartconnect_hb/M01) and from both
- * axi_dma masters. UIO-exposed as /dev/uio6 ("bram").
+ * URAM scratchpad on the 5r / 5t bitstreams: 512 KB at PA 0xA0080000
+ * (16/64 URAM288, backed by fpga/wrapper/uram_scratchpad.v), reachable
+ * from T1 m_axi_hb (via smartconnect_hb/M01) and from both axi_dma
+ * masters. UIO-exposed as "bram" (the bram_scratch DT node, reg size
+ * 0x80000). Earlier F4/5l bitstreams used a 32 KB BRAM at 0xB0000000.
  *
  * t1_scratchpad_alloc returns a t1_buf whose .va points into the
- * libt1-owned BRAM mmap and whose .pa is exactly 0xB0000000 + offset.
+ * libt1-owned URAM mmap and whose .pa is exactly T1_SCRATCHPAD_PA
+ * (0xA0080000) + offset.
  * Use this PA as the rs1 to vle/vse instructions when you want T1 to
  * read or write scratchpad instead of DDR. The DMA kernel APIs accept
  * the same PA - descriptor src/dst can mix DDR and scratchpad freely.
  *
  * Caller responsibilities:
- *   * `offset` and `size` must satisfy offset + size <= 32 KB
+ *   * `offset` and `size` must satisfy offset + size <= 512 KB
  *     (T1_SCRATCHPAD_SIZE). Failure returns -1 with errno=ERANGE.
  *   * Caller must pick non-overlapping [offset, offset+size) ranges
  *     for concurrent allocations. There is no internal allocator.
  *
- * Cache coherency: scratchpad is BRAM, non-coherent at the bram_ctrl
+ * Cache coherency: scratchpad is URAM, non-coherent at the bram_ctrl
  * level but PS-side access goes through UIO mmio (uncached by the UIO
  * kernel driver), so t1_buf_sync_for_{cpu,device} are no-ops on
  * scratchpad bufs (they return 0 without touching any sysfs file).
@@ -153,7 +156,7 @@ int t1_buf_sync_for_device(struct t1_buf *buf);
  * so PS direct mmap of /dev/uio6 now works.
  */
 #define T1_SCRATCHPAD_PA   0xA0080000u
-#define T1_SCRATCHPAD_SIZE 0x8000u  /* 32 KB */
+#define T1_SCRATCHPAD_SIZE 0x80000u  /* 512 KB (URAM, 16/64 URAM288) */
 
 int t1_scratchpad_alloc(struct t1_buf *buf, size_t offset, size_t size);
 
