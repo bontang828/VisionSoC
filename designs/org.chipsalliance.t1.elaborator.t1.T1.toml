@@ -101,9 +101,46 @@ cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --c
 [mudkip2d128big1bram1chain2lanescale_fpga]
 cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1"
 
+# ============= WORKING DEMO: correct one for 128*128 pixel grid with LMUL=1 =================
 [mudkip2d128big1bram1chain2lanescale_fpga_maskopt]
 cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1 --useFpgaMaskUnit true"
+# ============================================================================================
 
+
+
+
+
+# ============= REPORT PURPOSE ONLY (not functionally verified): 256*256 pixel grid with LMUL=1 =================
+[mudkip2d128big1bram1chain2lanescale_fpga_maskopt_large]
+cmdopt = "--dLen 128 --extensions zvl2048b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1 --useFpgaMaskUnit true"
+
+
+# ============= REPORT PURPOSE ONLY (not functionally verified): 128*128 pixel grid with LMUL=1 =================
+[mudkip2d128big1bram1chain2lanescale_fpga_maskopt_medium]
+cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1 --useFpgaMaskUnit true"
+
+
+# ============= REPORT PURPOSE ONLY (not functionally verified): 64*64 pixel grid with LMUL=1 =================
+[mudkip2d128big1bram1chain2lanescale_fpga_maskopt_small]
+cmdopt = "--dLen 128 --extensions zvl512b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1 --useFpgaMaskUnit true"
+
+
+# ===== dLen / bank-count sweep — 2 lanes each, XPM block-RAM banks (REPORT-ONLY) =====
+# laneScale is scaled so laneNumber = dLen/datapathWidth = 2 for all three (2 lanes -> 2 BRAM
+# ports). datapathWidth = laneScale*eLen, and numBanks = datapathWidth/8 (= byteCount).
+# --bankBramPrimitive true forces each bank to an XPM block-RAM (MEMORY_PRIMITIVE=block) so
+# the large 8192x128 = 1.05 Mb bank clears Vivado's 1 Mb behavioural-inference limit.
+#   large_dlen256 : laneScale 4 -> datapathWidth 128 -> laneNumber 2, numBanks 16, word 128b
+#   medium_dlen128: laneScale 2 -> datapathWidth 64  -> laneNumber 2, numBanks 8,  word 64b
+#   small_dlen64  : laneScale 1 -> datapathWidth 32  -> laneNumber 2, numBanks 4,  word 32b
+[mudkip2d128big1bram1chain2lanescale_fpga_maskopt_large_dlen256]
+cmdopt = "--dLen 256 --extensions zvl2048b --extensions zve32x --laneScale 4 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1 --useFpgaMaskUnit true --bankBramPrimitive true"
+
+[mudkip2d128big1bram1chain2lanescale_fpga_maskopt_medium_dlen128]
+cmdopt = "--dLen 128 --extensions zvl1024b --extensions zve32x --laneScale 2 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1 --useFpgaMaskUnit true --bankBramPrimitive true"
+
+[mudkip2d128big1bram1chain2lanescale_fpga_maskopt_small_dlen64]
+cmdopt = "--dLen 64 --extensions zvl512b --extensions zve32x --laneScale 1 --chainingSize 1 --vrfBankSize 1 --vrfRamType p0rw --vfuInstantiateParameter minimalFpga --rowNumber 1 --baseLMUL 1 --useFpgaMaskUnit true --bankBramPrimitive true"
 
 
 

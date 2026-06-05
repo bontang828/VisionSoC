@@ -21,11 +21,36 @@ case class SharedVRFParam(
   laneNumber:          Int,
   datapathWidth:       Int,
   chainingSize:        Int,
-  timeMultiplexBatch:  Int
+  timeMultiplexBatch:  Int,
+  // When true, back each bank with an explicit XPM block-RAM primitive
+  // (fpga/wrapper/vrf_bank_bram.v) instead of the chisel-inferred SRAM. Forces
+  // BRAM and dodges Vivado's 1 Mb behavioural-memory limit (large sweep bank =
+  // 8192x128 = 1.05 Mb). Default false -> deployed/sim configs unchanged.
+  bankBramPrimitive:   Boolean = false
 ) {
-  require(laneNumber == 2, "SharedVRF requires exactly 2 lanes per row due to FPGA BRAM dual port optimisation")
+  // SharedVRF maps the 2 lanes of a row onto the 2 read-write ports of a dual-port
+  // BRAM (lane 0 -> port 0, lane 1 -> port 1) -- the FPGA BRAM dual-port optimisation,
+  // so laneNumber must be exactly 2. A wider dLen (more bits/cycle) is obtained by
+  // KEEPING 2 lanes and widening the datapath (laneScale), which widens each bank's
+  // word and scales numBanks below -- NOT by adding lanes. (laneNumber != 2 would have
+  // to share or replicate the 2 BRAM ports and is not supported.)
+  require(laneNumber == 2, "SharedVRF requires exactly 2 lanes (one per dual-port BRAM port)")
 
-  val numBanks:             Int = 8 //based on diagonal skewing in memory mapping and how many banks needed for parallel access to a register
+  // numBanks = byteCount = datapathWidth/8, the diagonal-banking invariant: the
+  // byteCount column-neighbours of one datapath word must each land in a distinct
+  // bank for a single-cycle vertical gather (replaces the old magic 8). With
+  // laneNumber pinned at 2 (2 lanes -> 2 BRAM ports), the bank count scales with
+  // dLen via laneScale (datapathWidth = laneScale*eLen):
+  //   datapathWidth=128 (laneScale4, dLen256) -> 16 banks
+  //   datapathWidth=64  (laneScale2, dLen128) -> 8  banks  (== original/deployed)
+  //   datapathWidth=32  (laneScale1, dLen64)  -> 4  banks
+  val numBanks:             Int = datapathWidth / 8
+  val bankIdxBits:          Int = log2Ceil(numBanks)
+  // Each bank is a dual-port BRAM: 2 RW ports, one per lane (laneNumber == 2). A
+  // wider dLen adds more BANKS (numBanks above), not more ports per bank, for the
+  // parallel vertical access. parallel byte-accesses/cycle = numBanks * 2 ports
+  // = laneNumber * byteCount.
+  val sramReadWritePorts:   Int = laneNumber
   val regNum:               Int = 32 //based on the RVV spec
   val regNumBits:           Int = log2Ceil(regNum)
   val instructionIndexBits: Int = log2Ceil(chainingSize) + 1
@@ -109,15 +134,74 @@ class LaneVRFPorts(param: VRFParam, rowCounterBits: Int = 1) extends Bundle {
   val loadDataInLSUWriteQueue: UInt                   = Input(UInt(param.chaining1HBits.W))
 }
 
-// Shared VRF consisted of 8 SRAM instances, due to 8 banks for diagonal skewing in memory mapping. Each SRAM has 2 ports, one for each lane.
-// Memory addressing looks like this below:
+// Shared VRF = numBanks SRAM instances for diagonal skewing. numBanks is now
+// derived from dLen (= dLen/(2*byteCount)): dLen=128 -> 8 banks (original),
+// 256 -> 16, 64 -> 4. Each SRAM has laneNumber read-write ports (one per lane).
+// Memory addressing (bankIdxBits = log2(numBanks)):
 // | rowCounter (time-multiplex) | vs (reg index) | offset (group index) | laneIndex |
-//   7 bits for 128 rows          5 bits for 32 reg   1 bit for 2 groups    1bit for 2 lanes
-// 
-// logicalAddr = vs ## offset ## laneIndex   (7 bits, 0..127)
-// flatAddr    = rowCounter ## logicalAddr    (14 bits, 0..16383) <- full address map of each individual entries
-// bankAddr    = flatAddr >> 3               (11 bits, 0..2047) <- address used within a bank
-// bank        = (rowCounter + logicalAddr)[2:0]
+//   rowCounterBits                5 bits for 32 reg   vrfOffsetBits         log2(laneNumber)
+//
+// logicalAddr = vs ## offset ## laneIndex
+// flatAddr    = rowCounter ## logicalAddr          <- full per-entry address map
+// bankAddr    = flatAddr >> bankIdxBits            <- address used within a bank
+// bank        = (rowCounter + logicalAddr)[bankIdxBits-1:0]
+
+// XPM block-RAM BlackBox for a SharedVRF bank: true dual-port, byte-masked,
+// 1-cycle read. Used only when bankBramPrimitive is set; forces BRAM and dodges
+// Vivado's 1 Mb behavioural-memory limit. Synth-only (no Verilator resource) -
+// Vivado resolves it from fpga/wrapper/vrf_bank_bram.v via system_top.tcl.
+class VrfBankBram(dataWidth: Int, addrWidth: Int, memDepth: Int)
+    extends BlackBox(
+      Map("DATA_WIDTH" -> dataWidth, "ADDR_WIDTH" -> addrWidth, "MEM_DEPTH" -> memDepth)
+    ) {
+  override def desiredName: String = "vrf_bank_bram"
+  val io = IO(new Bundle {
+    val clk    = Input(Clock())
+    val a_en   = Input(Bool())
+    val a_we   = Input(UInt((dataWidth / 8).W))
+    val a_addr = Input(UInt(addrWidth.W))
+    val a_din  = Input(UInt(dataWidth.W))
+    val a_dout = Output(UInt(dataWidth.W))
+    val b_en   = Input(Bool())
+    val b_we   = Input(UInt((dataWidth / 8).W))
+    val b_addr = Input(UInt(addrWidth.W))
+    val b_din  = Input(UInt(dataWidth.W))
+    val b_dout = Output(UInt(dataWidth.W))
+  })
+}
+
+// Uniform per-bank dual-port memory so the read/write fabric drives either the
+// inferred chisel SRAM (default) or the XPM BRAM BlackBox through the same calls.
+// The SRAM path produces RTL identical to before, so non-flag configs (including
+// the deployed bitstream config) are byte-for-byte unchanged.
+sealed trait BankMem {
+  def drive(port: Int, address: UInt, enable: Bool, isWrite: Bool,
+            writeData: Vec[UInt], mask: Vec[Bool]): Unit
+  def readData(port: Int): UInt
+}
+final class SramBankMem(rf: SRAMInterface[Vec[UInt]]) extends BankMem {
+  def drive(port: Int, address: UInt, enable: Bool, isWrite: Bool,
+            writeData: Vec[UInt], mask: Vec[Bool]): Unit = {
+    rf.readwritePorts(port).address   := address
+    rf.readwritePorts(port).enable    := enable
+    rf.readwritePorts(port).isWrite   := isWrite
+    rf.readwritePorts(port).writeData := writeData
+    rf.readwritePorts(port).mask.get  := mask
+  }
+  def readData(port: Int): UInt = rf.readwritePorts(port).readData.asUInt
+}
+final class BramBankMem(bb: VrfBankBram) extends BankMem {
+  def drive(port: Int, address: UInt, enable: Bool, isWrite: Bool,
+            writeData: Vec[UInt], mask: Vec[Bool]): Unit = {
+    val we = Mux(isWrite, mask.asUInt, 0.U)
+    if (port == 0) {
+      bb.io.a_en := enable; bb.io.a_we := we; bb.io.a_addr := address; bb.io.a_din := writeData.asUInt
+    } else {
+      bb.io.b_en := enable; bb.io.b_we := we; bb.io.b_addr := address; bb.io.b_din := writeData.asUInt
+    }
+  }
+  def readData(port: Int): UInt = if (port == 0) bb.io.a_dout else bb.io.b_dout
+}
 
 class SharedVRF(val parameter: SharedVRFParam) extends Module {
   val vrfParam: VRFParam = parameter.toVRFParam
@@ -137,37 +221,59 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
   }
 
   // Bon2D: byte-granular writes for vertical-mode scatter. Each SRAM element is a byte; mask selects which bytes update.
+  // byteCount = bytes per datapath word (= ramWidth/8). This is the vertical-mode
+  // gather/scatter width and is INDEPENDENT of numBanks (which now scales with dLen).
   val byteCount: Int = parameter.ramWidth / 8
-  val vrfSRAM: Seq[SRAMInterface[Vec[UInt]]] = Seq.fill(parameter.numBanks)(
-    SRAM.masked(
-      size = parameter.bankDepth,
-      tpe = Vec(byteCount, UInt(8.W)),
-      numReadPorts = 0,
-      numWritePorts = 0,
-      numReadwritePorts = 2
-    )
-  )
+  // Dual-port banks (sramReadWritePorts = min(laneNumber,2)). numBanks scales with
+  // datapathWidth so wider datapaths get more banks for parallel vertical access.
+  // bankBramPrimitive picks an explicit XPM block-RAM per bank; otherwise the
+  // chisel-inferred SRAM (identical to the original design).
+  val vrfBanks: Seq[BankMem] = Seq.tabulate(parameter.numBanks) { _ =>
+    if (parameter.bankBramPrimitive) {
+      val bb = Module(new VrfBankBram(parameter.ramWidth, parameter.bankAddrBits, parameter.bankDepth))
+      bb.io.clk := clock
+      new BramBankMem(bb)
+    } else {
+      new SramBankMem(SRAM.masked(
+        size = parameter.bankDepth,
+        tpe = Vec(byteCount, UInt(8.W)),
+        numReadPorts = 0,
+        numWritePorts = 0,
+        numReadwritePorts = parameter.sramReadWritePorts
+      ))
+    }
+  }
 
   // ----- Compute bank index and bank-internal address ----
   // Dynamic rc + dynamic laneIdx so vertical mode can feed per-byte rowCounter_i and byte-lane.
+  // logicalAddr = vs ## offset ## laneField, where the lane field is cLaneBits wide
+  // (= log2(laneNumber)); empty when laneNumber==1. Generalises the old hard-coded
+  // `laneIdx(0)` which assumed exactly 2 lanes and made logicalAddr 1 bit too narrow
+  // at laneNumber=4 (dLen=256). Width is now exactly logicalAddrBits for any laneNumber.
+  def logicalAddrOf(vs: UInt, offset: UInt, laneIdx: UInt): UInt =
+    if (parameter.cLaneBits == 0) vs ## offset
+    else vs ## offset ## laneIdx.pad(parameter.cLaneBits)(parameter.cLaneBits - 1, 0)
+
   def bankSelectRC(vs: UInt, offset: UInt, laneIdx: UInt, rc: UInt): UInt = {
-    val logicalAddr = vs ## offset ## laneIdx(0)
-    UIntToOH((rc +& logicalAddr)(2, 0), parameter.numBanks)
+    val logicalAddr = logicalAddrOf(vs, offset, laneIdx)
+    // bank = (rc + logicalAddr) mod numBanks  (diagonal skew). Index width = log2(numBanks).
+    UIntToOH((rc +& logicalAddr)(parameter.bankIdxBits - 1, 0), parameter.numBanks)
   }
 
   def bankInternalAddrRC(vs: UInt, offset: UInt, laneIdx: UInt, rc: UInt): UInt = {
-    val logicalAddr = vs ## offset ## laneIdx(0)
+    val logicalAddr = logicalAddrOf(vs, offset, laneIdx)
     val flatAddr    = rc ## logicalAddr
-    val shifted     = (flatAddr >> 3).asUInt
+    // within-bank address = flatAddr / numBanks  (>> log2(numBanks)).
+    val shifted     = (flatAddr >> parameter.bankIdxBits).asUInt
     shifted(parameter.bankAddrBits - 1, 0)
   }
 
   // Horizontal-mode convenience wrappers - use module's global rowCounter and compile-time laneIdx.
   def bankSelect(vs: UInt, offset: UInt, laneIdx: Int): UInt =
-    bankSelectRC(vs, offset, laneIdx.U(1.W), rowCounter)
+    bankSelectRC(vs, offset, laneIdx.U(parameter.cLaneBits.max(1).W), rowCounter)
 
   def bankInternalAddr(vs: UInt, offset: UInt, laneIdx: Int): UInt =
-    bankInternalAddrRC(vs, offset, laneIdx.U(1.W), rowCounter)
+    bankInternalAddrRC(vs, offset, laneIdx.U(parameter.cLaneBits.max(1).W), rowCounter)
 
   // ---- Per-lane logic ------
   // Some of the logics are similar to the old VRF.scala (chaining record maintenance, hazard detection, write check), but the read/write arbitration and bank selection are redesigned to fit the shared SRAM architecture.
@@ -454,7 +560,10 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
       laneIdx.U(parameter.cLaneBits.W),
       0.U(parameter.cByteBits.W)
     )
-    val rcI:    Seq[UInt] = Seq.tabulate(parameter.numBanks) { i =>
+    // One row-neighbour per byte of the datapath word (byteCount), NOT per bank.
+    // With numBanks decoupled from byteCount, these byteCount neighbours fan out
+    // across (a subset of) the numBanks physical banks via the diagonal skew.
+    val rcI:    Seq[UInt] = Seq.tabulate(byteCount) { i =>
       (rcBase + i.U)(parameter.rowCounterBits - 1, 0)
     }
     val vBankOHPerI: Seq[UInt] = rcI.map(rc => bankSelectRC(vsStore, cGroup, cLane, rc))
@@ -528,12 +637,13 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
       laneIdx.U(parameter.cLaneBits.W),
       0.U(parameter.cByteBits.W)
     )
-    val rcIW: Seq[UInt] = Seq.tabulate(parameter.numBanks) { i =>
+    // One scatter source per byte of the datapath word (byteCount), NOT per bank.
+    val rcIW: Seq[UInt] = Seq.tabulate(byteCount) { i =>
       (rcBaseW + i.U)(parameter.rowCounterBits - 1, 0)
     }
     val vWriteBankOHPerI: Seq[UInt] = rcIW.map(rc => bankSelectRC(vsStoreW, cGroup, cLane, rc))
     val vWriteAddrPerI:   Seq[UInt] = rcIW.map(rc => bankInternalAddrRC(vsStoreW, cGroup, cLane, rc))
-    val writeByteOfI:     Seq[UInt] = Seq.tabulate(parameter.numBanks) { i =>
+    val writeByteOfI:     Seq[UInt] = Seq.tabulate(byteCount) { i =>
       writePipe.bits.data(8 * i + 7, 8 * i)
     }
 
@@ -545,7 +655,7 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     // For full-mask wide-vert writes (e.g. vector compute) all 8 mask bits
     // are 1, so every bank still fires - preserves Phase 2 baseline.
     val vWritePerBankValid: Vec[Bool] = VecInit(Seq.tabulate(parameter.numBanks) { b =>
-      val maskedHits: Seq[Bool] = (0 until parameter.numBanks).map(i =>
+      val maskedHits: Seq[Bool] = (0 until byteCount).map(i =>
         vWriteBankOHPerI(i)(b) && writePipe.bits.mask(i))
       VecInit(maskedHits).asUInt.orR && vWriteFire
     })
@@ -559,7 +669,9 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
     // ----- Connect to SRAM banks (lane's port) ----
     // Only lane 0 drives reset (avoids same-address dual-port write during reset)
     val laneResetValid: Bool = if (laneIdx == 0) resetValid else false.B
-    vrfSRAM.zipWithIndex.foreach { case (rf, bank) =>
+    // One RW port per lane (laneNumber == 2): lane 0 -> port 0, lane 1 -> port 1.
+    val portIdx: Int = laneIdx % parameter.sramReadWritePorts
+    vrfBanks.zipWithIndex.foreach { case (bankMem, bank) =>
       val hWriteValid: Bool = writePipe.valid && writeBankPipe(bank) && !useVerticalWrite
       val vWriteValid: Bool = vWritePerBankValid(bank)
       val ramWriteValid: Bool = hWriteValid || vWriteValid || laneResetValid
@@ -592,12 +704,15 @@ class SharedVRF(val parameter: SharedVRFParam) extends Module {
       val portWriteAddr: UInt =
         Mux(useVerticalWrite && !laneResetValid, vWritePerBankAddr(bank), writeAddress)
 
-      rf.readwritePorts(laneIdx).address   := Mux(ramWriteValid, portWriteAddr, firstReadPipe(bank).bits.address)
-      rf.readwritePorts(laneIdx).enable    := ramWriteValid || firstReadPipe(bank).valid
-      rf.readwritePorts(laneIdx).isWrite   := ramWriteValid
-      rf.readwritePorts(laneIdx).writeData := portWriteData
-      rf.readwritePorts(laneIdx).mask.get  := portWriteMask
-      readResultF(bank) := rf.readwritePorts(laneIdx).readData.asUInt
+      bankMem.drive(
+        portIdx,
+        Mux(ramWriteValid, portWriteAddr, firstReadPipe(bank).bits.address),
+        ramWriteValid || firstReadPipe(bank).valid,
+        ramWriteValid,
+        portWriteData,
+        portWriteMask
+      )
+      readResultF(bank) := bankMem.readData(portIdx)
     }
 
     // Vertical-mode per-port outputs. Computed unconditionally; selected via Mux below.

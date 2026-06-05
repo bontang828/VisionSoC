@@ -102,6 +102,14 @@ add_files -norecurse ${wrapper_dir}/uram_scratchpad.v
 # maskunit_fpga_handoff.md.
 add_files -norecurse ${wrapper_dir}/v0_bram.v
 
+# SharedVRF bank block-RAM: xpm_memory_tdpram, MEMORY_PRIMITIVE="block",
+# true dual-port byte-masked. Instanced only when the elaborator was invoked
+# with --bankBramPrimitive true (the dLen / bank-count report sweep); other
+# configs keep the inferred chisel SRAM. Synth-only (no Verilator twin, since
+# those configs are not in the t1emu TestBench toml). See fpga_build_status.md
+# § 0.15.
+add_files -norecurse ${wrapper_dir}/vrf_bank_bram.v
+
 update_compile_order -fileset sources_1
 
 

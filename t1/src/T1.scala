@@ -148,7 +148,13 @@ case class T1Parameter(
   // write-mask trees) instead of the default MaskUnit. Mirrors the
   // vfuInstantiateParameter == "minimalFpga" pattern but kept as a
   // separate flag so the two can be mixed if needed.
-  useFpgaMaskUnit:         Option[Boolean] = Some(false))
+  useFpgaMaskUnit:         Option[Boolean] = Some(false),
+  // bankBramPrimitive: when true, back each SharedVRF bank with an explicit
+  // XPM block-RAM primitive (fpga/wrapper/vrf_bank_bram.v) instead of the
+  // chisel-inferred SRAM. Forces BRAM and dodges Vivado's 1 Mb behavioural
+  // memory limit for wide banks. Default false leaves all existing configs
+  // (incl. the deployed bitstream + t1emu sim) on the inferred SRAM.
+  bankBramPrimitive:       Option[Boolean] = Some(false))
     extends SerializableModuleParameter {
   // TODO: expose it with the Property API
   override def toString: String =
@@ -527,7 +533,8 @@ class T1(val parameter: T1Parameter)
     laneNumber         = parameter.laneNumber,
     datapathWidth      = parameter.datapathWidth,
     chainingSize       = parameter.chainingSize,
-    timeMultiplexBatch = parameter.timeMultiplexBatch
+    timeMultiplexBatch = parameter.timeMultiplexBatch,
+    bankBramPrimitive  = parameter.bankBramPrimitive.getOrElse(false)
   )
   val sharedVRF2D: Seq[SharedVRF] = Seq.tabulate(parameter.numRows)(_ => Module(new SharedVRF(sharedVRFParam)))
 

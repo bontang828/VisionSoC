@@ -46,7 +46,8 @@ object T1 extends SerializableModuleElaborator {
     @arg(name = "matrixAluColSize") matrixAluColSize:               Option[Int],
     @arg(name = "rowNumber") rowNumber:                             Option[Int],
     @arg(name = "baseLMUL") baseLMUL:                               Option[Int],
-    @arg(name = "useFpgaMaskUnit") useFpgaMaskUnit:                 Option[Boolean]) {
+    @arg(name = "useFpgaMaskUnit") useFpgaMaskUnit:                 Option[Boolean],
+    @arg(name = "bankBramPrimitive") bankBramPrimitive:             Option[Boolean]) {
     def convert: P = {
       val fp   = extensions.contains("zve32f")
       val zvbb = extensions.contains("zvbb")
@@ -74,7 +75,8 @@ object T1 extends SerializableModuleElaborator {
         matrixAluColSize,
         rowNumber,
         baseLMUL,
-        useFpgaMaskUnit
+        useFpgaMaskUnit,
+        bankBramPrimitive
       )
     }
   }

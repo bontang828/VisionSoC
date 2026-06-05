@@ -117,6 +117,233 @@ swap by changing the `system_top_wrapper.bit.bin` and `.dtbo` in
     old CRC-mismatch panic is gone. Old firmware preserved at
     `/lib/firmware/ap1302_ar1335_single_fw.bin.old`.
 
+### 0.15 dLen / bank-count sweep + SharedVRF numBanks generalization (REPORT-ONLY, 2026-05-29/30)
+
+**REVISION v2 (2026-05-30): switched to 2 lanes per config.** The v1 sweep below
+varied dLen at fixed laneScale=2 → laneNumber 4/2/1, which forced lane-port sharing
+(4 lanes on 2 BRAM ports) and made small single-port → URAM. v2 instead scales
+`laneScale` (4/2/1) so **laneNumber=2 for all three** (2 lanes ↔ 2 dual-port BRAM
+ports), and `numBanks = datapathWidth/8` (= byteCount, the diagonal-banking invariant):
+
+| Config | dLen | laneScale | datapathWidth | laneNumber | numBanks | bank word | bankDepth |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| large_dlen256  | 256 | 4 | 128 | 2 | 16 | 128b | 8192 |
+| medium_dlen128 | 128 | 2 | 64  | 2 | 8  | 64b  | 8192 |
+| small_dlen64   | 64  | 1 | 32  | 2 | 4  | 32b  | 8192 |
+
+v2 RTL changes: dropped the unused `dLen` param; `numBanks = datapathWidth/8`
+(deployed dLen=128/dpw=64 still → 8, unchanged). All 3 RTL built OK; bank modules
+`sram_…_2RW_8M_8192x{128,64,32}` confirm **dual-port** banks (small no longer
+single-port → expected to infer BRAM not URAM). Synth (`-s -a`) IN FLIGHT;
+v2 results + small's memory-primitive verdict appended when done. Master logs:
+`test_output/dlen_sweep_20260529-184136/` (`rtl_phase3.log`, `synth_phase3.log`).
+
+**v2 synth results (2026-05-30):**
+
+| Metric | large_dlen256 (16 banks) | medium_dlen128 (8 banks) | small_dlen64 (4 banks) |
+|---|---:|---:|---:|
+| status | **SYNTH FAIL** | OK | OK |
+| system LUT | — | 104,717 | 64,367 |
+| system RAMB36 / URAM | — | 143 / 16 | 44 / 16 |
+| `sharedVRF2D_0` LUT | — | 10,651 | 3,247 |
+| `sharedVRF2D_0` RAMB36 / URAM | — | 128 / 0 | **32 / 0** |
+| per-bank | 8192×128 | 8192×64 (16 RAMB36) | 8192×32 (**8 RAMB36**) |
+
+- **small VRF is now BRAM** (32 RAMB36, 0 URAM) — the 2-lane/dual-port change moved it
+  off URAM. The user's "force small to BRAM" request is satisfied by the dual-port geometry
+  (no explicit primitive needed for small).
+- **medium == deployed** (104,717 LUT / 143 RAMB36), unchanged.
+- **large_dlen256 fails synth**: bank = 8192×128 = 1,048,576 bits > Vivado's 1,000,000-bit
+  behavioral-inference limit (`[Synth 8-4556]` on `sram_…_8192x128.sv`). → RESOLVED in v3.
+
+**REVISION v3 (2026-05-30): explicit XPM block-RAM banks, all 3 synthesize.**
+Added `--bankBramPrimitive` flag (default false → deployed/sim untouched). When set, each
+SharedVRF bank is an XPM `xpm_memory_tdpram`, `MEMORY_PRIMITIVE="block"`, true-dual-port,
+byte-masked, 1-cycle read (`fpga/wrapper/vrf_bank_bram.v` + `VrfBankBram` BlackBox + uniform
+`BankMem` trait in `SharedVRF.scala`; synth-only, no Verilator twin). Flag set on all 3 sweep
+configs. XPM has no behavioral-size limit → large clears the 1 Mb wall, and every bank is
+forced to BRAM.
+
+| Metric | large_dlen256 (16 banks) | medium_dlen128 (8 banks) | small_dlen64 (4 banks) |
+|---|---:|---:|---:|
+| status | **OK** | OK | OK |
+| system LUT | 231,183 | 104,392 | 64,448 |
+| system FF | 174,814 | 108,013 | 75,255 |
+| system RAMB36 / RAMB18 / URAM | 523 / 2 / 20 | 143 / 2 / 16 | 44 / 2 / 16 |
+| system DSP | 55 | 31 | 19 |
+| `u_t1` LUT / RAMB36 | 207,443 / 512 | 82,830 / 132 | 43,199 / 33 |
+| `sharedVRF2D_0` LUT | 57,482 | 10,816 | 3,351 |
+| **`sharedVRF2D_0` RAMB36 / URAM** | **512 / 0** | **128 / 0** | **32 / 0** |
+| per-bank (vrf_bank_bram) | 8192×128 = 32 RAMB36 | 8192×64 = 16 RAMB36 | 8192×32 = 8 RAMB36 |
+| `maskUnit2D_0` RAMB36 / URAM | 0 / 4 | 4 / 0 | 1 / 0 |
+
+**Findings (v3).**
+1. **All banks are BRAM now** (sharedVRF URAM=0 everywhere). Bank count scales 16/8/4 with
+   datapathWidth; per-bank tiles 32/16/8 ∝ word width (128/64/32, depth fixed 8192).
+2. **XPM is resource-neutral vs inferred** where both work: medium XPM 10,816 LUT / 128 RAMB36
+   vs v2 inferred 10,651 / 128; small XPM 3,351 / 32 vs v2 inferred 3,247 / 32. The ~1-2% LUT
+   delta is XPM wrapper steering; BRAM identical. So forcing the primitive costs ~nothing for
+   the configs that already inferred BRAM, and is the *only* way large synthesizes.
+3. **large is LUT-heavy intrinsically** (sharedVRF 57 k LUT): the 128-bit-wide, 32-deep-cascade
+   BRAM needs large read-data output muxing — a property of the wide datapath, not the XPM.
+4. **Budget (117,120 LUT / 144 BRAM36 / 64 URAM):** large busts LUT (197%) and BRAM (363%);
+   medium fits (~89% LUT, 143 BRAM36 ≈ deployed); small fits easily (55% LUT, 44 BRAM36).
+5. Deployed config + t1emu sim untouched (flag defaults false; inferred-SRAM path unchanged).
+
+--- v1 (laneNumber 4/2/1, superseded) below for reference ---
+
+**Goal.** Show how T1/SharedVRF resources scale when `numBanks` tracks `dLen`
+(more lanes → more dual-port banks for parallel vertical-mode access), holding
+the bank word at 64 bits. Three configs (copies of large/medium/small varying
+`--dLen`, `--baseLMUL 1`, `--laneScale 2`):
+
+| Config suffix | dLen | laneNumber=dLen/64 | numBanks | vLen |
+|---|---:|---:|---:|---:|
+| `…_maskopt_large_dlen256`  | 256 | 4 | **16** | 2048 |
+| `…_maskopt_medium_dlen128` | 128 | 2 | **8**  | 1024 |
+| `…_maskopt_small_dlen64`   | 64  | 1 | **4**  | 512  |
+
+**SharedVRF RTL change (`t1/src/vrf/SharedVRF.scala`, resource-only — NOT
+functionally verified for laneNumber≠2):**
+- `SharedVRFParam` now takes `dLen` (threaded from `T1.scala`, like `vLen`).
+  `numBanks = dLen/(2*(datapathWidth/8))` replaces the hardcoded `8`
+  (dLen=128 still → 8, so all deployed dLen=128 configs are unchanged).
+- Banks stay **dual-port** (`sramReadWritePorts = min(laneNumber,2)`); the extra
+  *bank count*, not extra ports, provides parallel access. parallel byte-accesses
+  = `numBanks*2 = laneNumber*byteCount`.
+- `require(laneNumber==2)` relaxed to `>=1`.
+- Lane field in `logicalAddr` generalized from the hardcoded 1-bit `laneIdx(0)`
+  to `cLaneBits` (fixes the laneNumber=4 "High index 13 out of range" width bug).
+- Vertical gather/scatter width decoupled from `numBanks` (now iterates
+  `byteCount`); bank index slice/shift parameterized by `bankIdxBits`.
+- Lanes mapped onto the ≤2 physical ports via `portIdx = laneIdx % sramReadWritePorts`.
+
+**RTL: all 3 built OK** (`test_output/<cfg>/rtl-20260529-18/19xx/`). `T1.sv` sizes
+track the lane count: large 1.52 MB (4 lanes) / medium 738 KB (2) / small 379 KB (1).
+
+**Synth COMPLETE 2026-05-29/30 (all 3 OK).** Master logs:
+`test_output/dlen_sweep_20260529-184136/`; reports in `fpga/build/<cfg>-<ts>/`.
+
+| Metric | large dLen256 (16 banks/4 lanes/vLen2048) | medium dLen128 (8/2/1024) | small dLen64 (4/1/512) |
+|---|---:|---:|---:|
+| system LUT | 218,174 | 104,717 | 57,590 |
+| system FF | 191,051 | 108,017 | 68,709 |
+| system RAMB36 / RAMB18 | 523 / 2 | 143 / 2 | 12 / 2 |
+| system URAM | 20 | 16 | 20 |
+| system DSP | 55 | 31 | 19 |
+| `u_t1` LUT | 194,434 | 83,147 | 36,334 |
+| `u_t1` RAMB36 / URAM | 512 / 4 | 132 / 0 | 1 / 4 |
+| `sharedVRF2D_0` LUT | 37,115 | 10,651 | 2,426 |
+| `sharedVRF2D_0` FF | 3,342 | 1,317 | 547 |
+| `sharedVRF2D_0` RAMB36 / URAM | 512 / 0 | 128 / 0 | 0 / 4 |
+| `maskUnit2D_0` LUT | 54,604 | 21,034 | 8,787 |
+| VRF banks (count × depth × width, ports) | 16 × 16384×64, 2RW | 8 × 8192×64, 2RW | 4 × 4096×64, **1RW** |
+
+**Findings.**
+1. **numBanks scaled exactly as designed** (16/8/4 instances counted in the reports).
+2. **Doubling banks at fixed vLen does NOT change VRF BRAM.** Cross-ref §0.14
+   large (vLen2048, dLen128, **8** banks): `sharedVRF`=**512 RAMB36**, system 523.
+   §0.15 large (vLen2048, dLen256, **16** banks): `sharedVRF`=**512 RAMB36**, system
+   523 — identical. Total VRF storage = numBanks·bankDepth·64 = vLen²/16·64 is set by
+   vLen; more banks just split the same bits into more/shallower banks (16×16384 vs
+   8×32768, both 16 Mbit → same 512 tiles). So the **dLen/bank knob buys parallel
+   vertical-access bandwidth at ~zero extra BRAM.**
+3. **The real cost of dLen is lane datapath logic.** At fixed vLen=2048, dLen 128→256
+   (2→4 lanes): system LUT 120,284 → 218,174 (**+81%**), DSP 31→55, `maskUnit` LUT
+   ~2.6×, `sharedVRF` LUT 13,110 → 37,115 (~2.8×, crossbar widens with banks×lanes).
+   FF and LUT roughly track laneNumber.
+4. **small VRF mapped to URAM, not BRAM.** sramReadWritePorts = min(1,2) = 1 → the
+   4×4096×64 single-port banks inferred as **4 URAM** (1 each), 0 RAMB36. medium/large
+   are dual-port → RAMB36. (If an apples-to-apples BRAM comparison is wanted for small,
+   force sramReadWritePorts=2.)
+5. **medium == deployed 5t-maskopt, bit-for-bit** (104,717 LUT, 143 RAMB36, 16 URAM,
+   31 DSP) — confirms the `dLen=128 → 8 banks` path is unchanged and the deployed
+   bitstream config is untouched.
+6. **Budget (117,120 LUT / 144 BRAM36 / 64 URAM):** large busts everything (218k LUT
+   =186%, 523 BRAM=363%); medium = deployable; small fits easily (57k LUT, 12 BRAM, 20 URAM).
+
+### 0.14 VRF-width synth sweep (REPORT-ONLY, IN FLIGHT 2026-05-29)
+
+**Purpose.** Measure how T1 synthesis resources — system LUT, BRAM tiles,
+and especially the SharedVRF and MaskUnitFpga sub-hierarchies — scale with
+VRF width, by sweeping `vLen` at a **fixed `baseLMUL=1`**. Synthesis-resource
+study only; the user explicitly accepts these are NOT functionally correct
+for the deployed 128×128 grid (see geometry note).
+
+**Configs (added to `designs/org.chipsalliance.t1.elaborator.t1.T1.toml`,
+all `--laneScale 2 --rowNumber 1 --baseLMUL 1 --vfuInstantiateParameter
+minimalFpga --useFpgaMaskUnit true`):**
+
+| Config suffix | vLen | targetElementNum = vLen·baseLMUL/8 | timeMultiplexBatch | implied grid |
+|---|---:|---:|---:|---|
+| `…_fpga_maskopt_large`  | 2048 | 256 | 256 | 256-wide row × 256 hw-rows |
+| `…_fpga_maskopt_medium` | 1024 | 128 | 128 | 128×128 (== existing `_fpga_maskopt`) |
+| `…_fpga_maskopt_small`  |  512 |  64 |  64 | 64-wide row × 64 hw-rows |
+
+Because `baseLMUL` is pinned at 1 (not scaled to hold the 128-element image
+row like the functional small/medium/big siblings in §0.13), each `vLen`
+implies a *different* grid geometry, and the LSU's hardcoded
+`logicalRowElements=128` (`StrideBase.scala:157`, `SimpleAccessUnit.scala:820`)
+no longer matches large/small — hence "not functionally verified". The
+TOML comment labels all three "256×256" but only `_large` matches that.
+Elaboration is sound for all three: `cVsOffBits = rowCounterBits −
+cByteBits(3) − cLaneBits(1) − cGroupBits` = 0 in every case.
+
+**Build recipe (per config):**
+```
+bash build_rtl.sh -c <config>
+bash fpga/system/build_fpga.sh -c <config> -s -a   # synth-only + full analysis
+```
+`-a` = `flatten_hierarchy none` + `report_utilization -hierarchical` so the
+SharedVRF / MaskUnitFpga rows survive in `utilization_synth.rpt`.
+
+**Sweep artefacts:** master logs under `test_output/synth_sweep_20260529-141244/`
+(`rtl_phase.log`, then `synth_phase.log`); per-config synth reports land in
+`fpga/build/<config>-<timestamp>/utilization_synth.rpt` + `timing_synth.rpt`.
+
+**Status: COMPLETE 2026-05-29.** All 3 RTL builds + all 3 synth (`-s -a`)
+runs finished OK. Whole sweep ~1h (RTL ~5 min; synth ~30/27/~? min for
+large/medium/small). Reports at
+`fpga/build/<config>-<ts>/utilization_synth.rpt`.
+
+**Synth utilization (hierarchical, `flatten_hierarchy none`):**
+
+| Metric | large (2048) | medium (1024) | small (512) |
+|---|---:|---:|---:|
+| `system_top_wrapper` LUT | 120,284 | 104,717 | 97,457 |
+| system FF | 117,989 | 108,017 | 102,676 |
+| system RAMB36 / RAMB18 | 523 / 2 | 143 / 2 | 45 / 2 |
+| system URAM | 18 | 16 | 16 |
+| system DSP | 31 | 31 | 31 |
+| `u_t1` LUT | 98,711 | 83,147 | 75,896 |
+| `u_t1` RAMB36 | 512 | 132 | 34 |
+| `sharedVRF2D_0` LUT | 13,110 | 10,651 | 10,051 |
+| `sharedVRF2D_0` FF | 1,868 | 1,317 | 1,022 |
+| `sharedVRF2D_0` RAMB36 | 512 | 128 | 32 |
+| `maskUnit2D_0` LUT | 32,452 | 21,034 | 16,198 |
+| `maskUnit2D_0` FF | 23,384 | 15,603 | 11,683 |
+| `maskUnit2D_0` RAMB36 / URAM | 0 / 2 | 4 / 0 | 2 / 0 |
+| VRF bank SRAM module | 32768×64 | 8192×64 | 2048×64 |
+
+**Findings.**
+1. **SharedVRF BRAM scales as vLen² (not vLen) at fixed baseLMUL=1.**
+   `bankDepth = timeMultiplexBatch(vLen/8) × regNum(32) × groupsPerReg(vLen/64)
+   / 8banks = vLen²/128` → 32768 / 8192 / 2048, confirmed by the bank module
+   names. RAMB36 follows: 512 → 128 → 32 (clean ×4 per ×2 vLen). Contrast
+   §0.13's functional sweep, where baseLMUL was scaled to hold the 128×128
+   grid and VRF BRAM scaled only linearly with vLen.
+2. **SharedVRF LUT is nearly flat** (13.1k / 10.7k / 10.1k) — VRF cost is
+   BRAM, not logic. The address-decode/bank-mux glue grows slightly at large.
+3. **MaskUnitFpga is the dominant LUT scaler in T1** (32.5k / 21.0k / 16.2k);
+   its v0 store maps to 2 URAM at vLen=2048 vs 4/2 RAMB36 at 1024/512.
+4. **VRF dominates T1 BRAM**: sharedVRF is 512/523, 128/143, 32/45 of system
+   RAMB36 respectively.
+5. **Budget (KV260: 117,120 LUT, 144 BRAM36, 64 URAM):** large busts BRAM
+   hard (523 = 363%) and LUT (103%) — report-only as expected; medium = the
+   deployed 5t-maskopt point (143 BRAM36 = 99%, 89% LUT, numbers match §0.13
+   bit-for-bit — methodology check); small fits easily (45 BRAM36 = 31%, 83%
+   LUT).
+
 ### 0.13 MaskUnitFpga — area-reduction variant for vLen=1024 (FUNCTIONAL + SYNTH VERIFIED 2026-05-18)
 
 **Motivation.** The 5s vLen=1024 synth pre-flight (§ 0.12) revealed that
