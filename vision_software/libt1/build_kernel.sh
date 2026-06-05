@@ -33,7 +33,7 @@ mkdir -p "$(dirname "$dst")"
     echo "#include <stdint.h>"
     echo
     printf "static const uint32_t %s[] = {\n" "$name"
-    od -An -tx4 -w16 "$tmp/kernel.bin" |
+    od -An -v -tx4 -w16 "$tmp/kernel.bin" |
         awk 'NF { printf "    "; for (i = 1; i <= NF; i++) printf "0x%s, ", $i; printf "\n" }'
     echo "};"
     printf "static const uint32_t %s_count = sizeof(%s) / sizeof(%s[0]);\n" \
