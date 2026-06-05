@@ -1,13 +1,13 @@
 <mxfile host="65bd71144e">
     <diagram name="FPGA System Top (T1 style) v2" id="fpga-system-top-t1style-v2">
-        <mxGraphModel dx="1294" dy="314" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1024" pageHeight="591" math="0" shadow="0">
+        <mxGraphModel dx="1345" dy="435" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1024" pageHeight="591" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
                 <mxCell id="61" value="&lt;b&gt;&lt;font style=&quot;font-size: 14px;&quot;&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp;Programmable Logic (PL)&lt;/font&gt;&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#9E9E9E;verticalAlign=top;align=left;spacingLeft=8;spacingTop=2;fontStyle=2;fontColor=#616161;strokeWidth=2;" parent="1" vertex="1">
                     <mxGeometry x="530" y="940" width="427" height="280" as="geometry"/>
                 </mxCell>
-                <mxCell id="2" value="VisionSoC FPGA — System Top  |  off-chip camera (left) → FPGA fabric (middle) → processor &amp; memory (right)" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#212121;" parent="1" vertex="1">
+                <mxCell id="2" value="VisionSoC FPGA — System Top&amp;nbsp;&amp;nbsp;|&amp;nbsp;&amp;nbsp;off-chip camera (left)&amp;nbsp; → processor &amp;amp; memory (top right)&amp;nbsp;&lt;span style=&quot;color: rgb(33, 33, 33);&quot;&gt;→ FPGA fabric (bottom right)&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;color: rgb(33, 33, 33);&quot;&gt;→ Display&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=15;fontStyle=1;fontColor=#212121;" parent="1" vertex="1">
                     <mxGeometry x="30" y="619" width="970" height="24" as="geometry"/>
                 </mxCell>
                 <mxCell id="3" value="&lt;b&gt;&lt;font style=&quot;font-size: 14px;&quot;&gt;&amp;nbsp; Camera module (off-chip)&lt;/font&gt;&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#9E9E9E;verticalAlign=top;align=left;spacingLeft=8;spacingTop=2;fontStyle=2;fontColor=#616161;strokeWidth=2;" parent="1" vertex="1">
