@@ -448,6 +448,26 @@ int main(int argc, char **argv)
              * the URAM/T1 round trip entirely. */
             memcpy(out.va, in.va, FRAME_BYTES);
             last_kernel_cycles = 0;
+#ifdef ACTIVE_KERNEL_DDR_IO
+        } else {
+            /*
+             * Attention path: run the kernel directly on the DDR `in` -> `out`
+             * udmabufs (operands also DDR, staged by attention_select.h). The
+             * attention kernel wedges the fabric when it reads operands from
+             * URAM, so it uses the all-DDR placement it was hardware-verified
+             * with (libt1/test/attention_probe.c). It also does far fewer LSU
+             * ops than the per-pixel kernels, so skipping the URAM round trip
+             * costs nothing measurable.
+             */
+            (void)t1_perf_start(1);
+            if (issue_active_kernel(in.pa, out.pa) < 0) {
+                die("issue_active_kernel(ddr in -> out)");
+            }
+            last_kernel_cycles = t1_perf_stop();
+            if (t1_buf_sync_for_cpu(&out) < 0) {
+                die("t1_buf_sync_for_cpu(out)");
+            }
+#else
         } else {
             /*
              * Stage 1 (DDR -> URAM half A): the visionsoc DMA fabric is a
@@ -499,6 +519,7 @@ int main(int argc, char **argv)
             if (t1_buf_sync_for_cpu(&out) < 0) {
                 die("t1_buf_sync_for_cpu(out)");
             }
+#endif /* ACTIVE_KERNEL_DDR_IO */
         }
         struct byte_stats out_y_stats = calc_stats(out.va, FRAME_BYTES);
 
