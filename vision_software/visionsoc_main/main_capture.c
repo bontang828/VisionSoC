@@ -472,6 +472,23 @@ int main(int argc, char **argv)
         memcpy(in_buf.va, cb.va, FRAME_BYTES);
         if (t1_buf_sync_for_device(&in_buf) < 0) die("t1_buf_sync_for_device(in)");
 
+#if defined(ACTIVE_KERNEL_PATCH_IO)
+        /*
+         * On-fabric ViT 8x8-patch attention (identical path to main.c):
+         * attention_patch_run patchifies the frame, runs blocked 256-token
+         * attention, and un-patchifies into out_buf.va (Y). It manages its
+         * own staging udmabuf; the PS reads out_buf.va directly, so there is
+         * no DMA round trip and no out sync needed here.
+         */
+        if (attention_patch_run((const uint8_t *)in_buf.va,
+                                (uint8_t *)out_buf.va) < 0)
+            die("attention_patch_run");
+#elif defined(ACTIVE_KERNEL_DDR_IO)
+        /* Attention path: run directly on the DDR in -> out udmabufs. */
+        if (issue_active_kernel(in_buf.pa, out_buf.pa) < 0)
+            die("issue_active_kernel(ddr in -> out)");
+        if (t1_buf_sync_for_cpu(&out_buf) < 0) die("t1_buf_sync_for_cpu(out)");
+#else
         /* DDR -> URAM_HALF_A. */
         if (t1_dma_s2mm_async(0, URAM_HALF_A, FRAME_BYTES) < 0)
             die("t1_dma_s2mm_async(arm uram_a)");
@@ -490,6 +507,7 @@ int main(int argc, char **argv)
             die("t1_dma_mm2s_async(uram_b)");
         if (t1_dma_wait() < 0) die("t1_dma_wait(uram_b -> out)");
         if (t1_buf_sync_for_cpu(&out_buf) < 0) die("t1_buf_sync_for_cpu(out)");
+#endif
 
         const uint8_t *camera_uv = cb.uv_va ?
                                    (const uint8_t *)cb.uv_va :

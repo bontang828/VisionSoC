@@ -33,7 +33,7 @@ PLOTTER="$PERF_DIR/plot_perf.py"
 
 usage() {
     cat >&2 <<EOF
-usage: $0 {sobel|optical_flow|matmul_8bitraw_short|pipeline|both} [N] [--t1-hz HZ]
+usage: $0 {sobel|optical_flow|matmul_8bitraw_short|attention_self|pipeline|both} [N] [--t1-hz HZ]
   N       iters (standalone kernels) / frames (pipeline)     default 100 / 30
   --t1-hz T1 clock in Hz for the libt1-overhead sliver       default 60e6
 EOF
@@ -42,7 +42,7 @@ EOF
 
 MODE=${1:-help}
 case "$MODE" in
-    sobel|optical_flow|matmul_8bitraw_short|pipeline|both) ;;
+    sobel|optical_flow|matmul_8bitraw_short|attention_self|pipeline|both) ;;
     *) usage ;;
 esac
 shift
@@ -98,6 +98,8 @@ case "$MODE" in
     optical_flow) scp kv260:/tmp/optical_flow_perf.csv "$OUT/" ;;
     matmul_8bitraw_short)
                   scp kv260:/tmp/matmul_8bitraw_short_perf.csv "$OUT/" ;;
+    attention_self)
+                  scp kv260:/tmp/attention_self_perf.csv "$OUT/" ;;
     pipeline)     scp kv260:/tmp/pipeline_perf.csv     "$OUT/" ;;
     both)
         scp kv260:/tmp/sobel_perf.csv    "$OUT/"
@@ -117,6 +119,10 @@ fi
 if [ -f "$OUT/matmul_8bitraw_short_perf.csv" ]; then
     python3 "$PLOTTER" matmul_8bitraw_short "$OUT/matmul_8bitraw_short_perf.csv" \
         --out "$OUT/matmul_8bitraw_short_breakdown.png" --both
+fi
+if [ -f "$OUT/attention_self_perf.csv" ]; then
+    python3 "$PLOTTER" attention_self "$OUT/attention_self_perf.csv" \
+        --out "$OUT/attention_self_breakdown.png" --both
 fi
 if [ -f "$OUT/pipeline_perf.csv" ]; then
     python3 "$PLOTTER" pipeline "$OUT/pipeline_perf.csv" \

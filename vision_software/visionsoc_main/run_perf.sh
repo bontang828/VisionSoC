@@ -189,11 +189,40 @@ run_pipeline() {
     start_vsm
 }
 
+run_attention_self() {
+    local iters=${1:-20}
+    local rc
+    echo "=== run_attention_self iters=$iters ==="
+    stop_vsm
+    sudo -n "$PERF_BIN_DIR/attention_self_perf" --iters "$iters" --out /tmp/attention_self_perf.csv
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "  ERROR: attention_self_perf failed with rc=$rc" >&2
+        reapply_overlay_and_media_ctl
+        start_vsm
+        return "$rc"
+    fi
+    if [ ! -f /tmp/attention_self_perf.csv ]; then
+        echo "  ERROR: attention_self_perf did not create /tmp/attention_self_perf.csv" >&2
+        reapply_overlay_and_media_ctl
+        start_vsm
+        return 1
+    fi
+    echo "  CSV: /tmp/attention_self_perf.csv ($(wc -l </tmp/attention_self_perf.csv) lines)"
+    # Killing VSM mid-stream wedges the CSI subdev (STREAMON -> Broken pipe on
+    # the next open), so the camera pipeline must be reset before VSM can come
+    # back -- same recovery run_pipeline does. The perf binary itself never
+    # touches the camera; this is purely to restore the live display feed.
+    reapply_overlay_and_media_ctl
+    start_vsm
+}
+
 case "$MODE" in
     sobel)        run_sobel                   "${N:-100}" ;;
     optical_flow) run_optical_flow            "${N:-100}" ;;
     matmul_8bitraw_short)
                   run_matmul_8bitraw_short   "${N:-100}" ;;
+    attention_self) run_attention_self        "${N:-20}"  ;;
     pipeline)     run_pipeline                "${N:-30}"  ;;
     both)
         run_sobel    "${N:-100}"

@@ -448,7 +448,22 @@ int main(int argc, char **argv)
              * the URAM/T1 round trip entirely. */
             memcpy(out.va, in.va, FRAME_BYTES);
             last_kernel_cycles = 0;
-#ifdef ACTIVE_KERNEL_DDR_IO
+#if defined(ACTIVE_KERNEL_PATCH_IO)
+        } else {
+            /*
+             * On-fabric ViT 8x8-patch attention: the ENTIRE tokenisation +
+             * attention runs on the vector fabric (near-sensor). attention_patch_run
+             * patchifies the frame (im2col, 3 vrgather passes), runs blocked
+             * 256-token attention against the fixed K/V dictionary, and
+             * un-patchifies into out.va (Y). It manages its own staging udmabuf;
+             * display reads out.va on the PS, so no out sync is needed here.
+             */
+            (void)t1_perf_start(1);
+            if (attention_patch_run((const uint8_t *)in.va, (uint8_t *)out.va) < 0) {
+                die("attention_patch_run");
+            }
+            last_kernel_cycles = t1_perf_stop();
+#elif defined(ACTIVE_KERNEL_DDR_IO)
         } else {
             /*
              * Attention path: run the kernel directly on the DDR `in` -> `out`

@@ -37,6 +37,9 @@ optical_flow_perf: optical_flow_perf.o ../libt1/libt1.a
 matmul_8bitraw_short_perf: matmul_8bitraw_short_perf.o ../libt1/libt1.a
 	$(CC) $(CFLAGS) -o $@ matmul_8bitraw_short_perf.o $(LDLIBS)
 
+attention_self_perf: attention_self_perf.o ../libt1/libt1.a
+	$(CC) $(CFLAGS) -o $@ attention_self_perf.o $(LDLIBS)
+
 display_smoke: display_smoke.o display.o
 	$(CC) $(CFLAGS) -o $@ display_smoke.o display.o $(DRM_LIBS)
 

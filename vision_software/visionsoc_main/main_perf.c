@@ -362,6 +362,25 @@ int main(int argc, char **argv)
         clock_gettime(CLOCK_MONOTONIC, &t_b);
         double prep_in_us = us_between(&t_a, &t_b);
 
+#if defined(ACTIVE_KERNEL_PATCH_IO)
+        /* Patch path: attention_patch_run does im2col + attention + un-patchify
+         * directly on in_buf.va -> out_buf.va (it manages its own staging udmabuf),
+         * so the explicit DDR<->URAM DMA stages collapse into t1_kernel and the
+         * out-sync is unneeded (the run writes out_buf.va on the CPU). */
+        double dma_in_us = 0.0;
+        t_a = t_b;
+        __asm__ __volatile__("" ::: "memory");
+        volatile uint32_t perf_start_lo = t1_perf_start(1);
+        if (attention_patch_run((const uint8_t *)in_buf.va, (uint8_t *)out_buf.va) < 0)
+            die("attention_patch_run");
+        volatile uint32_t t1_kernel_cycles = t1_perf_stop();
+        __asm__ __volatile__("" ::: "memory");
+        clock_gettime(CLOCK_MONOTONIC, &t_b);
+        double t1_kernel_us = us_between(&t_a, &t_b);
+        (void)perf_start_lo;
+        double dma_out_us = 0.0;
+        double sync_out_us = 0.0;
+#else
         /* Stage: dma_in -- DDR -> URAM_HALF_A (async-pair pattern). */
         t_a = t_b;
         if (t1_dma_s2mm_async(0, URAM_HALF_A, FRAME_BYTES) < 0) die("dma s2mm arm uram_a");
@@ -396,6 +415,7 @@ int main(int argc, char **argv)
         if (t1_buf_sync_for_cpu(&out_buf) < 0) die("sync_for_cpu out");
         clock_gettime(CLOCK_MONOTONIC, &t_b);
         double sync_out_us = us_between(&t_a, &t_b);
+#endif
 
         /* Stage: stats_out -- min/max/avg scan over output Y plane. */
         t_a = t_b;

@@ -349,6 +349,41 @@ MATMUL_SHORT_GROUP_SHORT: Dict[int, str] = {
 }
 
 
+# -----------------------------------------------------------------------------
+# attention_self_perf.c -- self-attention patch pipeline. CSV has 80 logical
+# rows: im2col (0-7), transpose (8-9), per-query-block attention with the QK
+# body aggregated x512 (128 keys x 2 key-blocks x 2 query-blocks) and the PV
+# body aggregated x128 (64 features x 2 query-blocks). Same per-instruction CSV
+# schema as sobel/optical_flow/matmul.
+# -----------------------------------------------------------------------------
+
+ATTENTION_SELF_GROUPS: List[Tuple[str, List[int]]] = [
+    ("im2col (load+gather)",  list(range(0, 8))),    # 0-7
+    ("transpose",             [8, 9]),
+    ("QK setup",              list(range(10, 16))),   # 10-15
+    ("QK body x512",          list(range(16, 25))),   # 16-24
+    ("softmax",               list(range(25, 39))),   # 25-38
+    ("Newton reciprocal",     list(range(39, 56))),   # 39-55
+    ("normalize (pq)",        list(range(56, 64))),   # 56-63
+    ("PV setup",              [64, 65, 66]),
+    ("PV body x128",          list(range(67, 79))),   # 67-78
+    ("store O",               [79]),
+]
+
+ATTENTION_SELF_GROUP_SHORT: Dict[int, str] = {
+    **{i: "im2col"    for i in range(0, 8)},
+    **{i: "transpose" for i in (8, 9)},
+    **{i: "QK pre"    for i in range(10, 16)},
+    **{i: "QK x512"   for i in range(16, 25)},
+    **{i: "softmax"   for i in range(25, 39)},
+    **{i: "Newton"    for i in range(39, 56)},
+    **{i: "norm"      for i in range(56, 64)},
+    **{i: "PV pre"    for i in (64, 65, 66)},
+    **{i: "PV x128"   for i in range(67, 79)},
+    79: "store",
+}
+
+
 @dataclass
 class InstrSummary:
     idx: int
@@ -1136,6 +1171,203 @@ def plot_matmul_8bitraw_short(csv_path: str, out_path: str,
 # Driver
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# attention_self plotting -- same per-instruction CSV schema as the others, but
+# 80 logical rows (the widest kernel). QK body rows aggregate 512 repeats, PV
+# body rows aggregate 128. Per-instr legend uses a 4-column phase split.
+# -----------------------------------------------------------------------------
+
+def plot_attention_self_per_instr(instrs: List[InstrSummary],
+                                  out_path: str) -> None:
+    cy_total = sum(i.cycles_mean for i in instrs)
+    w_total  = sum(i.wall_mean   for i in instrs)
+    palette = plt.cm.tab20(np.linspace(0, 1, len(instrs)))
+
+    segments = [{"idx": i.idx, "mnem": i.mnemonic,
+                 "cyc": i.cycles_mean, "wall": i.wall_mean,
+                 "is_csr": i.is_csr_flip,
+                 "group": ATTENTION_SELF_GROUP_SHORT.get(i.idx, "?")}
+                for i in instrs]
+
+    rendered_cycles = [_human_cyc(s["cyc"]) for s in segments]
+    rendered_walls  = [_human_us(s["wall"]) for s in segments]
+
+    IDX_W  = max(len("stage"),    max(len(f"{s['idx']}:") for s in segments))
+    MNEM_W = max(len("assembly"), max(len(s["mnem"]) for s in segments))
+    GRP_W  = max(len("group"),    max(len(s["group"]) for s in segments))
+    CYC_W  = max(len("cycles"),   max(len(c) for c in rendered_cycles))
+    WALL_W = max(len("wall"),     max(len(w) for w in rendered_walls))
+
+    def _row(idx: str, mnem: str, group: str, cyc: str, wall: str) -> str:
+        return (f"{idx:>{IDX_W}s} "
+                f"{mnem:<{MNEM_W}s} "
+                f"{group:<{GRP_W}s} "
+                f"{cyc:>{CYC_W}s}  "
+                f"{wall:>{WALL_W}s}")
+
+    legend_lines = [
+        _row(f"{s['idx']}:", s["mnem"], s["group"], cyc, wall)
+        for s, cyc, wall in zip(segments, rendered_cycles, rendered_walls)
+    ]
+    header_line = _row("stage", "assembly", "group", "cycles", "wall")
+
+    fig = plt.figure(figsize=(20, 13))
+    gs = fig.add_gridspec(1, 1,
+                          left=0.06, right=0.99, top=0.93, bottom=0.80)
+    ax = fig.add_subplot(gs[0])
+
+    def inline(seg):
+        return f"{seg['idx']}"
+
+    GROUP_Y    = 0.35
+    GROUP_H    = 0.25
+    ASSEMBLY_Y = 0.00
+    ASSEMBLY_H = 0.30
+    Y_TOP      = 0.50
+    Y_BOTTOM   = -0.20
+
+    n = len(instrs)
+    # Phase-aligned 4-column split for the 80-word kernel:
+    #   col 0 -- im2col + transpose + QK setup       (0-15,  16 data)
+    #   col 1 -- QK body + softmax                    (16-38, 23 data)
+    #   col 2 -- Newton + normalize                   (39-63, 25 data)
+    #   col 3 -- PV setup + PV body + store O         (64-79, 16 data)
+    if n == 80:
+        data_per_col = [16, 23, 25, 16]
+    else:
+        base = n // 4
+        rem = n - base * 4
+        data_per_col = [base + (1 if k < rem else 0) for k in range(4)]
+
+    _draw_single_bar_dual_axis(
+        fig, ax, segments,
+        cy_total=cy_total, w_total=w_total,
+        inline_label_for=inline,
+        legend_lines=legend_lines,
+        palette=palette,
+        legend_loc="bottom", legend_ncol=4,
+        data_per_col=data_per_col,
+        label_thresh_frac=0.02,
+        header_line=header_line,
+        bar_y=ASSEMBLY_Y, bar_height=ASSEMBLY_H,
+        ylim=(Y_BOTTOM, Y_TOP),
+    )
+
+    GRAY_LIGHT = "#F2F2F2"
+    GRAY_DARK  = "#A8A8A8"
+    cumsum = np.cumsum([0.0] + [s["wall"] for s in segments])
+    label_thresh_strip = w_total * 0.03
+    drawn = 0
+    boundaries = set()
+    for label, idxs in ATTENTION_SELF_GROUPS:
+        if not idxs or idxs[-1] >= len(cumsum) - 1:
+            continue
+        left = cumsum[idxs[0]]
+        right = cumsum[idxs[-1] + 1]
+        width = right - left
+        boundaries.add(right)
+        if width <= 0:
+            continue
+        color = GRAY_LIGHT if drawn % 2 == 0 else GRAY_DARK
+        ax.barh([GROUP_Y], [width], left=left, height=GROUP_H,
+                color=color, edgecolor="black", linewidth=0.4)
+        short = ATTENTION_SELF_GROUP_SHORT.get(idxs[0], label.split(" ")[0])
+        if width >= label_thresh_strip:
+            ax.text(left + width / 2, GROUP_Y, short,
+                    ha="center", va="center", fontsize=8)
+        drawn += 1
+
+    if boundaries:
+        boundaries.discard(max(boundaries))
+    line_top = Y_TOP + 0.08
+    line_bot = Y_BOTTOM - 0.08
+    for x in sorted(boundaries):
+        ax.plot([x, x], [line_bot, line_top],
+                linestyle=":", color="dimgray", linewidth=1.1,
+                clip_on=False, zorder=5)
+
+    ax.set_yticks([ASSEMBLY_Y, GROUP_Y])
+    ax.set_yticklabels(["assembly", "group"], fontsize=9)
+    ax.tick_params(axis="y", length=0)
+
+    n_issued = sum(1 for s in segments if not s["is_csr"])
+    n_csr    = sum(1 for s in segments if s["is_csr"])
+    fig.suptitle(
+        f"attention_self (ViT patch self-attention): per-instruction breakdown   "
+        f"{n_issued} timed rows + {n_csr} dispatcher-only CSR flips; "
+        f"QK body aggregates 512 repeats, PV body 128\n"
+        f"total T1 cycles = {_human_cyc(cy_total)}    "
+        f"total wall = {_human_us(w_total)}    "
+        f"libt1 sliver = {_human_us(max(0, w_total - cy_total/60))} (@60MHz)",
+        fontsize=11, y=0.965,
+    )
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out_path}")
+
+
+def plot_attention_self_grouped(instrs: List[InstrSummary],
+                                out_path: str) -> None:
+    palette = plt.cm.Set2(np.linspace(0, 1, len(ATTENTION_SELF_GROUPS)))
+    segments = []
+    for label, idxs in ATTENTION_SELF_GROUPS:
+        cy = sum(i.cycles_mean for i in instrs if i.idx in idxs)
+        w  = sum(i.wall_mean   for i in instrs if i.idx in idxs)
+        segments.append({"idx": idxs[0] if len(idxs) == 1
+                                 else f"{idxs[0]}-{idxs[-1]}",
+                         "mnem": label, "cyc": cy, "wall": w,
+                         "is_csr": False})
+
+    cy_total = sum(s["cyc"] for s in segments)
+    w_total  = sum(s["wall"] for s in segments)
+    group_w = max(len("group"), max(len(s["mnem"]) for s in segments))
+    cycle_w = max(len("cycles"), max(len(_human_cyc(s["cyc"])) for s in segments))
+    wall_w  = max(len("wall"), max(len(_human_us(s["wall"])) for s in segments))
+    legend_lines = [
+        f"{s['mnem']:<{group_w}s} {_human_cyc(s['cyc']):>{cycle_w}s}  {_human_us(s['wall']):>{wall_w}s}"
+        for s in segments
+    ]
+    header_line = f"{'group':<{group_w}s} {'cycles':>{cycle_w}s}  {'wall':>{wall_w}s}"
+
+    fig = plt.figure(figsize=(16, 3.6))
+    gs = fig.add_gridspec(1, 1, left=0.05, right=0.68, top=0.66, bottom=0.34)
+    ax = fig.add_subplot(gs[0])
+
+    def inline(seg):
+        return f"{seg['mnem'].split(' ')[0]}"
+
+    _draw_single_bar_dual_axis(
+        fig, ax, segments,
+        cy_total=cy_total, w_total=w_total,
+        inline_label_for=inline,
+        legend_lines=legend_lines,
+        palette=palette,
+        legend_loc="right", legend_ncol=1,
+        header_line=header_line,
+    )
+    fig.suptitle(
+        f"attention_self: breakdown by logical group   "
+        f"total T1 = {_human_cyc(cy_total)}    "
+        f"total wall = {_human_us(w_total)}",
+        fontsize=11, y=0.96,
+    )
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {out_path}")
+
+
+def plot_attention_self(csv_path: str, out_path: str, mode: str) -> None:
+    instrs = load_per_instr_csv(csv_path)
+    base, ext = os.path.splitext(out_path)
+    ext = ext or ".png"
+    if mode in ("per-instr", "both"):
+        path = out_path if mode == "per-instr" else f"{base}.per_instr{ext}"
+        plot_attention_self_per_instr(instrs, path)
+    if mode in ("grouped", "both"):
+        path = out_path if mode == "grouped" else f"{base}.grouped{ext}"
+        plot_attention_self_grouped(instrs, path)
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1184,6 +1416,19 @@ def main() -> int:
                     dest="mode", help="emit both (default)")
     mp.set_defaults(mode="both")
 
+    ap2 = sub.add_parser("attention_self",
+                         help="plot attention_self_perf CSV "
+                              "(per-instruction breakdown)")
+    ap2.add_argument("csv")
+    ap2.add_argument("--out", default="attention_self_breakdown.png")
+    ap2.add_argument("--per-instr", action="store_const", const="per-instr",
+                     dest="mode", help="emit only the per-instruction chart")
+    ap2.add_argument("--grouped", action="store_const", const="grouped",
+                     dest="mode", help="emit only the logical-group chart")
+    ap2.add_argument("--both", action="store_const", const="both",
+                     dest="mode", help="emit both (default)")
+    ap2.set_defaults(mode="both")
+
     args = p.parse_args()
     if args.cmd == "pipeline":
         plot_pipeline(args.csv, args.out, args.t1_hz,
@@ -1194,6 +1439,8 @@ def main() -> int:
         plot_optical_flow(args.csv, args.out, args.mode)
     elif args.cmd == "matmul_8bitraw_short":
         plot_matmul_8bitraw_short(args.csv, args.out, args.mode)
+    elif args.cmd == "attention_self":
+        plot_attention_self(args.csv, args.out, args.mode)
     return 0
 
 
