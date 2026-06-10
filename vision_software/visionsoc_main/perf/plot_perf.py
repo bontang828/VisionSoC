@@ -1213,7 +1213,7 @@ def plot_attention_self_per_instr(instrs: List[InstrSummary],
 
     fig = plt.figure(figsize=(20, 13))
     gs = fig.add_gridspec(1, 1,
-                          left=0.06, right=0.99, top=0.93, bottom=0.80)
+                          left=0.06, right=0.99, top=0.885, bottom=0.80)
     ax = fig.add_subplot(gs[0])
 
     def inline(seg):
@@ -1299,7 +1299,7 @@ def plot_attention_self_per_instr(instrs: List[InstrSummary],
         f"total T1 cycles = {_human_cyc(cy_total)}    "
         f"total wall = {_human_us(w_total)}    "
         f"libt1 sliver = {_human_us(max(0, w_total - cy_total/60))} (@60MHz)",
-        fontsize=11, y=0.965,
+        fontsize=11, y=0.97,
     )
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
