@@ -14,8 +14,63 @@
     \includegraphics[
         width=\textwidth
     ]{project_diagram/selected_output/asic_die_v2}
-    \caption{asic_die_v2}
+    \caption{This shows the proposed ASIC die design placement of the CMOS sensor and the 2D vector processor on the same die. Vector instructions will stream over via the die-to-die connection and the captured image never leaves the Near-sensor Processor Die, only the computed result does.}
     \label{fig:asic_die_v2}
+\end{figure}
+}
+
+\newcommand{\figAttentionInputOuput}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/attention_input_ouput}
+    \caption{attention_input_ouput}
+    \label{fig:attention_input_ouput}
+\end{figure}
+}
+
+\newcommand{\figAttentionInstPerfSimp}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/attention_inst_perf_simp}
+    \caption{attention_inst_perf_simp}
+    \label{fig:attention_inst_perf_simp}
+\end{figure}
+}
+
+\newcommand{\figAttentionInstPerfWhole}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/attention_inst_perf_whole}
+    \caption{attention_inst_perf_whole}
+    \label{fig:attention_inst_perf_whole}
+\end{figure}
+}
+
+\newcommand{\figAttentionSelf}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/attention_self}
+    \caption{attention_self}
+    \label{fig:attention_self}
+\end{figure}
+}
+
+\newcommand{\figBenchmark}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/benchmark}
+    \caption{benchmark}
+    \label{fig:benchmark}
 \end{figure}
 }
 
@@ -30,6 +85,17 @@
 \end{figure}
 }
 
+\newcommand{\figFabricInstructionBasics}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/fabric_instruction_basics_v2}
+    \caption{fabric_instruction_basics_v2}
+    \label{fig:fabric_instruction_basics_v2}
+\end{figure}
+}
+
 \newcommand{\figFpgaSystemTop}{%
 \begin{figure}[H]
     \centering
@@ -38,6 +104,17 @@
     ]{project_diagram/selected_output/fpga_system_top_t1style_v4}
     \caption{Top level FPGA system architecture for AMD Kria KV260. Highlighted with 3 major component group: Camera module, Processor System, Programmable Logic}
     \label{fig:fpga_system_top_t1style_v4}
+\end{figure}
+}
+
+\newcommand{\figFpgaSystemTopTonestyle}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/fpga_system_top_t1style_v5}
+    \caption{fpga_system_top_t1style_v5}
+    \label{fig:fpga_system_top_t1style_v5}
 \end{figure}
 }
 
@@ -74,6 +151,28 @@
 \end{figure}
 }
 
+\newcommand{\figMatmulEightbitrawShortSteps}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/matmul_8bitraw_short_steps_v4}
+    \caption{matmul_8bitraw_short_steps_v4}
+    \label{fig:matmul_8bitraw_short_steps_v4}
+\end{figure}
+}
+
+\newcommand{\figOpticalFlowInputOuput}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/optical_flow_input_ouput}
+    \caption{optical_flow_input_ouput}
+    \label{fig:optical_flow_input_ouput}
+\end{figure}
+}
+
 \newcommand{\figOpticalFlowPerf}{%
 \begin{figure}[H]
     \centering
@@ -96,6 +195,17 @@
 \end{figure}
 }
 
+\newcommand{\figSobelInputOuput}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/sobel_input_ouput}
+    \caption{sobel_input_ouput}
+    \label{fig:sobel_input_ouput}
+\end{figure}
+}
+
 \newcommand{\figSobelSteps}{%
 \begin{figure}[H]
     \centering
@@ -104,6 +214,17 @@
     ]{project_diagram/selected_output/sobel_kernel_steps_v2}
     \caption{Sobel kernel execution steps on the RVV 2D vector architecture.}
     \label{fig:sobel_kernel_steps_v2}
+\end{figure}
+}
+
+\newcommand{\figSobelKernelSteps}{%
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth
+    ]{project_diagram/selected_output/sobel_kernel_steps_v3}
+    \caption{sobel_kernel_steps_v3}
+    \label{fig:sobel_kernel_steps_v3}
 \end{figure}
 }
 
@@ -168,7 +289,7 @@
     \includegraphics[
         width=\textwidth
     ]{project_diagram/selected_output/vrf_diagonal_banking_v5_per_word}
-    \caption{vrf_diagonal_banking_v5_per_word}
+    \caption{Diagonal banking scheme used for the vector register file in 2D T1 memory subsystem.}
     \label{fig:vrf_diagonal_banking_v5_per_word}
 \end{figure}
 }

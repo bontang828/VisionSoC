@@ -1,9 +1,12 @@
 <mxfile host="65bd71144e">
     <diagram name="FPGA System Top (T1 style) v2" id="fpga-system-top-t1style-v2">
-        <mxGraphModel dx="1345" dy="435" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1024" pageHeight="591" math="0" shadow="0">
+        <mxGraphModel dx="1131" dy="118" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1024" pageHeight="591" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
+                <mxCell id="84" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry y="591" width="1020" height="669" as="geometry"/>
+                </mxCell>
                 <mxCell id="61" value="&lt;b&gt;&lt;font style=&quot;font-size: 14px;&quot;&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp;Programmable Logic (PL)&lt;/font&gt;&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=none;strokeColor=#9E9E9E;verticalAlign=top;align=left;spacingLeft=8;spacingTop=2;fontStyle=2;fontColor=#616161;strokeWidth=2;" parent="1" vertex="1">
                     <mxGeometry x="530" y="940" width="427" height="280" as="geometry"/>
                 </mxCell>

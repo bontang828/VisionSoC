@@ -40,6 +40,12 @@ matmul_8bitraw_short_perf: matmul_8bitraw_short_perf.o ../libt1/libt1.a
 attention_self_perf: attention_self_perf.o ../libt1/libt1.a
 	$(CC) $(CFLAGS) -o $@ attention_self_perf.o $(LDLIBS)
 
+# Stage-by-stage visualiser: grabs one live camera frame, runs the exact
+# attention_self pipeline with the kernel's own dbg checkpoints enabled, and
+# dumps the 128x128 data-plane at every stage to PPMs. Links camera.o.
+attention_self_viz: attention_self_viz.o camera.o ../libt1/libt1.a
+	$(CC) $(CFLAGS) -o $@ attention_self_viz.o camera.o $(LDLIBS)
+
 display_smoke: display_smoke.o display.o
 	$(CC) $(CFLAGS) -o $@ display_smoke.o display.o $(DRM_LIBS)
 
@@ -113,13 +119,19 @@ optical_flow_perf.o: kernels/optical_flow.h
 
 matmul_8bitraw_short_perf.o: kernels/matmul_8bitraw_short.h kernels/matmul_weights.h
 
+attention_self_viz.o: kernels/attention_patch_weights.h kernels/attention_patch_im2col.h \
+                      kernels/attention_patch_im2col_issue.h kernels/attention_self.h \
+                      kernels/attention_self_transpose.h kernels/attention_patch_issue.h
+
 kernels: kernels/grid_vadd.h kernels/frame_passthrough.h kernels/sobel.h kernels/cnn2d_decoder_primitives.h kernels/optical_flow.h kernels/flow_color_rgb565.h kernels/matmul.h kernels/matmul_8bitraw.h kernels/matmul_8bitraw_short.h
 
 clean:
 	$(RM) $(OBJS) main_perf.o main_capture.o sobel_perf.o optical_flow_perf.o \
-		matmul_8bitraw_short_perf.o display_smoke.o \
+		matmul_8bitraw_short_perf.o attention_self_perf.o attention_self_viz.o \
+		display_smoke.o \
 		visionsoc_main visionsoc_main_perf visionsoc_main_capture \
 		sobel_perf optical_flow_perf \
-		matmul_8bitraw_short_perf display_smoke
+		matmul_8bitraw_short_perf attention_self_perf attention_self_viz \
+		display_smoke
 
 .PHONY: all clean kernels

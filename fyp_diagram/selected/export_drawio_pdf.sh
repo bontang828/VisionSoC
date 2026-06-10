@@ -171,6 +171,7 @@ caption_from_stem() {
     t1_vs_scamp5_v3) printf '%s\n' 'Comparison between the T1 fabric and SCAMP-5 in programmability. Highlighted the data control abstractions with RISC-V RVV instructions and execution in a 2D plane.' ;;
     vrf_diagonal_banking_v3) printf '%s\n' 'Diagonal banking scheme used for the vector register file in 2D T1 memory subsystem.' ;;
     vrf_diagonal_banking_v5_per_word) printf '%s\n' 'Diagonal banking scheme used for the vector register file in 2D T1 memory subsystem.' ;;
+    asic_die_v2) printf '%s\n' 'This shows the proposed ASIC die design placement of the CMOS sensor and the 2D vector processor on the same die. Vector instructions will stream over via the die-to-die connection and the captured image never leaves the Near-sensor Processor Die, only the computed result does.' ;;
     *)
       printf '%s\n' "$stem"
       ;;
