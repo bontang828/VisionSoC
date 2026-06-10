@@ -42,3 +42,6 @@ wave_debug.json
 **/*.so
 /vision_software/visionsoc_main/perf/*T*Z*
 /vision_software/visionsoc_main/capture
+/fyp_diagram/select_output/*
+/vision_software/visionsoc_main/viz/*
+/vision_software/visionsoc_main/benchmark/results/*
