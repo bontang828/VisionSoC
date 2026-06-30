@@ -45,3 +45,4 @@ wave_debug.json
 /fyp_diagram/select_output/*
 /vision_software/visionsoc_main/viz/*
 /vision_software/visionsoc_main/benchmark/results/*
+**.claude
