@@ -1,0 +1,8 @@
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s1_title\480p15\Title.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s2_cat\480p15\TheImage.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s3_conventional\480p15\ConventionalPipeline.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s4_neurosensor\480p15\NearSensorDie.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s5_zoom_bonsai\480p15\ZoomIntoBonsai.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s8_expand_registers\480p15\ExpandRegisters.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s10_collapse\480p15\CollapseRegisters.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media\videos\s11_scalable\480p15\Scalable.mp4'

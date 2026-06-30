@@ -46,3 +46,5 @@ wave_debug.json
 /vision_software/visionsoc_main/viz/*
 /vision_software/visionsoc_main/benchmark/results/*
 **.claude
+/fyp_demo/bonsai_video/media/*
+/fyp_demo/bonsai_video/review/*
