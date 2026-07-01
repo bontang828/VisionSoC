@@ -20,12 +20,26 @@ FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 SCENES = [
     ("s1_title.py", "Title"),
     ("s2_cat.py", "TheImage"),
-    ("s3_conventional.py", "ConventionalPipeline"),
+    ("s3_5_compare.py", "ThreeWayCompare"),
+    ("s3_6_contribution.py", "ContributionArch"),
+    ("s3_7_fpga.py", "ContributionFPGA"),
+    ("s3_8_eval.py", "ContributionEval"),
+    ("s3_9_howitworks.py", "HowItWorks"),
     ("s4_neurosensor.py", "NearSensorDie"),
     ("s5_zoom_bonsai.py", "ZoomIntoBonsai"),
     ("s8_expand_registers.py", "ExpandRegisters"),
     ("s10_collapse.py", "CollapseRegisters"),
     ("s11_scalable.py", "Scalable"),
+    ("s12_compute_scale.py", "ComputeScale"),
+    ("s13_linear.py", "LinearScaling"),
+    ("s14_arch.py", "ArchOverview"),
+    ("s15_decoder_in.py", "DecoderIn"),
+    ("s16_decoder_multi.py", "DecoderMulti"),
+    ("s17_instr_list.py", "InstrList"),
+    ("s18_compile.py", "Compile"),
+    ("s19_arch.py", "ArchRecap"),
+    ("s20_die_channels.py", "DieChannels"),
+    ("s21_two_dies.py", "TwoDies"),
 ]
 
 QUALITY_DIR = {"-ql": "480p15", "-qm": "720p30", "-qh": "1080p60", "-qk": "2160p60"}

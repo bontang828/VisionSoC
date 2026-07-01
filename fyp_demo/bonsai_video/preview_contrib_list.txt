@@ -1,0 +1,3 @@
+file 'C:/storage/coding/EEE/code_fyp/VisionSoC/fyp_demo/bonsai_video/media/videos/s3_6_contribution/480p15/ContributionArch.mp4'
+file 'C:/storage/coding/EEE/code_fyp/VisionSoC/fyp_demo/bonsai_video/media/videos/s3_7_fpga/480p15/ContributionFPGA.mp4'
+file 'C:/storage/coding/EEE/code_fyp/VisionSoC/fyp_demo/bonsai_video/media/videos/s3_8_eval/480p15/ContributionEval.mp4'

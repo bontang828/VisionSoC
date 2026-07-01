@@ -108,6 +108,19 @@ def make_reg_file(size=2.0, color=BLUE):
     return g
 
 
+def compute_lane(n=8, color=GREEN, cw=0.45, ch=0.6, gap=0.12):
+    """A single compute lane: a green box holding n lane cells."""
+    cells = VGroup(*[Rectangle(width=cw, height=ch, stroke_color=color, stroke_width=2).set_fill(color, 0.12)
+                     for _ in range(n)])
+    cells.arrange(RIGHT, buff=gap)
+    box = RoundedRectangle(width=cells.width + 0.5, height=ch + 0.4, corner_radius=0.08,
+                           stroke_color=color, stroke_width=2).set_fill(color, 0.05).move_to(cells)
+    g = VGroup(box, cells)
+    g.box = box
+    g.cells = cells
+    return g
+
+
 def bonsai_floorplan(scale=1.0):
     """Simplified Bonsai floor-plan: register-file stack on top, compute lanes
     below, an LSU to the side, and a decoder feeding instructions in.

@@ -1,0 +1,170 @@
+"""Scene 3.5 - Three-way comparison, introduced STAGE BY STAGE.
+Layout: Top = Conventional, Bottom = On-Sensor, Middle = Near-Sensor (our focus).
+Reveal order: Conventional -> On-Sensor -> Near-Sensor (revealed last).
+One small cat (from Scene 2) on the left feeds each pipeline via a dragged copy.
+Then the cat leaves and two gradient axes appear (power usage, programmability),
+and a rectangle highlights the near-sensor (BONSAI) approach.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import numpy as np
+from manim import (
+    Scene, VGroup, Square, Text, Arrow, Line, Polygon, RoundedRectangle,
+    SurroundingRectangle, FadeIn, FadeOut, Create, interpolate_color,
+    LEFT, RIGHT, UP, DOWN,
+)
+from common.layout import make_cat_photo, CAT_SMALL_POS, CAT_SMALL_W
+from common.icons import camera_sensor, chip, lightning
+from common.palette import FG, MUTED, TEAL, AMBER, BLUE, GREEN, PURPLE, RED, SANS, MONO, caption
+from scenes.s3_conventional import conventional_pipeline, conv_label, die_around, CONV_Y, PIPE_X0
+
+NS_Y, OS_Y = 0.0, -2.6
+LBL_X = -4.6
+
+
+def _p(x, y):
+    return np.array([x, y, 0.0])
+
+
+def data_block(color=AMBER):
+    return Text("(3,7) (1,4)\n(8,2) (5,9)", font=MONO, font_size=15, color=color)
+
+
+def power_label(center, text="low power", color=GREEN, fs=13):
+    b = lightning(0.22, color)
+    t = Text(text, font=SANS, font_size=fs, color=color).next_to(b, RIGHT, buff=0.06)
+    return VGroup(b, t).move_to(center)
+
+
+def _multi_color(colors, t):
+    t = min(max(t, 0.0), 1.0)
+    if len(colors) == 1:
+        return colors[0]
+    s = t * (len(colors) - 1)
+    i = min(int(s), len(colors) - 2)
+    return interpolate_color(colors[i], colors[i + 1], s - i)
+
+
+def grad_axis(x, y_tail, y_head, colors, sw=11, n=48, tip=0.36):
+    """A vertical gradient arrow built from many small coloured segments (so the
+    gradient renders clearly), with a filled triangular tip at the head."""
+    d = 1 if y_head > y_tail else -1
+    body_end = y_head - d * tip
+    segs = VGroup()
+    for i in range(n):
+        ya = y_tail + (body_end - y_tail) * i / n
+        yb = y_tail + (body_end - y_tail) * (i + 1) / n
+        segs.add(Line(_p(x, ya), _p(x, yb), stroke_width=sw).set_color(_multi_color(colors, i / (n - 1))))
+    tip_m = Polygon(_p(x, y_head), _p(x - tip * 0.5, body_end), _p(x + tip * 0.5, body_end),
+                    stroke_width=0).set_fill(colors[-1], 1)
+    return VGroup(segs, tip_m)
+
+
+def proc_grid(center):
+    cells = VGroup(*[Square(0.26, stroke_color=AMBER, stroke_width=1.5).set_fill(AMBER, 0.12)
+                     for _ in range(9)])
+    cells.arrange_in_grid(rows=3, cols=3, buff=0.07)
+    box = RoundedRectangle(width=cells.width + 0.3, height=cells.height + 0.3, corner_radius=0.08,
+                           stroke_color=AMBER, stroke_width=2).set_fill(AMBER, 0.05).move_to(cells)
+    return VGroup(box, cells).move_to(center)
+
+
+class ThreeWayCompare(Scene):
+    def construct(self):
+        cat = make_cat_photo(CAT_SMALL_W).move_to(CAT_SMALL_POS)   # carried from Scene 2
+        self.add(cat)
+
+        def drag(w):
+            c = make_cat_photo(w).move_to(cat)
+            self.add(c)
+            return c
+
+        # ============= TOP: conventional (revealed first) ================
+        conv = conventional_pipeline()
+        conv_lbl = conv_label()
+        self.play(FadeIn(conv_lbl), run_time=0.4)
+        c1 = drag(0.5)
+        self.play(FadeIn(conv.stage_sensor), c1.animate.move_to(conv.sensor), run_time=0.6)
+        self.play(FadeIn(conv.stage_cpu), c1.animate.move_to(conv.cpu), run_time=0.6)
+        self.play(FadeIn(conv.stage_gpu), c1.animate.move_to(conv.gpu), run_time=0.6)
+        self.play(FadeOut(c1), run_time=0.3)
+
+        # ============= BOTTOM: on-sensor (revealed second) ===============
+        grid = proc_grid(_p(PIPE_X0, OS_Y))
+        grid_d = die_around(grid, AMBER, pad_w=0.18, pad_h=0.18)
+        grid_lbl = Text("processor per pixel", font=SANS, font_size=14, color=AMBER).next_to(grid, UP, buff=0.1)
+        o_cpu = chip("CPU", w=1.0, h=0.85, color=MUTED).move_to(_p(PIPE_X0 + 3.2, OS_Y))
+        oc_d = die_around(o_cpu, MUTED)
+        o_arrow = Arrow(grid.get_right(), o_cpu.get_left(), buff=0.15, stroke_width=3, max_tip_length_to_length_ratio=0.15).set_color_by_gradient(GREEN, TEAL)
+        o_lp = power_label(o_arrow.get_center() + UP * 0.42, "low power")
+        o_data = data_block(GREEN).move_to(grid)
+        os_lbl = Text("On-sensor", font=SANS, font_size=19, color=MUTED).move_to(_p(LBL_X, OS_Y))
+        os = VGroup(grid, grid_d, grid_lbl, o_cpu, oc_d, o_arrow, o_lp, o_data)
+
+        self.play(FadeIn(os_lbl), run_time=0.4)
+        c3 = drag(0.55)
+        self.play(FadeIn(grid, grid_d, grid_lbl), c3.animate.move_to(grid), run_time=0.6)
+        self.play(FadeOut(c3), FadeIn(o_data), run_time=0.4)
+        self.play(FadeIn(o_arrow, o_cpu, oc_d, o_lp),
+                  o_data.animate.move_to(o_cpu.get_left() + LEFT * 0.35), run_time=0.6)
+
+        # ============= MIDDLE: near-sensor (revealed LAST - our focus) ====
+        n_sensor = camera_sensor(0.65).move_to(_p(PIPE_X0, NS_Y))
+        n_scratch = chip("Scratchpad\nMemory", w=1.45, h=0.95, color=GREEN, font_size=15).move_to(_p(PIPE_X0 + 2.1, NS_Y))
+        n_bons = chip("Bonsai\nProcessor", w=1.5, h=1.0, color=PURPLE, font_size=15).move_to(_p(PIPE_X0 + 4.6, NS_Y))
+        n_inner = VGroup(n_sensor, n_scratch, n_bons)
+        n_die = die_around(n_inner, TEAL, pad_w=0.4, pad_h=0.4)
+        n_die_r = RoundedRectangle(width=n_inner.width + 0.8, height=n_inner.height + 0.8).move_to(n_inner)
+        n_a1 = Arrow(n_sensor.get_right(), n_scratch.get_left(), buff=0.05, stroke_width=2.5, max_tip_length_to_length_ratio=0.3).set_color_by_gradient(GREEN, TEAL)
+        n_a2 = Arrow(n_scratch.get_right(), n_bons.get_left(), buff=0.05, stroke_width=2.5, max_tip_length_to_length_ratio=0.3).set_color_by_gradient(GREEN, TEAL)
+        n_cpu = chip("CPU", w=1.0, h=0.85, color=MUTED).move_to(_p(PIPE_X0 + 7.6, NS_Y))
+        nc_d = die_around(n_cpu, MUTED)
+        n_out = Arrow(n_die_r.get_right(), n_cpu.get_left(), buff=0.1, stroke_width=3, max_tip_length_to_length_ratio=0.12).set_color_by_gradient(BLUE, TEAL)
+        ua1 = power_label(_p(n_a1.get_center()[0], NS_Y + 0.66), "ultra low power", fs=11)
+        ua2 = power_label(_p(n_a2.get_center()[0], NS_Y + 0.66), "ultra low power", fs=11)
+        n_lp = power_label(n_out.get_center() + UP * 0.42, "low power")
+        n_data = data_block(BLUE).scale(0.9).move_to(n_bons)   # inside the Bonsai box
+        ns_lbl = Text("Near-sensor", font=SANS, font_size=19, color=TEAL).move_to(_p(LBL_X, NS_Y))
+        ns = VGroup(n_sensor, n_scratch, n_bons, n_die, n_a1, n_a2, ua1, ua2, n_cpu, nc_d, n_out, n_lp, n_data)
+
+        self.play(FadeIn(ns_lbl), run_time=0.4)
+        c2 = drag(0.4)
+        self.play(FadeIn(n_sensor, n_die), c2.animate.move_to(n_sensor), run_time=0.6)
+        self.play(FadeIn(n_a1, n_scratch, ua1), c2.animate.move_to(n_scratch), run_time=0.6)
+        self.play(FadeIn(n_a2, n_bons, ua2), c2.animate.move_to(n_bons), run_time=0.6)
+        self.play(FadeOut(c2), FadeIn(n_data), run_time=0.4)
+        self.play(FadeIn(n_out, n_cpu, nc_d, n_lp),
+                  n_data.animate.move_to(n_cpu.get_left() + LEFT * 0.35), run_time=0.6)
+
+        cap = caption("Three ways to process the frame - trading off power and programmability.")
+        self.play(FadeIn(cap), run_time=0.5)
+        self.wait(1.2)
+
+        # ============= comparison axes (no shift) ========================
+        self.play(FadeOut(cap), FadeOut(cat), run_time=0.7)
+
+        grad = [RED, AMBER, GREEN]
+        power = grad_axis(-6.6, 3.0, -3.0, grad)      # top (High/Bad) -> bottom (Low/Good)
+        p_ttl = Text("power usage", font=SANS, font_size=22, color=FG).move_to(_p(-5.7, 3.6))
+        p_top = Text("High (Bad)", font=SANS, font_size=20, color=RED).next_to(_p(-6.6, 3.0), RIGHT, buff=0.12)
+        p_bot = Text("Low (Good)", font=SANS, font_size=20, color=GREEN).next_to(_p(-6.6, -3.0), RIGHT, buff=0.12)
+
+        prog = grad_axis(6.6, -3.0, 3.0, grad)         # bottom (Low/Bad) -> top (High/Good)
+        pr_ttl = Text("Programmability", font=SANS, font_size=22, color=FG).move_to(_p(5.3, 3.6))
+        pr_top = Text("High (Good)", font=SANS, font_size=20, color=GREEN).next_to(_p(6.6, 3.0), LEFT, buff=0.12)
+        pr_bot = Text("Low (Bad)", font=SANS, font_size=20, color=RED).next_to(_p(6.6, -3.0), LEFT, buff=0.12)
+
+        self.play(Create(power), FadeIn(VGroup(p_ttl, p_top, p_bot)), run_time=0.9)
+        self.play(Create(prog), FadeIn(VGroup(pr_ttl, pr_top, pr_bot)), run_time=0.9)
+
+        # highlight the near-sensor (BONSAI) approach
+        hl = SurroundingRectangle(VGroup(ns_lbl, ns), color=TEAL, buff=0.22, corner_radius=0.12)
+        hl.set_stroke(TEAL, 3).set_fill(TEAL, 0.05)
+        hl_lbl = Text("the BONSAI approach", font=SANS, font_size=17, color=TEAL).next_to(hl, DOWN, buff=0.12)
+        self.play(Create(hl), FadeIn(hl_lbl), run_time=0.8)
+        self.wait(2.0)
+        self.play(FadeOut(VGroup(conv, conv_lbl, ns, ns_lbl, os, os_lbl, hl, hl_lbl,
+                                 power, p_ttl, p_top, p_bot, prog, pr_ttl, pr_top, pr_bot)), run_time=0.9)

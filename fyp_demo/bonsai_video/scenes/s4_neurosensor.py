@@ -1,6 +1,6 @@
-"""Scene 4 - The Near-Sensor die: sensor + buffer + BONSAI on one die.
+"""Scene 4 - The near-sensor die: sensor + buffer + BONSAI on one die.
 The cat is captured onto the sensor and read into the buffer; it stays in the
-buffer (carried into Scene 5). Sensor/buffer/BONSAI blocks also carry over."""
+buffer (carried into Scene 5). Buffer/BONSAI blocks also carry over."""
 import os
 import sys
 
@@ -29,15 +29,14 @@ def build_near_sensor_blocks():
 class NearSensorDie(Scene):
     def construct(self):
         cat = make_cat().move_to(CAT_LEFT)
-        self.add(cat)
+        self.play(FadeIn(cat), run_time=0.5)
 
         sensor, buffer, bonsai, a_sb, a_bb = build_near_sensor_blocks()
         inner = VGroup(sensor, buffer, bonsai)
         die = RoundedRectangle(width=inner.width + 1.2, height=inner.height + 1.5,
                                corner_radius=0.15, stroke_color=TEAL, stroke_width=2).move_to(inner)
         die_d = DashedVMobject(die, num_dashes=64, dashed_ratio=0.55).set_stroke(TEAL, 2, opacity=0.8)
-        die_lbl = Text("NEAR-SENSOR DIE", font_size=18, color=TEAL, weight="BOLD")
-        die_lbl.move_to(die.get_top() + DOWN * 0.28)
+        die_lbl = Text("NEAR-SENSOR DIE", font_size=18, color=TEAL, weight="BOLD").move_to(die.get_top() + DOWN * 0.28)
         sensor_lbl = Text("sensor", font_size=15, color=BLUE).next_to(sensor, DOWN, buff=0.12)
 
         self.play(Create(die_d), FadeIn(die_lbl), run_time=0.8)
@@ -52,12 +51,10 @@ class NearSensorDie(Scene):
                   cat.animate.scale_to_fit_width(0.95).move_to(sensor.get_center()), run_time=0.8)
         self.play(cat.animate.scale_to_fit_width(0.8).move_to(BUFFER_POS), run_time=0.7)
 
-        cap = caption("BONSAI puts the sensor and the processor on one die - "
-                      "the image never leaves the chip.")
+        cap = caption("The near-sensor die: the image is captured and kept on-chip, beside the sensor.")
         self.play(FadeIn(cap), run_time=0.7)
         self.wait(1.4)
 
-        # carry out: the sensor + its arrow fade TOGETHER with the die frame;
-        # keep buffer/bonsai (+buffer->bonsai arrow) and the cat-in-buffer
-        self.play(FadeOut(VGroup(sensor, sensor_lbl, a_sb, die_d, die_lbl, cap)), run_time=0.7)
+        # carry out: keep buffer/BONSAI (+arrow) and the cat-in-buffer for Scene 5
+        self.play(FadeOut(VGroup(sensor_lbl, die_d, die_lbl, sensor, a_sb, cap)), run_time=0.7)
         self.wait(0.2)
