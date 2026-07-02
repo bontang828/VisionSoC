@@ -19,7 +19,7 @@ class TheImage(Scene):
 
         self.play(FadeIn(intro), run_time=0.7)
         self.play(FadeIn(cat), FadeIn(label), run_time=0.9)
-        cap = caption("Where does it go, and how is it processed?")
+        cap = caption("Where does it go, and how is it processed?").shift(UP * 0.8)
         self.play(FadeIn(cap), run_time=0.6)
         self.wait(1.2)
 

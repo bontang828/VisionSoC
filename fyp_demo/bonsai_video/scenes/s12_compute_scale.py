@@ -23,10 +23,11 @@ class ComputeScale(Scene):
             copies.append(l)
         dots = Text("·  ·  ·", font=SANS, font_size=34, color=MUTED).move_to(UP * 1.7 + DOWN * 4.0)
 
-        self.play(LaggedStart(*[FadeIn(l, shift=DOWN * 0.3) for l in copies],
-                              lag_ratio=0.4, run_time=1.6))
+        # the caption lands together with the duplication it describes
+        cap = caption("Need more throughput -> Add more compute lanes.")
+        self.play(FadeIn(cap),
+                  LaggedStart(*[FadeIn(l, shift=DOWN * 0.3) for l in copies],
+                              lag_ratio=0.4), run_time=1.6)
         self.play(FadeIn(dots), run_time=0.4)
-        cap = caption("Need more throughput?  Add more compute lanes.")
-        self.play(FadeIn(cap), run_time=0.6)
         self.wait(1.4)
         self.play(FadeOut(VGroup(title, lane0, *copies, dots, cap)), run_time=0.7)

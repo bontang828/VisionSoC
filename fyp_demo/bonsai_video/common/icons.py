@@ -53,10 +53,11 @@ def lightning(scale=1.0, color=AMBER):
     return bolt
 
 
-def chip(label, w=1.8, h=1.2, color=MUTED, font_size=22, fill_opacity=0.10):
+def chip(label, w=1.8, h=1.2, color=MUTED, font_size=22, fill_opacity=0.10,
+         weight="NORMAL"):
     box = RoundedRectangle(width=w, height=h, corner_radius=0.1,
                            stroke_color=color, stroke_width=2.5).set_fill(color, fill_opacity)
-    t = Text(label, font_size=font_size, color=FG).move_to(box)
+    t = Text(label, font_size=font_size, color=FG, weight=weight).move_to(box)
     if t.width > w * 0.85:
         t.scale_to_fit_width(w * 0.85)
     g = VGroup(box, t)

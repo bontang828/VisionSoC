@@ -1,0 +1,2 @@
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media/videos/s3_10_soc_dataflow/480p15/SocDataflow.mp4'
+file 'C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\media/videos/s6_programmability/480p15/Programmability.mp4'

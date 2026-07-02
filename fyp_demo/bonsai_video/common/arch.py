@@ -4,7 +4,7 @@ floor-plan (register file + compute lanes + LSU + decoder)."""
 import numpy as np
 from manim import (
     VGroup, Square, Rectangle, RoundedRectangle, Line, Text, Arrow,
-    UP, DOWN, LEFT, RIGHT,
+    DoubleArrow, UP, DOWN, LEFT, RIGHT,
 )
 from .palette import FG, MUTED, TEAL, AMBER, BLUE, PURPLE, GREEN, ORANGE
 
@@ -130,7 +130,8 @@ def bonsai_floorplan(scale=1.0):
     # register file (the one simplified stack model used everywhere)
     rf = make_reg_file(size=2.0)
     rf.move_to(_p(0, 1.0))
-    rf_lbl = Text("Register File", font_size=20, color=BLUE).next_to(rf, UP, buff=0.35)
+    # "Memory Register File" so viewers who don't know registers still get it
+    rf_lbl = Text("Memory Register File", font_size=20, color=BLUE).next_to(rf, UP, buff=0.35)
 
     # compute lanes (a band of lane cells) directly below
     lanes = VGroup()
@@ -158,8 +159,10 @@ def bonsai_floorplan(scale=1.0):
     # arrows: register file <-> lanes ; lanes <-> lsu ; decoder -> lanes
     a_rf = Arrow(rf.get_bottom(), lanes_box.get_top(), color=BLUE, buff=0.1,
                  stroke_width=3, max_tip_length_to_length_ratio=0.12)
-    a_lsu = Arrow(lanes_box.get_right(), lsu.get_left(), color=PURPLE, buff=0.08,
-                  stroke_width=3, max_tip_length_to_length_ratio=0.18)
+    # double-headed: data flows both ways between the lanes and the LSU
+    a_lsu = DoubleArrow(lanes_box.get_right(), lsu.get_left(), color=PURPLE,
+                        buff=0.08, stroke_width=3,
+                        max_tip_length_to_length_ratio=0.18)
     a_dec = Arrow(dec.get_right(), lanes_box.get_left(), color=AMBER, buff=0.08,
                   stroke_width=3, max_tip_length_to_length_ratio=0.18)
 

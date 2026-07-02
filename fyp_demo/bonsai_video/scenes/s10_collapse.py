@@ -45,8 +45,4 @@ class CollapseRegisters(Scene):
             LaggedStart(*[collapse_anim(i, p) for i, p in enumerate(planes)], lag_ratio=0.03),
             run_time=1.8,
         )
-        cap = caption("Collapse back to the simplified register file.")
-        self.play(FadeIn(cap), run_time=0.6)
-        self.wait(1.2)
-        self.play(FadeOut(cap), run_time=0.5)
-        self.wait(0.2)
+        self.wait(1.0)

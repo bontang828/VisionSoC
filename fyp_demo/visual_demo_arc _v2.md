@@ -98,43 +98,45 @@ ii. Right Side (Programmability): An upward-pointing arrow (bottom to top). Labe
 (d) Add animations for these two arrows to conclude the scene.
 
 
-## Contributions section (scenes 3.6 – 3.8)
+**scene 3.6**
+Contribution
+A generalised 2D spatial near-sensor chip architecture -- BONSAI
+- Heterogenous processing
+- Easy programmability
+- Row & column image-plane processing
 
-A three-scene "Our Contributions" interlude that sits **right after the 3-pipeline
-comparison** (the power-usage / programmability arrows scene) and before Scene 4
-(the near-sensor die deep-dive). Each scene is one contribution, with a persistent
-kicker "CONTRIBUTION 1 / 3", "2 / 3", "3 / 3" so the audience tracks progress.
+Live camera FPGA prototype 
+- Time Multiplex
+- Demo Kenrels
+please attach an image of the kria kv260 image
 
-**Scene 3.6 — Contribution 1: the architecture**
-Headline: *A generalised 2D spatial near-sensor chip architecture — **BONSAI***.
-Three feature cards reveal one by one, each with a small icon:
-- **Heterogeneous processing** — one fabric runs many different kernels.
-- **Easy programmability** — standard RISC-V vector (RVV) ISA.
-- **Row & column image-plane processing** — operate along rows *and* columns natively.
+Evaluation of vector instruction based 2D image plane processor
 
-**Scene 3.7 — Contribution 2: live camera FPGA prototype**
-Headline: *Live camera FPGA prototype*. Show the **AMD Kria KV260** board photo
-(`kv260_image_background_removed.png`) on the right; bullets reveal on the left:
-- AMD Kria KV260 (real hardware).
-- Real-time **30 FPS** over HDMI.
-- **Time-multiplexed** execution (logical rows mapped onto physical lanes).
-- **Demonstration kernels** running live from the camera.
+**scene 3.7**
+And here, just show a clean display and say so how does bonsai works. Just a clean title screen with the text "So how does BONSAI work?" and then fade into the next scene.
 
-**Scene 3.8 — Contribution 3: evaluation**
-Headline: *Evaluation of a vector-instruction-based 2D image-plane processor*.
-Left: a schematic **linear resource-scaling** plot (ties back to Scene 13).
-Right: a checklist of what was evaluated:
-- Row & column kernels.
-- Whole image processed in one instruction.
-- Real-time on FPGA.
+**scene 3.8**
+Please refer to thi drawio fle for the framing within the scene and the movements of the objects within the scene. The file is located at:
+C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\drawio_scene_ref\bonsai_soc.drawio
+Please used the same elements from previous scene if they are suitable for continuity. The scene will be broken down into multiple sub-scenes, each with its own focus and animation.
+For the sme object please drag them to the correct location using the same element, please dont just spawn a new object if possible. As this is to show the viewer the direction of the data traval and the structure of the architecture. 
 
-**Scene 4:** I would like to show a similar concept to Scene 3, starting with the same cat image.
+<!-- **Scene 4:** I would like to show a similar concept to Scene 3, starting with the same cat image.
 4A. On the right-hand side, show our new near-sensor die. This die, displayed on the right-hand side screen, includes a camera sensor, a buffer, and our Bonsai processor, along with the interconnects we previously discussed in another document.
 4B. Show the cat again with two lines drawn towards the camera sensor, indicating that this sensor is capturing the cat.
 
 **Scene 5:** We zoom into the Bonsai.
 5A. Show that the cat image is being captured by the sensor, loaded into the buffer, and then moved towards the Bonsai architecture.
-5B. We shift the Bonsai architecture to the center of the frame and zoom in to see the clear architecture of the floor plan. It shows square register planes stacked together, overlaying each other. Below them, we have the compute lanes. The compute lane is connected to a load-store unit, which has arrows drawn from the outer to the inner parts of the architecture to show communication between the outer buffer and the on-chip architecture.
+5B. We shift the Bonsai architecture to the center of the frame and zoom in to see the clear architecture of the floor plan. It shows square register planes stacked together, overlaying each other. Below them, we have the compute lanes. The compute lane is connected to a load-store unit, which has arrows drawn from the outer to the inner parts of the architecture to show communication between the outer buffer and the on-chip architecture. -->
+
+**scene 6:**
+This si the frame reference doc C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\drawio_scene_ref\programmability.drawio. This is then connected with what we have for loading the cat image into the memory register file. Remember to use the word **Memory** register file, so is understand about by people dont know what is register. 
+
+**scene 7:**
+C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\drawio_scene_ref\row_col_processing.drawio,this is the scene breakdown, this show the transition from after explaining decoder from the previous scene to this one that explain the row or column processing. This scene will place in before the scene that zoom into memory that explain the 32 registers and scaling, as the last shot in scene 6 was originally zooming into the memory for the expand explaination.
+
+**scene7.5:** 
+C:\storage\coding\EEE\code_fyp\VisionSoC\fyp_demo\bonsai_video\drawio_scene_ref\hetergeneous_processing.drawio, this is the scene reference frame for the heterogeneous processing scene. This scene will be placed after the row col processing scene and before expanding to explain the 32 registers. This scene will show the heterogeneous processing and the different primatives that can be done on the architecture.
 
 **Scene 8:** We zoom into those square register files. We break them down because they were overlayed. Now, we have an animation of them filling up the entire screen. We break them down into 32 2D square registers, as we have 32 stacked together. We won't show all 32 stacked, but multiple ones to convey that there are many. When we expand them in Scene 8 for the animation, we see 32 of them arranged on the screen.
 

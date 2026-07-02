@@ -68,16 +68,19 @@ class Scalable(Scene):
         arrows = always_redraw(make_arrows)
         readout = always_redraw(
             lambda: Text(f"{int(round(128 * front.width / INIT_W))} x "
-                         f"{int(round(128 * front.width / INIT_W))}",
-                         font=MONO, font_size=40, color=AMBER).move_to(RIGHT * 4.2 + UP * 0.5)
+                         f"{int(round(128 * front.width / INIT_W))} (pixels)",
+                         font=MONO, font_size=34, color=AMBER).move_to(RIGHT * 4.4 + UP * 0.3)
         )
-        res_lbl = Text("pixels stored", font=SANS, font_size=20, color=MUTED).move_to(RIGHT * 4.2 + DOWN * 0.1)
+
+        title = Text("Memory Register Scalability", font=SANS, font_size=32,
+                     color=FG, weight="BOLD").to_edge(UP, buff=0.55)
 
         self.add(grid)
         # 1) fade the grid IN within the existing register file (no new object)
-        self.play(grid_op.animate.set_value(0.45), run_time=0.8)
-        self.play(FadeIn(arrows), FadeIn(readout), FadeIn(res_lbl), run_time=0.6)
-        cap = caption("Scale in width and height - more cells, more pixels, same programming model.")
+        self.play(FadeIn(title, shift=UP * 0.15),
+                  grid_op.animate.set_value(0.45), run_time=0.8)
+        self.play(FadeIn(arrows), FadeIn(readout), run_time=0.6)
+        cap = caption("Scale up memory -> more pixels in each register.")
         self.play(FadeIn(cap), run_time=0.5)
 
         # 2) scale the file; cells multiply at fixed pitch (stretch to fill)
@@ -87,4 +90,5 @@ class Scalable(Scene):
         grid.clear_updaters()
         arrows.clear_updaters()
         readout.clear_updaters()
-        self.play(FadeOut(VGroup(stack, grid, arrows, readout, res_lbl, cap)), run_time=0.8)
+        self.play(FadeOut(VGroup(stack, grid, arrows, readout, cap,
+                                 title)), run_time=0.8)

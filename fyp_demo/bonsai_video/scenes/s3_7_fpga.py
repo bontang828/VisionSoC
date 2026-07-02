@@ -12,7 +12,7 @@ from manim import (
     Scene, Group, VGroup, Text, Dot, ImageMobject, RoundedRectangle,
     FadeIn, FadeOut, UP, DOWN, LEFT, RIGHT,
 )
-from common.palette import FG, MUTED, TEAL, AMBER, SANS
+from common.palette import FG, MUTED, TEAL, AMBER, GREEN, SANS
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KV260 = os.path.join(_ROOT, "kv260_image_background_removed.png")
@@ -36,8 +36,9 @@ def bullet(text, color=TEAL, fs=24):
 class ContributionFPGA(Scene):
     def construct(self):
         tag = kicker(2)
-        title = Text("Live camera FPGA prototype", font=SANS, font_size=34,
-                     color=FG).to_edge(UP, buff=1.0)
+        title = Text("Live camera prototype on FPGA", font=SANS, font_size=34,
+                     color=FG, weight="BOLD",
+                     t2c={"Live": GREEN, "prototype": AMBER}).to_edge(UP, buff=1.0)
 
         # --- KV260 board photo (right) ---
         board = ImageMobject(KV260)

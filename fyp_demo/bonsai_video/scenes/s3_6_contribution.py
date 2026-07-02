@@ -11,7 +11,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np
 from manim import (
-    Scene, VGroup, Square, Text, Line, RoundedRectangle, FadeIn, FadeOut,
+    Scene, VGroup, Square, Text, Line, Arrow, RoundedRectangle,
+    FadeIn, FadeOut, GrowArrow,
     UP, DOWN, LEFT, RIGHT,
 )
 from common.palette import FG, MUTED, TEAL, AMBER, MAGENTA, BLUE, GREEN, SANS, MONO
@@ -70,17 +71,22 @@ def feature_card(icon, title, desc, color):
 class ContributionArch(Scene):
     def construct(self):
         tag = kicker(1)
-        head1 = Text("A generalised 2D spatial near-sensor", font=SANS,
-                     font_size=32, color=FG)
-        head2 = Text("chip architecture", font=SANS, font_size=32, color=FG)
+        # heading: "BONSAI = A Generalised 2D Spatial Near-sensor Chip
+        # Architecture" - the "=" sits at the horizontal centre, BONSAI on
+        # the left, the description entirely on the right
+        eq = Text("=", font=SANS, font_size=36, color=FG).move_to(_p(0, 2.5))
         bonsai = Text("BONSAI", font=SANS, font_size=40, color=TEAL, weight="BOLD")
-        head = VGroup(head1, head2).arrange(DOWN, buff=0.12)
-        head.move_to(_p(0, 2.35))
-        bonsai.next_to(head, DOWN, buff=0.28)
+        bonsai.next_to(eq, LEFT, buff=0.45)
+        desc = VGroup(
+            Text("A Generalised 2D Spatial", font=SANS, font_size=30, color=FG),
+            Text("Near-sensor Chip Architecture", font=SANS, font_size=30,
+                 color=FG),
+        ).arrange(DOWN, buff=0.14, aligned_edge=LEFT).next_to(eq, RIGHT, buff=0.45)
+        head = VGroup(bonsai, eq, desc)
 
         self.play(FadeIn(tag), run_time=0.4)
-        self.play(FadeIn(head, shift=UP * 0.15), run_time=0.7)
-        self.play(FadeIn(bonsai, scale=1.1), run_time=0.6)
+        self.play(FadeIn(bonsai, scale=1.1), run_time=0.5)
+        self.play(FadeIn(eq), FadeIn(desc, shift=RIGHT * 0.15), run_time=0.7)
 
         cards = VGroup(
             feature_card(icon_hetero(), "Heterogeneous\nprocessing",
@@ -91,8 +97,15 @@ class ContributionArch(Scene):
                          "Operate along rows\nand columns natively", TEAL),
         ).arrange(RIGHT, buff=0.45).move_to(_p(0, -1.55))
 
+        # each card is introduced with an arrow from BONSAI itself
+        arrow_src = bonsai.get_bottom() + DOWN * 0.12
+        arrows = VGroup()
         for c in cards:
-            self.play(FadeIn(c, shift=UP * 0.2), run_time=0.6)
+            a = Arrow(arrow_src, c.get_top() + UP * 0.05,
+                      color=TEAL, buff=0.1, stroke_width=3,
+                      max_tip_length_to_length_ratio=0.08)
+            arrows.add(a)
+            self.play(FadeIn(c, shift=UP * 0.2), GrowArrow(a), run_time=0.6)
         self.wait(1.6)
 
-        self.play(FadeOut(VGroup(tag, head, bonsai, cards)), run_time=0.8)
+        self.play(FadeOut(VGroup(tag, head, cards, arrows)), run_time=0.8)

@@ -32,8 +32,8 @@ def die_around(mob, color, pad_w=0.28, pad_h=0.28):
     r = RoundedRectangle(width=mob.width + pad_w * 2, height=mob.height + pad_h * 2,
                          corner_radius=0.1, stroke_color=color, stroke_width=1.8).move_to(mob)
     d = DashedVMobject(r, num_dashes=22, dashed_ratio=0.55).set_stroke(color, 1.8, opacity=0.7)
-    lbl = Text("silicon die", font=SANS, font_size=11, color=color)
-    lbl.move_to(r.get_bottom() + UP * 0.15)
+    lbl = Text("silicon die", font=SANS, font_size=15, color=color)
+    lbl.move_to(r.get_bottom() + UP * 0.17)
     return VGroup(d, lbl)
 
 
@@ -71,8 +71,8 @@ def conventional_pipeline():
 def conv_label():
     # grey (same as the On-sensor label) so it doesn't clash with the red "Bad"
     # of the gradient axis, and lets the teal Near-sensor pipeline stand out
-    return Text("Conventional\npipeline", font=SANS, font_size=19, color=MUTED,
-                line_spacing=0.7).move_to(CONV_LBL_POS)
+    return Text("Conventional\nprocess", font=SANS, font_size=19, color=MUTED,
+                weight="BOLD", line_spacing=0.7).move_to(CONV_LBL_POS)
 
 
 class ConventionalPipeline(Scene):
