@@ -35,4 +35,6 @@ class Title(Scene):
         self.play(FadeIn(sub), run_time=0.5)
         self.play(FadeIn(author1), FadeIn(authors), FadeIn(inst), run_time=0.7)
         self.wait(1.8)
-        self.play(FadeOut(VGroup(tree, title, sub, author1, authors, inst)), run_time=0.9)
+        # keep tree + title + sub on screen: the kernel-demo scene picks them
+        # up in place (matched cut)
+        self.play(FadeOut(VGroup(author1, authors, inst)), run_time=0.9)

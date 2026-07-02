@@ -19,6 +19,7 @@ FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 # (file, SceneClass) in playback order
 SCENES = [
     ("s1_title.py", "Title"),
+    ("s1_5_kernel_demo.py", "KernelDemo"),
     ("s2_cat.py", "TheImage"),
     ("s3_5_compare.py", "ThreeWayCompare"),
     ("s3_6_contribution.py", "ContributionArch"),
@@ -36,6 +37,7 @@ SCENES = [
     ("s11_scalable.py", "Scalable"),
     ("s12_compute_scale.py", "ComputeScale"),
     ("s13_linear.py", "LinearScaling"),
+    ("s22_summary.py", "Summary"),
     # Scenes below are retired: their content is covered earlier now
     # (s14/s19 recaps; s15-s18 decoder story lives in s6; s20/s21 die
     # channels live in s3_10).

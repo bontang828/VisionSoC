@@ -101,8 +101,11 @@ class HeterogeneousProcessing(Scene):
 
         # persistent top-left note (every drawio frame carries it) - boxed
         # and bigger so it reads as the rule of the whole scene
-        note_t = Text("One instruction, whole image", font=SANS, font_size=23,
-                      color=AMBER, weight="BOLD")
+        # two lines: the box must stay clear of the global-memory buffer that
+        # loads the middle panel (they overlapped as one long line)
+        note_t = Text("One instruction,\napplies to whole image", font=SANS,
+                      font_size=23, color=AMBER, weight="BOLD",
+                      line_spacing=0.85)
         note_box = RoundedRectangle(width=note_t.width + 0.45,
                                     height=note_t.height + 0.3,
                                     corner_radius=0.1, stroke_color=AMBER,
