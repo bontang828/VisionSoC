@@ -7,7 +7,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manim import (
-    Scene, VGroup, Text, FadeIn, FadeOut, LaggedStart, ORIGIN, UP, DOWN,
+    Scene, VGroup, Text, Rectangle, FadeIn, FadeOut, LaggedStart,
+    ReplacementTransform, AnimationGroup, ORIGIN, UP, DOWN,
 )
 from common.arch import make_reg_file, register_array
 from common.layout import RF_POS, RF_SIZE
@@ -48,5 +49,62 @@ class ExpandRegisters(Scene):
         self.play(LaggedStart(*[FadeIn(t) for t in labels], lag_ratio=0.03, run_time=1.6),
                   FadeIn(cap))
         self.wait(1.6)
-        self.play(FadeOut(cap), run_time=0.5)
+
+        # --- register grouping: pairs stick together into ONE register -------
+        def merged(a, b, name):
+            """One register covering the union of a and b, named `name`."""
+            w = b.get_right()[0] - a.get_left()[0]
+            r = Rectangle(width=w, height=a.height, stroke_color=BLUE,
+                          stroke_width=2.5).set_fill(BLUE, 0.10)
+            r.move_to((a.get_center() + b.get_center()) / 2)
+            lbl = Text(name, font=MONO, font_size=18,
+                       color=TEAL).next_to(r, DOWN, buff=0.08)
+            return r, lbl
+
+        cap_g1 = caption("Registers can be grouped: each pair acts as ONE wider register (v0 + v1 -> v0).")
+        pair_rects, pair_labels, merges1 = [], [], []
+        for k in range(16):
+            i = 2 * k
+            r, lbl = merged(planes[i], planes[i + 1], f"v{i}")
+            pair_rects.append(r)
+            pair_labels.append(lbl)
+            merges1.append(AnimationGroup(
+                ReplacementTransform(VGroup(planes[i], planes[i + 1]), r),
+                ReplacementTransform(VGroup(labels[i], labels[i + 1]), lbl)))
+        self.play(FadeOut(cap), FadeIn(cap_g1),
+                  LaggedStart(*merges1, lag_ratio=0.04), run_time=1.8)
+        self.wait(1.2)
+
+        # --- one more level: two pairs group into one (v0..v3 -> v0) ---------
+        cap_g2 = caption("Group pairs again: v0-v3 act as one register - room for larger images.")
+        quad_rects, quad_labels, merges2 = [], [], []
+        for j in range(8):
+            r, lbl = merged(pair_rects[2 * j], pair_rects[2 * j + 1], f"v{4 * j}")
+            quad_rects.append(r)
+            quad_labels.append(lbl)
+            merges2.append(AnimationGroup(
+                ReplacementTransform(VGroup(pair_rects[2 * j], pair_rects[2 * j + 1]), r),
+                ReplacementTransform(VGroup(pair_labels[2 * j], pair_labels[2 * j + 1]), lbl)))
+        self.play(FadeOut(cap_g1), FadeIn(cap_g2),
+                  LaggedStart(*merges2, lag_ratio=0.06), run_time=1.6)
+        self.wait(1.8)
+
+        # --- ungroup: back to the 32 registers (the state Scene 10 carries in)
+        cap_g3 = caption("Ungrouped again: 32 independent registers.")
+        arr2 = register_array(rows=4, cols=8, size=ARRAY_SIZE, grid=False,
+                              color=BLUE).shift(ARRAY_SHIFT)
+        labels2 = VGroup(*[Text(f"v{i}", font=MONO, font_size=18, color=TEAL)
+                           .next_to(p, DOWN, buff=0.08)
+                           for i, p in enumerate(arr2.planes)])
+        splits = []
+        for j in range(8):
+            splits.append(AnimationGroup(
+                ReplacementTransform(quad_rects[j],
+                                     VGroup(*arr2.planes[4 * j:4 * j + 4])),
+                ReplacementTransform(quad_labels[j],
+                                     VGroup(*labels2[4 * j:4 * j + 4]))))
+        self.play(FadeOut(cap_g2), FadeIn(cap_g3),
+                  LaggedStart(*splits, lag_ratio=0.05), run_time=1.4)
+        self.wait(1.0)
+        self.play(FadeOut(cap_g3), run_time=0.5)
         self.wait(0.2)
