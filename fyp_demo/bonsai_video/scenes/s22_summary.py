@@ -92,10 +92,10 @@ class Summary(Scene):
 
         # --- rows, one by one ---
         rows_spec = [
-            ("CNN & Attention",
-             [(False, "only CNN"), (True, "local & global"), (True, "local & global")]),
-            ("Low bandwidth\noff-chip",
-             [(True, "only results"), (True, "only results"), (False, "raw image")]),
+            ("CNN & Attention\nprimitives",
+             [(False, "only CNN"), (True, "local & global operation"), (True, "local & global operation")]),
+            ("Low off-chip\nbandwidth",
+             [(True, "only results sent"), (True, "only results sent"), (False, "raw image sent")]),
             ("Low latency\n& power",
              [(True, "on-chip compute"), (True, "on-chip compute"), (False, "off-chip compute")]),
         ]
@@ -111,7 +111,7 @@ class Summary(Scene):
             self.play(FadeIn(lab),
                       LaggedStart(*[FadeIn(c, shift=UP * 0.12) for c in cells],
                                   lag_ratio=0.25), run_time=0.9)
-            self.wait(0.5)
+            self.wait(0.9)
             table_rows.add(VGroup(lab, cells))
 
         # --- golden highlight on the BONSAI column ---
@@ -131,13 +131,15 @@ class Summary(Scene):
             ("portable codebase", GOLD, True),
         ], size=25)
         e2 = rich_line([
-            ("for vision researchers to pick up", FG, False),
-            ("now", GOLD, True),
-            ("- no time cost to re-learn.", GOLD, True),
+            ("so vision researchers can pick it up", FG, False),
+            ("now,", GOLD, True),
+            ("with no time spent re-learning.", GOLD, True),
         ], size=23)
         ending = VGroup(e1, e2).arrange(DOWN, buff=0.14).move_to(_p(0, -3.3))
         self.play(FadeIn(ending, shift=UP * 0.15), run_time=1.0)
-        self.wait(3.0)
+        # long hold: reading time for the whole summary (7.35 raw = ~8.8s at
+        # the global 1.2x pace, i.e. 4s more than before)
+        self.wait(7.35)
 
         self.play(FadeOut(VGroup(heading, blob1, heads, hline, vline,
                                  table_rows, gold, ending)), run_time=1.0)
