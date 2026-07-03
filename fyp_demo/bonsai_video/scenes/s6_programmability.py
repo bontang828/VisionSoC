@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from manim import (
     Scene, VGroup, Square, Rectangle, Text, Arrow, VMobject, RoundedRectangle,
-    FadeIn, FadeOut, GrowArrow, ReplacementTransform, Indicate,
+    FadeIn, FadeOut, GrowArrow, ReplacementTransform, Indicate, Flash,
     MoveAlongPath, Succession, LaggedStart, rgb_to_color,
     LEFT, RIGHT, UP, DOWN, ORIGIN,
 )
@@ -122,7 +122,7 @@ class Programmability(Scene):
         # travelling backwards
         dim = Rectangle(width=15, height=9, stroke_width=0).set_fill(BG, 0.55)
         dim.set_z_index(15)
-        rew_t = Text("Let's go again - with details", font=SANS, font_size=40,
+        rew_t = Text("Let's go again, with details", font=SANS, font_size=40,
                      color=TEAL, weight="BOLD")
         rew_bg = RoundedRectangle(width=rew_t.width + 0.7,
                                   height=rew_t.height + 0.45,
@@ -136,17 +136,27 @@ class Programmability(Scene):
         cat = make_cat(n=24).scale_to_fit_width(CAT_IN_BLOCK_W).move_to(bonsai)
         self.play(ReplacementTransform(st.result, cat), run_time=0.5)
         self.play(cat.animate.move_to(scratch), run_time=0.7)
+        # rewind all the way to the capture: the cat returns to the sensor
+        self.play(cat.animate.move_to(sensor), run_time=0.7)
         self.play(FadeOut(rew), FadeOut(dim), run_time=0.4)
 
+        # replay from the capture: the image is written into memory again
+        cap_r = caption("The image is captured into the global memory again.")
+        self.play(FadeIn(cap_r), cat.animate.move_to(scratch),
+                  Flash(p.a1.get_center(), color=TEAL, line_length=0.12),
+                  run_time=0.8)
+        self.wait(0.8)
+        self.play(FadeOut(cap_r), run_time=0.3)
+
         # ---- 5: the CPU sends instructions again - how does that work? ------
-        cap5 = caption("The image waits in memory. How does the CPU actually program BONSAI?")
+        cap5 = caption("The image waits in memory. How does the CPU program BONSAI?")
         instr = Arrow(cpu.get_left() + UP * 0.4, bonsai.get_right() + UP * 0.4,
                       color=BLUE, buff=0.15, stroke_width=3.5,
                       max_tip_length_to_length_ratio=0.1)
         instr_l = Text("Instructions", font=SANS, font_size=16, color=BLUE)
         instr_l.next_to(instr, UP, buff=0.1)
         self.play(GrowArrow(instr), FadeIn(instr_l), FadeIn(cap5), run_time=0.8)
-        self.wait(1.0)
+        self.wait(2.2)
 
         # ---- 6: zoom into the Bonsai processor ------------------------------
         cap6 = caption("Let's look inside the BONSAI Processor.")
@@ -197,7 +207,7 @@ class Programmability(Scene):
         self.play(ReplacementTransform(instr2, instr3),
                   ReplacementTransform(instr2_l, instr3_l),
                   ReplacementTransform(data2, data3), run_time=0.7)
-        self.wait(1.0)
+        self.wait(1.6)
 
         # ---- 8: an instruction token travels CPU -> decoder -----------------
         cap8 = caption("The CPU streams instructions into the decoder.")
@@ -257,7 +267,7 @@ class Programmability(Scene):
         self.wait(1.0)
 
         # ---- 11-13: the compiler hovers over each line and parses it --------
-        cap11 = caption("Compiled by stock LLVM / GNU compilers - no custom toolchain needed.")
+        cap11 = caption("Compiled by stock LLVM and GNU compilers. No custom toolchain needed.")
         comp_rect = RoundedRectangle(width=3.8, height=0.58, corner_radius=0.1,
                                      stroke_color=GREEN, stroke_width=2).set_fill(GREEN, 0.12)
         comp_lbl = Text("LLVM / GNU compiler", font=SANS, font_size=12, color=GREEN)

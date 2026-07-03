@@ -54,8 +54,8 @@ class LinearScaling(Scene):
         # "Linear" tag sits clear of the line (above-left of it)
         tag = Text("Linear", font=SANS, font_size=30, color=TEAL,
                    weight="BOLD").move_to(o + RIGHT * 3.4 + UP * 3.4)
-        cap = caption("Throughput increase with linear silicon size growth.")
+        cap = caption("Throughput increases with linear silicon growth.")
         self.play(FadeIn(tag), FadeIn(cap), run_time=0.7)
-        self.wait(1.5)
+        self.wait(1.8)
         self.play(FadeOut(VGroup(title, xax, yax, xl, yl, line, chips, tag, cap)),
                   run_time=0.7)

@@ -51,8 +51,8 @@ LANE_BIG = np.array([0.0, -2.5, 0.0])   # leaves room for the label on top
 LANE_W = 5.6
 LANE_STRIP_W = 5.1                      # data strip width inside the lane
 SPLIT_DX = 3.2                          # panel offset in the split view
-MODE_L = np.array([-6.3, -0.8, 0.0])    # mode boxes in the split view
-MODE_R = np.array([6.3, -0.8, 0.0])
+MODE_L = np.array([-5.85, -0.8, 0.0])   # mode boxes in the split view
+MODE_R = np.array([5.85, -0.8, 0.0])
 MODE_FULL = np.array([-5.4, -2.2, 0.0])
 
 
@@ -60,18 +60,16 @@ def _p(x, y):
     return np.array([x, y, 0.0])
 
 
-def mode_box(enabled):
-    """The row/col access config: 'vertical mode' CSR, DISABLED or ENABLED."""
-    ttl = Text("vertical mode", font=SANS, font_size=13, color=MUTED)
-    val = Text("ENABLED" if enabled else "DISABLED", font=MONO, font_size=17,
-               color=MAGENTA if enabled else FG)
-    inner = VGroup(ttl, val).arrange(DOWN, buff=0.12)
-    box = RoundedRectangle(width=inner.width + 0.45, height=inner.height + 0.35,
+def mode_box(vertical):
+    """The row/col access config: Horizontal mode or Vertical mode."""
+    val = Text("Vertical mode" if vertical else "Horizontal mode", font=MONO,
+               font_size=15, color=MAGENTA if vertical else FG)
+    box = RoundedRectangle(width=val.width + 0.4, height=val.height + 0.35,
                            corner_radius=0.1,
-                           stroke_color=MAGENTA if enabled else MUTED,
+                           stroke_color=MAGENTA if vertical else MUTED,
                            stroke_width=2).set_fill(
-                               MAGENTA if enabled else MUTED, 0.08)
-    return VGroup(box.move_to(inner), inner)
+                               MAGENTA if vertical else MUTED, 0.08)
+    return VGroup(box.move_to(val), val)
 
 
 def rowcol_badge():
@@ -102,7 +100,7 @@ class RowColProcessing(Scene):
         vals = cat_image(N)
 
         # ---- 1: a new instruction - its row/col result differs --------------
-        cap1 = caption("Example of executing an instruction: vshift - it slides the pixels of a row.")
+        cap1 = caption("Take one instruction: vshift slides the pixels of a row.")
         tag = VGroup(
             Text("vshift", font=MONO, font_size=22, color=BLUE),
             Text("slide the pixels", font=SANS, font_size=16, color=MUTED),
@@ -112,7 +110,7 @@ class RowColProcessing(Scene):
         self.play(tok.animate.move_to(fp.dec.get_center() + UP * 0.75), run_time=0.9)
         self.play(FadeOut(tok, target_position=fp.dec), Indicate(fp.dec, color=AMBER),
                   FadeIn(tag), run_time=0.6)
-        self.wait(0.6)
+        self.wait(1.2)
 
         # ---- 2: zoom into the Memory Register File + compute lane -----------
         cap2 = caption("Zoom in on the Memory Register File and the compute lane.")
@@ -141,11 +139,11 @@ class RowColProcessing(Scene):
                      color=GREEN, buff=0, stroke_width=3,
                      max_tip_length_to_length_ratio=0.25)
         self.play(GrowArrow(a_down), GrowArrow(a_up), run_time=0.6)
-        self.wait(0.5)
+        self.wait(1.0)
 
         # ---- 3: vertical mode DISABLED - row access; badge pins -------------
-        cap3 = caption("A config bit picks the access direction. Disabled = work on ROWS.")
-        mode_l = mode_box(enabled=False).move_to(MODE_FULL)
+        cap3 = caption("A config bit picks the mode. Horizontal mode: work on ROWS.")
+        mode_l = mode_box(vertical=False).move_to(MODE_FULL)
         # badge spawns big in the CENTRE (contribution callback), then docks
         badge = rowcol_badge().move_to(_p(0, 0)).scale(1.35)
         self.play(FadeIn(badge, scale=1.2), run_time=0.6)
@@ -162,7 +160,7 @@ class RowColProcessing(Scene):
         self.wait(0.5)
 
         # ---- 4: the row loads into the lane, chunk by chunk ------------------
-        cap4 = caption("The row streams into the compute lane, chunk by chunk...")
+        cap4 = caption("The row streams into the compute lane, chunk by chunk.")
         strip = VGroup(*[sq.copy() for sq in row_cells])
         cell_w = LANE_STRIP_W / N
         lane_c = fp.lanes_box.get_center()
@@ -178,18 +176,20 @@ class RowColProcessing(Scene):
             self.play(*[strip[c].animate.scale(s).move_to(lane_slot(c))
                         for c in range(k * chunk, (k + 1) * chunk)],
                       run_time=0.45)
+        self.wait(0.5)
 
         # ---- 5: process - the pixels slide -----------------------------------
-        cap5 = caption("...gets processed - every pixel slides along the row...")
+        cap5 = caption("Processing: every pixel slides along the row.")
         rolled_row = [vals[ROW_IDX, (c - SHIFT) % N] for c in range(N)]
         self.play(FadeOut(cap4), FadeIn(cap5),
                   Indicate(fp.lanes_box, color=GREEN, scale_factor=1.03),
                   *[strip[c].animate.set_fill(rgb_to_color(rolled_row[c]))
                     for c in range(N)],
                   run_time=0.9)
+        self.wait(0.6)
 
         # ---- 6: store back; the sweep continues row by row -------------------
-        cap6 = caption("...and is stored back. Then the next row, and the next...")
+        cap6 = caption("The result stores back. Then the next row, and the next.")
         self.play(FadeOut(cap5), FadeIn(cap6),
                   *[strip[c].animate.scale(1 / s).move_to(row_cells[c].get_center())
                     for c in range(N)],
@@ -208,7 +208,7 @@ class RowColProcessing(Scene):
         self.wait(0.8)
 
         # ---- 7: split screen - same instruction, vertical mode ENABLED ------
-        cap7 = caption("Same image, same vshift - now with vertical mode ENABLED.")
+        cap7 = caption("Same image, same vshift, now in Vertical mode.")
         divider = DashedLine(_p(0, 3.3), _p(0, -3.2), stroke_width=2,
                              dash_length=0.15).set_stroke(MUTED, opacity=0.7)
         left_grp = VGroup(fp.rf, fp.rf_lbl, row_done, fp.lanes_box, fp.lanes,
@@ -225,7 +225,7 @@ class RowColProcessing(Scene):
         a_up_r = a_up.copy().shift(RIGHT * 2 * SPLIT_DX)
         cat_r = PixelGrid(vals, cell_size=row_done.cell(0, 0).width)
         cat_r.move_to(row_done.get_center() + RIGHT * 2 * SPLIT_DX)
-        mode_r = mode_box(enabled=True).move_to(MODE_R)
+        mode_r = mode_box(vertical=True).move_to(MODE_R)
         self.play(TransformFromCopy(fp.rf, rf_r),
                   TransformFromCopy(VGroup(fp.lanes_box, fp.lanes), lane_r),
                   FadeIn(rf_lbl_r), FadeIn(a_down_r), FadeIn(a_up_r),
@@ -235,7 +235,7 @@ class RowColProcessing(Scene):
         self.wait(0.4)
 
         # ---- 8: a COLUMN loads into the lane (transposed look) ---------------
-        cap8 = caption("Now a COLUMN streams into the same horizontal lane...")
+        cap8 = caption("Now a COLUMN streams into the same horizontal lane.")
         col_cells = [cat_r.cell(r, COL_IDX) for r in range(N)]
         hl_c = SurroundingRectangle(VGroup(*col_cells), color=MAGENTA, buff=0.02,
                                     stroke_width=5.5)
@@ -253,9 +253,10 @@ class RowColProcessing(Scene):
             self.play(*[strip_c[r].animate.scale(s_c).move_to(lane_slot_r(r))
                         for r in range(k * chunk, (k + 1) * chunk)],
                       run_time=0.45)
+        self.wait(0.4)
 
         # ---- 9-10: process the column and store it back ----------------------
-        cap9 = caption("...the pixels slide along the COLUMN, and store back.")
+        cap9 = caption("The pixels slide along the COLUMN and store back.")
         rolled_col = [vals[(r - SHIFT) % N, COL_IDX] for r in range(N)]
         self.play(FadeOut(cap8), FadeIn(cap9),
                   Indicate(lane_r[0], color=MAGENTA, scale_factor=1.03),
@@ -292,7 +293,7 @@ class RowColProcessing(Scene):
         for _ in range(2):
             self.play(FadeOut(blink), run_time=0.22)
             self.play(FadeIn(blink), run_time=0.22)
-        self.wait(1.6)
+        self.wait(2.2)
 
         # fade everything - Scene 7.5 (heterogeneous processing) starts fresh
         rest = VGroup(fp.rf, fp.rf_lbl, row_done, fp.lanes_box, fp.lanes,

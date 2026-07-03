@@ -95,7 +95,7 @@ class HeterogeneousProcessing(Scene):
         badge = hetero_badge().move_to(_p(0, 0)).scale(1.4)
         cap0 = caption("Heterogeneous processing: one fabric runs many different kernels.")
         self.play(FadeIn(badge, scale=1.2), FadeIn(cap0), run_time=0.7)
-        self.wait(1.0)
+        self.wait(1.4)
         self.play(badge.animate.scale(1 / 1.4).to_corner(UP + RIGHT, buff=0.5),
                   run_time=0.7)
 
@@ -130,7 +130,7 @@ class HeterogeneousProcessing(Scene):
             panel.mode_l = new_l
 
         # ---- 2-4: panel 1 - vshift right, whole plane, both directions ------
-        cap2 = caption("Different instruction types, one plane at a time. vshift: the whole image slides.")
+        cap2 = caption("Different instructions act on whole planes. vshift slides the entire image.")
         p1 = build_panel("vshift right", vertical=False, x=PANEL_X[0], vals=vals)
         self.play(FadeOut(cap0), FadeIn(note), FadeIn(p1), FadeIn(cap2),
                   run_time=0.8)
@@ -146,7 +146,7 @@ class HeterogeneousProcessing(Scene):
         self.wait(0.4)
 
         # ---- 5-6: panel 2 - vertical-mode load/store = free transpose -------
-        cap5 = caption("load/store in vertical mode: read rows from the buffer, write columns...")
+        cap5 = caption("load/store in vertical mode: read rows, write columns.")
         p2 = build_panel("load/store", vertical=True, x=PANEL_X[1], vals=vals)
         self.remove(p2.cat)          # the cat arrives column by column instead
         buf = PixelGrid(cat_image(12), cell_size=0.11).move_to(BUF_POS)
@@ -175,14 +175,14 @@ class HeterogeneousProcessing(Scene):
             self.play(*anims, run_time=0.35)
         p2.cat = tcat
         p2.add(tcat)
-        cap6 = caption("...and the image lands transposed - for free.")
+        cap6 = caption("The image lands transposed, for free.")
         self.play(FadeOut(hover), FadeOut(buf), FadeOut(buf_l),
                   FadeOut(cap5), FadeIn(cap6), run_time=0.6)
         self.play(p2.mode_l.animate.set_opacity(0), run_time=0.3)
-        self.wait(0.5)
+        self.wait(1.0)
 
         # ---- 7-10: panel 3 - vgather PHYSICALLY moves pixels within rows ----
-        cap7 = caption("vgather: an index register rearranges pixels - here, mirroring every row.")
+        cap7 = caption("vgather: an index register rearranges pixels, mirroring every row.")
         p3 = build_panel("vgather (Global pixel rearrange)", vertical=False,
                          x=PANEL_X[2], vals=vals)
         self.play(FadeOut(cap6), FadeIn(cap7), FadeIn(p3), run_time=0.8)
@@ -279,7 +279,7 @@ class HeterogeneousProcessing(Scene):
             self.play(Indicate(h, color=c, scale_factor=1.08), run_time=0.35)
         self.wait(0.6)
 
-        capb = caption("One fabric, many kernels - heterogeneous processing.")
+        capb = caption("One fabric, many kernels: heterogeneous processing.")
         self.play(FadeOut(cap14), FadeIn(capb),
                   Indicate(badge, color=AMBER, scale_factor=1.1), run_time=0.8)
         self.wait(1.6)

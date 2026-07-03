@@ -14,7 +14,7 @@ from common.palette import FG, TEAL, SANS
 
 class HowItWorks(Scene):
     def construct(self):
-        title = Text("How does BONSAI processor work?", font=SANS, font_size=52,
+        title = Text("How does a BONSAI Processor work?", font=SANS, font_size=52,
                      color=FG, weight="BOLD")
         rule = Line(np.array([-1.6, 0, 0]), np.array([1.6, 0, 0]),
                     stroke_width=3).set_color(TEAL).next_to(title, DOWN, buff=0.35)

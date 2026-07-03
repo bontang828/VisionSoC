@@ -38,6 +38,8 @@ def tick_item(text):
 
 
 class ContributionEval(Scene):
+    SLOWDOWN = 1.5   # word-heavy card: extra reading time
+
     def construct(self):
         tag = kicker(3)
         title = Text("How we evaluate BONSAI effectiveness?", font=SANS,

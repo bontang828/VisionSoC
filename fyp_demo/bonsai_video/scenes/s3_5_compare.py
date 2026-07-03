@@ -115,7 +115,8 @@ class ThreeWayCompare(Scene):
         conv_lbl = conv_label()
         conv_s_lbl = Text("sensor", font=SANS, font_size=13, color=BLUE)
         conv_s_lbl.next_to(conv.sensor_die, UP, buff=0.08)
-        self.play(FadeIn(conv_lbl), run_time=0.7)
+        capA = caption("Conventional: the image travels sensor -> CPU -> GPU, then back.")
+        self.play(FadeIn(conv_lbl), FadeIn(capA), run_time=0.7)
         c1 = drag(0.5)
         self.play(FadeIn(conv.stage_sensor), FadeIn(conv_s_lbl),
                   c1.animate.move_to(conv.sensor), run_time=1.0)
@@ -156,7 +157,8 @@ class ThreeWayCompare(Scene):
         os = VGroup(grid, grid_d, grid_lbl, cam_ov, o_cpu, oc_d, o_arrow,
                     o_lp, o_bw, o_data)
 
-        self.play(FadeIn(os_lbl), run_time=0.7)
+        capB = caption("On-sensor: a processor in every pixel, results go straight to the CPU.")
+        self.play(FadeIn(os_lbl), FadeOut(capA), FadeIn(capB), run_time=0.7)
         c3 = drag(0.55)
         self.play(FadeIn(grid, grid_d, grid_lbl), c3.animate.move_to(grid), run_time=1.0)
         self.play(FadeIn(cam_ov), run_time=0.6)
@@ -196,7 +198,8 @@ class ThreeWayCompare(Scene):
         ns = VGroup(n_sensor, n_s_lbl, n_scratch, n_bons, n_die, n_a1, n_a2,
                     ua1, ua2, n_cpu, nc_d, n_out, n_lp, n_bw, n_data)
 
-        self.play(FadeIn(ns_lbl), run_time=0.7)
+        capC = caption("Near-sensor: a full processor beside the sensor, on the same die.")
+        self.play(FadeIn(ns_lbl), FadeOut(capB), FadeIn(capC), run_time=0.7)
         c2 = drag(0.4)
         self.play(FadeIn(n_sensor, n_s_lbl, n_die), c2.animate.move_to(n_sensor), run_time=1.0)
         self.play(FadeIn(n_a1, n_scratch, ua1), c2.animate.move_to(n_scratch), run_time=1.0)
@@ -211,9 +214,9 @@ class ThreeWayCompare(Scene):
         ns.remove(n_data)   # same detach as the on-sensor data block
         self.play(Create(gpu_x_ns[1]), Create(gpu_x_ns[2]), run_time=0.6)
 
-        cap = caption("Three ways to process the frame - trading off power and programmability.")
-        self.play(FadeIn(cap), run_time=0.7)
-        self.wait(1.6)
+        cap = caption("Three ways to process a frame, trading off power and programmability.")
+        self.play(FadeOut(capC), FadeIn(cap), run_time=0.7)
+        self.wait(2.0)
 
         # ============= comparison axes (no shift) ========================
         # the crossed-out GPUs leave before the axes claim the side space
@@ -241,8 +244,9 @@ class ThreeWayCompare(Scene):
         hl.set_stroke(TEAL, 3).set_fill(TEAL, 0.05)
         hl_lbl = Text("BONSAI approach", font=SANS, font_size=26, color=TEAL,
                       weight="BOLD").next_to(hl, DOWN, buff=0.12)
-        self.play(Create(hl), FadeIn(hl_lbl), run_time=0.8)
-        self.wait(2.0)
+        cap_ax = caption("BONSAI hits the sweet spot: low power and high programmability.")
+        self.play(Create(hl), FadeIn(hl_lbl), FadeIn(cap_ax), run_time=0.8)
+        self.wait(2.4)
         self.play(FadeOut(VGroup(conv, conv_lbl, conv_s_lbl, ns, ns_lbl, os, os_lbl,
-                                 hl, hl_lbl, conv_ret, t_conv, t_os, t_ns,
+                                 hl, hl_lbl, cap_ax, conv_ret, t_conv, t_os, t_ns,
                                  power, p_ttl, p_top, p_bot, prog, pr_ttl, pr_top, pr_bot)), run_time=0.9)

@@ -4,6 +4,8 @@ Keep every scene importing these so the look stays consistent.
 """
 from manim import Text, ManimColor, DOWN, UP
 
+from . import pacing  # noqa: F401  (side effect: global 1.2x slowdown)
+
 # --- Core palette -----------------------------------------------------------
 BG = ManimColor("#0e0e12")        # near-black background (also set in manim.cfg)
 FG = ManimColor("#e6e6ea")        # primary text / foreground

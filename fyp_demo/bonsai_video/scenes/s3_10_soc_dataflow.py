@@ -139,29 +139,29 @@ class SocDataflow(Scene):
 
         # ---- 1: the setup - cat looks into the pipeline ---------------------
         cat = make_cat(n=24).scale_to_fit_width(1.7).move_to(CAT_START)
-        cap1 = caption("Sensor, memory and BONSAI share one die - the CPU sits on its own.")
+        cap1 = caption("Sensor, memory and BONSAI share one die. The CPU sits apart.")
         self.play(FadeIn(p.near_grp), FadeIn(p.cpu_grp), FadeIn(cat), FadeIn(cap1),
                   run_time=0.9)
 
         l1 = Line(cat.get_corner(UP + RIGHT), sensor.get_left(), stroke_width=2).set_stroke(TEAL, opacity=0.8)
         l2 = Line(cat.get_corner(DOWN + RIGHT), sensor.get_left(), stroke_width=2).set_stroke(TEAL, opacity=0.8)
         self.play(Create(l1), Create(l2), run_time=0.6)
-        self.wait(0.6)
+        self.wait(1.6)
 
         # ---- 2: capture - the cat drags into the sensor ---------------------
-        cap2 = caption("The sensor captures the image...")
+        cap2 = caption("The sensor captures the image.")
         self.play(FadeOut(VGroup(l1, l2)), FadeOut(cap1), FadeIn(cap2),
                   cat.animate.scale_to_fit_width(CAT_IN_BLOCK_W).move_to(sensor),
                   run_time=0.9)
-        self.wait(0.6)
+        self.wait(1.0)
 
         # ---- 3: into the global memory ---------------------------------------
-        cap3 = caption("...and writes it into the global memory, still on-die.")
+        cap3 = caption("It lands in the global memory, still on the die.")
         self.play(FadeOut(cap2), FadeIn(cap3),
                   cat.animate.move_to(scratch),
                   Flash(p.a1.get_center(), color=TEAL, line_length=0.12),
                   run_time=0.8)
-        self.wait(0.8)
+        self.wait(1.4)
 
         # ---- 4: dies slide apart; the CPU sends "Load image" ----------------
         cap4 = caption("Instruction: Load image")
@@ -174,12 +174,12 @@ class SocDataflow(Scene):
         self.wait(0.8)
 
         # ---- 5: the image loads into the BONSAI Processor -------------------
-        cap5 = caption("The whole image loads into the BONSAI Processor...")
+        cap5 = caption("The whole image loads into the BONSAI Processor.")
         self.play(FadeOut(cap4), FadeIn(cap5),
                   cat.animate.move_to(bonsai),
                   Flash(p.a2.get_center(), color=TEAL, line_length=0.12),
                   run_time=0.8)
-        self.wait(0.8)
+        self.wait(1.2)
 
         # ---- 6: next instruction - "Process image" ---------------------------
         cap6 = caption("Instruction: Process image")
@@ -217,10 +217,10 @@ class SocDataflow(Scene):
         # the frame is done - end of the pipeline
         tick = Text("✓", font=SANS, font_size=30, color=GREEN, weight="BOLD")
         tick.move_to(cpu.get_corner(UP + RIGHT) + np.array([0.24, 0.24, 0.0]))
-        end_l = Text("frame done - end of pipeline", font=SANS, font_size=15,
+        end_l = Text("frame done: end of pipeline", font=SANS, font_size=15,
                      color=GREEN).next_to(p.cpu_die, UP, buff=0.15)
         self.play(FadeIn(tick, scale=1.4), FadeIn(end_l), run_time=0.5)
-        self.wait(1.6)
+        self.wait(2.4)
 
         # keep the diagram for the matched cut into Scene 6 (rewind); the
         # trip markers leave with the caption

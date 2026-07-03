@@ -34,6 +34,8 @@ def bullet(text, color=TEAL, fs=24):
 
 
 class ContributionFPGA(Scene):
+    SLOWDOWN = 1.5   # word-heavy card: extra reading time
+
     def construct(self):
         tag = kicker(2)
         title = Text("Live camera prototype on FPGA", font=SANS, font_size=34,

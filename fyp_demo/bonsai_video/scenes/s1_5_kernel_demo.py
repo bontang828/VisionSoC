@@ -51,6 +51,8 @@ def _ensure_frames():
 
 
 class KernelDemo(Scene):
+    SLOWDOWN = 1.0   # the real footage dictates this scene's length
+
     def construct(self):
         files = _ensure_frames()
         video_len = len(files) / VIDEO_FPS
@@ -109,7 +111,7 @@ class KernelDemo(Scene):
         cx = card.get_right()[0] + 0.1
         a_in = Arrow(_p(vx, -1.75), _p(cx, -1.4), color=BLUE, buff=0,
                      stroke_width=5, max_tip_length_to_length_ratio=0.12)
-        l_in = Text("Sensor data", font=SANS, font_size=22,
+        l_in = Text("Camera sensor data", font=SANS, font_size=22,
                     color=BLUE).next_to(a_in, DOWN, buff=0.18)
         self.play(GrowArrow(a_in), FadeIn(l_in), run_time=1.0)
         self.wait(0.5)
@@ -121,7 +123,10 @@ class KernelDemo(Scene):
                      color=AMBER).next_to(a_out, UP, buff=0.18)
         self.play(GrowArrow(a_out), FadeIn(l_out), run_time=1.0)
         self.wait(0.4)
-        used += 0.4 + 1.0 + 0.5 + 1.0 + 0.4
+        # second caption fills the long playback stretch for the voice-over
+        cap2 = caption("Sensor data streams in, processed results come back, live.")
+        self.play(FadeOut(cap), FadeIn(cap2), run_time=0.5)
+        used += 0.4 + 1.0 + 0.5 + 1.0 + 0.4 + 0.5
 
         # --- 5) bonsai "loading" pulse while the demo runs its full length ---
         leaves = VGroup(*tree.submobjects[3:6])
@@ -136,5 +141,5 @@ class KernelDemo(Scene):
         self.wait(max(0.3, video_len - used + 0.3))
 
         video.clear_updaters()
-        self.play(FadeOut(Group(heading, card, video, vframe, cap,
+        self.play(FadeOut(Group(heading, card, video, vframe, cap2,
                                 a_in, l_in, a_out, l_out)), run_time=0.9)

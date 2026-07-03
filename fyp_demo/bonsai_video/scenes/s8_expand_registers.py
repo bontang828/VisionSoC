@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from manim import (
-    Scene, VGroup, Text, Rectangle, FadeIn, FadeOut, LaggedStart,
+    Scene, VGroup, Text, Rectangle, DashedLine, FadeIn, FadeOut, LaggedStart,
     ReplacementTransform, AnimationGroup, ORIGIN, UP, DOWN,
 )
 from common.arch import make_reg_file, register_array
@@ -29,9 +29,10 @@ class ExpandRegisters(Scene):
         self.add(stack)
         cap0 = caption("Zoom into the register file.")
         self.play(FadeIn(cap0), run_time=0.5)
-        self.wait(0.6)
+        self.wait(1.0)
 
-        self.play(stack.animate.move_to(ORIGIN + ARRAY_SHIFT), FadeOut(cap0), run_time=0.7)
+        # cap0 stays through the distribution; it leaves when cap arrives
+        self.play(stack.animate.move_to(ORIGIN + ARRAY_SHIFT), run_time=0.7)
         targets = distributed_targets()
         scale_f = ARRAY_SIZE / RF_SIZE
         planes = stack.planes
@@ -47,19 +48,32 @@ class ExpandRegisters(Scene):
             labels.add(Text(f"v{i}", font=MONO, font_size=18, color=TEAL).next_to(p, DOWN, buff=0.08))
         cap = caption("The register file is 32 two-dimensional square registers: v0 to v31.")
         self.play(LaggedStart(*[FadeIn(t) for t in labels], lag_ratio=0.03, run_time=1.6),
-                  FadeIn(cap))
-        self.wait(1.6)
+                  FadeOut(cap0), FadeIn(cap))
+        self.wait(2.0)
 
         # --- register grouping: pairs stick together into ONE register -------
         def merged(a, b, name):
-            """One register covering the union of a and b, named `name`."""
+            """One register covering the union of a and b, named `name`.
+            Dotted lines mark where the grouped registers were joined."""
             w = b.get_right()[0] - a.get_left()[0]
             r = Rectangle(width=w, height=a.height, stroke_color=BLUE,
                           stroke_width=2.5).set_fill(BLUE, 0.10)
             r.move_to((a.get_center() + b.get_center()) / 2)
+            inner_xs = (getattr(a, "inner_xs", [])
+                        + [(a.get_center()[0] + b.get_center()[0]) / 2]
+                        + getattr(b, "inner_xs", []))
+            dashes = VGroup(*[
+                DashedLine([x, r.get_top()[1] - 0.03, 0],
+                           [x, r.get_bottom()[1] + 0.03, 0],
+                           dash_length=0.07,
+                           stroke_width=1.6).set_stroke(BLUE, opacity=0.6)
+                for x in inner_xs
+            ])
+            g = VGroup(r, dashes)
+            g.inner_xs = inner_xs
             lbl = Text(name, font=MONO, font_size=18,
                        color=TEAL).next_to(r, DOWN, buff=0.08)
-            return r, lbl
+            return g, lbl
 
         cap_g1 = caption("Registers can be grouped: each pair acts as ONE wider register (v0 + v1 -> v0).")
         pair_rects, pair_labels, merges1 = [], [], []
@@ -73,10 +87,10 @@ class ExpandRegisters(Scene):
                 ReplacementTransform(VGroup(labels[i], labels[i + 1]), lbl)))
         self.play(FadeOut(cap), FadeIn(cap_g1),
                   LaggedStart(*merges1, lag_ratio=0.04), run_time=1.8)
-        self.wait(1.2)
+        self.wait(2.0)
 
         # --- one more level: two pairs group into one (v0..v3 -> v0) ---------
-        cap_g2 = caption("Group pairs again: v0-v3 act as one register - room for larger images.")
+        cap_g2 = caption("Group pairs again: v0 to v3 act as one, fitting larger images.")
         quad_rects, quad_labels, merges2 = [], [], []
         for j in range(8):
             r, lbl = merged(pair_rects[2 * j], pair_rects[2 * j + 1], f"v{4 * j}")

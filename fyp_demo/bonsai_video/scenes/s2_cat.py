@@ -21,7 +21,7 @@ class TheImage(Scene):
         self.play(FadeIn(cat), FadeIn(label), run_time=0.9)
         cap = caption("Where does it go, and how is it processed?").shift(UP * 0.8)
         self.play(FadeIn(cap), run_time=0.6)
-        self.wait(1.2)
+        self.wait(2.2)
 
         # downscale the cat and move it to the left (carried into Scene 3.5)
         self.play(FadeOut(intro), FadeOut(label), FadeOut(cap),

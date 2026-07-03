@@ -25,6 +25,7 @@ SCENES = [
     ("s3_6_contribution.py", "ContributionArch"),
     ("s3_7_fpga.py", "ContributionFPGA"),
     ("s3_8_eval.py", "ContributionEval"),
+    ("s3_85_similar_work.py", "SimilarWork"),
     ("s3_9_howitworks.py", "HowItWorks"),
     ("s3_10_soc_dataflow.py", "SocDataflow"),
     # s4/s5 retired: the top-level SoC animation (3.10) covers the capture,
@@ -38,6 +39,7 @@ SCENES = [
     ("s12_compute_scale.py", "ComputeScale"),
     ("s13_linear.py", "LinearScaling"),
     ("s22_summary.py", "Summary"),
+    ("s23_outro.py", "Outro"),
     # Scenes below are retired: their content is covered earlier now
     # (s14/s19 recaps; s15-s18 decoder story lives in s6; s20/s21 die
     # channels live in s3_10).
@@ -86,12 +88,29 @@ def main():
             f.write(f"file '{mp4}'\n")
 
     out = os.path.join(HERE, "bonsai_demo.mp4")
-    print(f"\n=== Concatenating -> {out} ===")
-    subprocess.run(
-        [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
-         "-c", "copy", out],
-        check=True,
-    )
+    vo = os.path.join(HERE, "voice_over.m4a")
+    if os.path.exists(vo):
+        # concat silently, then mux the voice-over (synced to video start)
+        silent = os.path.join(HERE, "bonsai_demo_silent.mp4")
+        print(f"\n=== Concatenating -> {silent} ===")
+        subprocess.run(
+            [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+             "-c", "copy", silent],
+            check=True,
+        )
+        print(f"=== Muxing voice-over -> {out} ===")
+        subprocess.run(
+            [FFMPEG, "-y", "-i", silent, "-i", vo,
+             "-map", "0:v", "-map", "1:a", "-c", "copy", out],
+            check=True,
+        )
+    else:
+        print(f"\n=== Concatenating -> {out} ===")
+        subprocess.run(
+            [FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+             "-c", "copy", out],
+            check=True,
+        )
     print(f"\nDONE: {out}")
 
 

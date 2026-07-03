@@ -69,6 +69,8 @@ def feature_card(icon, title, desc, color):
 
 
 class ContributionArch(Scene):
+    SLOWDOWN = 1.5   # word-heavy card: extra reading time
+
     def construct(self):
         tag = kicker(1)
         # heading: "BONSAI = A Generalised 2D Spatial Near-sensor Chip
